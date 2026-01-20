@@ -493,7 +493,7 @@ interface FormationEditorProps {
   dancerRadius: number;
   onPositionsChange: (positions: Position[]) => void;
   onClose: () => void;
-  onApplyPreset: (formation: FormationType) => void;
+  onApplyPreset: (formation: FormationType, spread: number) => void;
 }
 
 function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeight, scale, dancerRadius, onPositionsChange, onClose, onApplyPreset }: FormationEditorProps) {
@@ -502,10 +502,139 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
   const [localPositions, setLocalPositions] = useState<Position[]>(positions);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [snapSize, setSnapSize] = useState(0.5); // 0.5m grid snap
+  const [spread, setSpread] = useState(1.0); // 대형 크기 (0.5 ~ 1.5)
+  const [currentPreset, setCurrentPreset] = useState<FormationType | null>(null);
+
+  // Undo/Redo 히스토리
+  const [history, setHistory] = useState<Position[][]>([]);
+  const [future, setFuture] = useState<Position[][]>([]);
+  const maxHistory = 50; // 최대 히스토리 개수
 
   useEffect(() => {
     setLocalPositions(positions);
+    setHistory([]);
+    setFuture([]);
   }, [positions]);
+
+  // 히스토리에 현재 상태 저장
+  const saveToHistory = useCallback((currentPos: Position[]) => {
+    setHistory(prev => {
+      const newHistory = [...prev, currentPos];
+      if (newHistory.length > maxHistory) {
+        return newHistory.slice(-maxHistory);
+      }
+      return newHistory;
+    });
+    setFuture([]); // 새 변경 시 redo 히스토리 초기화
+  }, []);
+
+  // Undo
+  const undo = useCallback(() => {
+    if (history.length === 0) return;
+
+    const previousState = history[history.length - 1];
+    const newHistory = history.slice(0, -1);
+
+    setFuture(prev => [...prev, localPositions]);
+    setHistory(newHistory);
+    setLocalPositions(previousState);
+    onPositionsChange(previousState);
+  }, [history, localPositions, onPositionsChange]);
+
+  // Redo
+  const redo = useCallback(() => {
+    if (future.length === 0) return;
+
+    const nextState = future[future.length - 1];
+    const newFuture = future.slice(0, -1);
+
+    setHistory(prev => [...prev, localPositions]);
+    setFuture(newFuture);
+    setLocalPositions(nextState);
+    onPositionsChange(nextState);
+  }, [future, localPositions, onPositionsChange]);
+
+  // 키보드 단축키 (Ctrl+Z, Ctrl+Shift+Z)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+      }
+      // Ctrl+Y for redo (Windows style)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        e.preventDefault();
+        redo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
+
+  // spread 변경 시 현재 프리셋으로 실시간 업데이트
+  const handleSpreadChange = useCallback((newSpread: number) => {
+    setSpread(newSpread);
+    if (currentPreset) {
+      saveToHistory(localPositions);
+      const newPositions = generateFormation(currentPreset, dancerCount, {
+        stageWidth,
+        stageHeight,
+        spread: newSpread
+      });
+      setLocalPositions(newPositions);
+      onPositionsChange(newPositions);
+    }
+  }, [currentPreset, dancerCount, stageWidth, stageHeight, onPositionsChange, localPositions, saveToHistory]);
+
+  // 프리셋 적용
+  const handlePresetClick = useCallback((preset: FormationType) => {
+    setCurrentPreset(preset);
+    onApplyPreset(preset, spread);
+  }, [spread, onApplyPreset]);
+
+  // 전체 대형 이동
+  const moveAll = useCallback((dx: number, dy: number) => {
+    saveToHistory(localPositions);
+    const newPositions = localPositions.slice(0, dancerCount).map(pos => ({
+      x: Math.max(0.5, Math.min(stageWidth - 0.5, pos.x + dx)),
+      y: Math.max(0.5, Math.min(stageHeight - 0.5, pos.y + dy)),
+    }));
+    // 나머지 포지션도 유지
+    const fullPositions = [...newPositions, ...localPositions.slice(dancerCount)];
+    setLocalPositions(fullPositions);
+    onPositionsChange(fullPositions);
+  }, [localPositions, dancerCount, stageWidth, stageHeight, onPositionsChange, saveToHistory]);
+
+  // 중앙 정렬
+  const centerAll = useCallback(() => {
+    const activePositions = localPositions.slice(0, dancerCount);
+    if (activePositions.length === 0) return;
+
+    saveToHistory(localPositions);
+
+    // 현재 대형의 중심 계산
+    const centerX = activePositions.reduce((sum, p) => sum + p.x, 0) / activePositions.length;
+    const centerY = activePositions.reduce((sum, p) => sum + p.y, 0) / activePositions.length;
+
+    // 무대 중앙으로 이동
+    const targetCenterX = stageWidth / 2;
+    const targetCenterY = stageHeight / 2;
+    const dx = targetCenterX - centerX;
+    const dy = targetCenterY - centerY;
+
+    const newPositions = activePositions.map(pos => ({
+      x: Math.max(0.5, Math.min(stageWidth - 0.5, pos.x + dx)),
+      y: Math.max(0.5, Math.min(stageHeight - 0.5, pos.y + dy)),
+    }));
+    const fullPositions = [...newPositions, ...localPositions.slice(dancerCount)];
+    setLocalPositions(fullPositions);
+    onPositionsChange(fullPositions);
+  }, [localPositions, dancerCount, stageWidth, stageHeight, onPositionsChange, saveToHistory]);
 
   const svgWidth = stageWidth * scale + PADDING * 2;
   const svgHeight = stageHeight * scale + PADDING * 2;
@@ -516,6 +645,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
 
   const handleMouseDown = (id: number) => (e: React.MouseEvent) => {
     e.preventDefault();
+    saveToHistory(localPositions); // 드래그 시작 전 히스토리 저장
     setDraggingId(id);
   };
 
@@ -556,18 +686,69 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
       <div className="formation-editor">
         <div className="editor-header">
           <h3>{title}</h3>
-          <button onClick={onClose} className="close-btn">✕</button>
+          <div className="header-actions">
+            <div className="undo-redo-btns">
+              <button
+                onClick={undo}
+                disabled={history.length === 0}
+                className="undo-btn"
+                title="실행 취소 (Ctrl+Z)"
+              >
+                ↶
+              </button>
+              <button
+                onClick={redo}
+                disabled={future.length === 0}
+                className="redo-btn"
+                title="다시 실행 (Ctrl+Shift+Z)"
+              >
+                ↷
+              </button>
+            </div>
+            <button onClick={onClose} className="close-btn">✕</button>
+          </div>
         </div>
 
         <div className="editor-toolbar">
           <div className="preset-buttons">
             {presets.map(p => (
-              <button key={p} onClick={() => onApplyPreset(p)} className="preset-btn">
+              <button
+                key={p}
+                onClick={() => handlePresetClick(p)}
+                className={`preset-btn ${currentPreset === p ? 'active' : ''}`}
+              >
                 {p === 'line' ? '일렬' : p === 'circle' ? '원형' : p === 'v_shape' ? 'V자' :
                  p === 'diagonal' ? '대각선' : p === 'diamond' ? '다이아' : p === 'triangle' ? '삼각' :
                  p === 'two_lines' ? '두줄' : '흩어짐'}
               </button>
             ))}
+          </div>
+          <div className="spread-control">
+            <label>대형 크기:</label>
+            <input
+              type="range"
+              min={0.5}
+              max={1.7}
+              step={0.05}
+              value={spread}
+              onChange={(e) => handleSpreadChange(parseFloat(e.target.value))}
+            />
+            <span className="spread-value">{Math.round(Math.min(spread * 60, 100))}%</span>
+            {!currentPreset && <span className="spread-hint">(프리셋 선택 후 조절)</span>}
+          </div>
+          <div className="position-control">
+            <label>위치 이동:</label>
+            <div className="position-pad">
+              <button className="pos-btn" onClick={() => moveAll(-0.5, 0.5)}>↖</button>
+              <button className="pos-btn" onClick={() => moveAll(0, 0.5)}>↑</button>
+              <button className="pos-btn" onClick={() => moveAll(0.5, 0.5)}>↗</button>
+              <button className="pos-btn" onClick={() => moveAll(-0.5, 0)}>←</button>
+              <button className="pos-btn center" onClick={centerAll}>◎</button>
+              <button className="pos-btn" onClick={() => moveAll(0.5, 0)}>→</button>
+              <button className="pos-btn" onClick={() => moveAll(-0.5, -0.5)}>↙</button>
+              <button className="pos-btn" onClick={() => moveAll(0, -0.5)}>↓</button>
+              <button className="pos-btn" onClick={() => moveAll(0.5, -0.5)}>↘</button>
+            </div>
           </div>
           <div className="snap-controls">
             <label className="snap-toggle">
@@ -940,13 +1121,13 @@ export default function DanceChoreography() {
   const [dancers, setDancers] = useState<DancerData[]>([]);
   const [totalCounts, setTotalCounts] = useState(8);
 
-  // Initialize custom positions when dancer count changes
+  // Initialize custom positions when dancer count or stage size changes
   useEffect(() => {
-    const startPos = generateFormation(startFormation === 'custom' ? 'line' : startFormation, dancerCount);
-    const endPos = generateFormation(endFormation === 'custom' ? 'v_shape' : endFormation, dancerCount);
+    const startPos = generateFormation(startFormation === 'custom' ? 'line' : startFormation, dancerCount, { stageWidth, stageHeight });
+    const endPos = generateFormation(endFormation === 'custom' ? 'v_shape' : endFormation, dancerCount, { stageWidth, stageHeight });
     setCustomStartPositions(startPos);
     setCustomEndPositions(endPos);
-  }, [dancerCount]);
+  }, [dancerCount, stageWidth, stageHeight]);
 
   // Initialize with default choreography
   useEffect(() => {
@@ -988,6 +1169,8 @@ export default function DanceChoreography() {
         useGeminiParser: isApiKeyConfigured(),
         useGeminiEvaluator: false,
         dancerCount: dancerCount,
+        stageWidth: stageWidth,
+        stageHeight: stageHeight,
       });
 
       setResult(choreographyResult);
@@ -1000,7 +1183,7 @@ export default function DanceChoreography() {
     } finally {
       setIsLoading(false);
     }
-  }, [dancerCount]);
+  }, [dancerCount, stageWidth, stageHeight]);
 
   const handleDirectGenerate = useCallback(() => {
     setIsLoading(true);
@@ -1016,6 +1199,8 @@ export default function DanceChoreography() {
           totalCounts: 8,
           customStartPositions: startFormation === 'custom' ? customStartPositions.slice(0, dancerCount) : undefined,
           customEndPositions: endFormation === 'custom' ? customEndPositions.slice(0, dancerCount) : undefined,
+          stageWidth: stageWidth,
+          stageHeight: stageHeight,
         }
       );
 
@@ -1029,11 +1214,11 @@ export default function DanceChoreography() {
     } finally {
       setIsLoading(false);
     }
-  }, [startFormation, endFormation, dancerCount, customStartPositions, customEndPositions]);
+  }, [startFormation, endFormation, dancerCount, customStartPositions, customEndPositions, stageWidth, stageHeight]);
 
   // Handle formation preset in editor
-  const handleApplyPreset = useCallback((formation: FormationType, target: 'start' | 'end') => {
-    const positions = generateFormation(formation, dancerCount);
+  const handleApplyPreset = useCallback((formation: FormationType, target: 'start' | 'end', spread: number = 1.0) => {
+    const positions = generateFormation(formation, dancerCount, { stageWidth, stageHeight, spread });
     if (target === 'start') {
       setCustomStartPositions(positions);
       setStartFormation('custom');
@@ -1041,17 +1226,17 @@ export default function DanceChoreography() {
       setCustomEndPositions(positions);
       setEndFormation('custom');
     }
-  }, [dancerCount]);
+  }, [dancerCount, stageWidth, stageHeight]);
 
   // Handle dancer count change
   const handleDancerCountChange = useCallback((count: number) => {
     setDancerCount(count);
     // Regenerate positions for new count
-    const startPos = generateFormation(startFormation === 'custom' ? 'line' : startFormation, count);
-    const endPos = generateFormation(endFormation === 'custom' ? 'v_shape' : endFormation, count);
+    const startPos = generateFormation(startFormation === 'custom' ? 'line' : startFormation, count, { stageWidth, stageHeight });
+    const endPos = generateFormation(endFormation === 'custom' ? 'v_shape' : endFormation, count, { stageWidth, stageHeight });
     setCustomStartPositions(startPos);
     setCustomEndPositions(endPos);
-  }, [startFormation, endFormation]);
+  }, [startFormation, endFormation, stageWidth, stageHeight]);
 
   // Handle stage preset change
   const handleStagePresetChange = useCallback((preset: StagePreset) => {
@@ -1119,13 +1304,13 @@ export default function DanceChoreography() {
           onStartChange={(f) => {
             setStartFormation(f);
             if (f !== 'custom') {
-              setCustomStartPositions(generateFormation(f, dancerCount));
+              setCustomStartPositions(generateFormation(f, dancerCount, { stageWidth, stageHeight }));
             }
           }}
           onEndChange={(f) => {
             setEndFormation(f);
             if (f !== 'custom') {
-              setCustomEndPositions(generateFormation(f, dancerCount));
+              setCustomEndPositions(generateFormation(f, dancerCount, { stageWidth, stageHeight }));
             }
           }}
           onDancerCountChange={handleDancerCountChange}
@@ -1156,7 +1341,7 @@ export default function DanceChoreography() {
             }
           }}
           onClose={() => setEditingFormation(null)}
-          onApplyPreset={(f) => handleApplyPreset(f, editingFormation)}
+          onApplyPreset={(f, spread) => handleApplyPreset(f, editingFormation, spread)}
         />
       )}
 

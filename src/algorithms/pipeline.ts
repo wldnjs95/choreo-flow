@@ -95,11 +95,15 @@ export async function generateChoreographyFromText(
     useGeminiParser?: boolean;
     useGeminiEvaluator?: boolean;
     dancerCount?: number;
+    stageWidth?: number;
+    stageHeight?: number;
   } = {}
 ): Promise<ChoreographyResult> {
   const {
     useGeminiParser = isApiKeyConfigured(),
     dancerCount = 8,
+    stageWidth = 12,
+    stageHeight = 10,
   } = options;
 
   const startTime = performance.now();
@@ -116,18 +120,18 @@ export async function generateChoreographyFromText(
   const startPositions = generateFormation(
     request.startFormation.type as FormationType,
     dancerCount,
-    { ...request.startFormation.params, spread: request.style.spread }
+    { ...request.startFormation.params, spread: request.style.spread, stageWidth, stageHeight }
   );
 
   let endPositions = generateFormation(
     request.endFormation.type as FormationType,
     dancerCount,
-    { ...request.endFormation.params, spread: request.style.spread }
+    { ...request.endFormation.params, spread: request.style.spread, stageWidth, stageHeight }
   );
 
   // spread 적용
   if (request.style.spread !== 1.0) {
-    endPositions = applySpread(endPositions, request.style.spread);
+    endPositions = applySpread(endPositions, request.style.spread, stageWidth, stageHeight);
   }
 
   // 3. 최적 할당 (Hungarian Algorithm)
@@ -191,6 +195,8 @@ export function generateChoreographyDirect(
     mainDancer?: number;
     customStartPositions?: Position[];
     customEndPositions?: Position[];
+    stageWidth?: number;
+    stageHeight?: number;
   } = {}
 ): ChoreographyResult {
   const {
@@ -200,13 +206,15 @@ export function generateChoreographyDirect(
     mainDancer = null,
     customStartPositions,
     customEndPositions,
+    stageWidth = 12,
+    stageHeight = 10,
   } = options;
 
   const startTime = performance.now();
 
   // 대형 생성 (커스텀 포지션이 있으면 사용)
-  const startPositions = customStartPositions || generateFormation(startFormation, dancerCount, { spread });
-  const endPositions = customEndPositions || generateFormation(endFormation, dancerCount, { spread });
+  const startPositions = customStartPositions || generateFormation(startFormation, dancerCount, { spread, stageWidth, stageHeight });
+  const endPositions = customEndPositions || generateFormation(endFormation, dancerCount, { spread, stageWidth, stageHeight });
 
   // 최적 할당
   const assignments = computeOptimalAssignment(startPositions, endPositions);
