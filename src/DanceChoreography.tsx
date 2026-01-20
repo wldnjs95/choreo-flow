@@ -524,8 +524,8 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
 
     const svg = svgRef.current;
     const rect = svg.getBoundingClientRect();
-    let x = ((e.clientX - rect.left - PADDING) / SCALE);
-    let y = STAGE_HEIGHT - ((e.clientY - rect.top - PADDING) / SCALE);
+    let x = ((e.clientX - rect.left - PADDING) / scale);
+    let y = stageHeight - ((e.clientY - rect.top - PADDING) / scale);
 
     // Apply grid snap if enabled
     if (snapEnabled) {
@@ -534,13 +534,13 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     }
 
     // Clamp to stage bounds
-    const clampedX = Math.max(0.5, Math.min(STAGE_WIDTH - 0.5, x));
-    const clampedY = Math.max(0.5, Math.min(STAGE_HEIGHT - 0.5, y));
+    const clampedX = Math.max(0.5, Math.min(stageWidth - 0.5, x));
+    const clampedY = Math.max(0.5, Math.min(stageHeight - 0.5, y));
 
     setLocalPositions(prev => prev.map((pos, i) =>
       i === draggingId ? { x: clampedX, y: clampedY } : pos
     ));
-  }, [draggingId, snapEnabled, snapSize]);
+  }, [draggingId, snapEnabled, snapSize, scale, stageWidth, stageHeight]);
 
   const handleMouseUp = useCallback(() => {
     if (draggingId !== null) {
@@ -596,8 +596,8 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
 
         <svg
           ref={svgRef}
-          width={width}
-          height={height}
+          width={svgWidth}
+          height={svgHeight}
           style={{ background: BACKGROUND_COLOR, borderRadius: '8px', cursor: draggingId !== null ? 'grabbing' : 'default' }}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -606,32 +606,32 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
           <rect
             x={PADDING}
             y={PADDING}
-            width={STAGE_WIDTH * SCALE}
-            height={STAGE_HEIGHT * SCALE}
+            width={stageWidth * scale}
+            height={stageHeight * scale}
             fill="rgba(40, 40, 60, 0.5)"
             stroke="#444"
             strokeWidth={2}
           />
 
           {/* Grid */}
-          {Array.from({ length: STAGE_WIDTH + 1 }).map((_, x) => (
+          {Array.from({ length: Math.floor(stageWidth) + 1 }).map((_, x) => (
             <line
               key={`v-${x}`}
-              x1={PADDING + x * SCALE}
+              x1={PADDING + x * scale}
               y1={PADDING}
-              x2={PADDING + x * SCALE}
-              y2={PADDING + STAGE_HEIGHT * SCALE}
+              x2={PADDING + x * scale}
+              y2={PADDING + stageHeight * scale}
               stroke={GRID_COLOR}
               strokeWidth={1}
             />
           ))}
-          {Array.from({ length: STAGE_HEIGHT + 1 }).map((_, y) => (
+          {Array.from({ length: Math.floor(stageHeight) + 1 }).map((_, y) => (
             <line
               key={`h-${y}`}
               x1={PADDING}
-              y1={PADDING + y * SCALE}
-              x2={PADDING + STAGE_WIDTH * SCALE}
-              y2={PADDING + y * SCALE}
+              y1={PADDING + y * scale}
+              x2={PADDING + stageWidth * scale}
+              y2={PADDING + y * scale}
               stroke={GRID_COLOR}
               strokeWidth={1}
             />
@@ -639,10 +639,10 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
 
           {/* Center line */}
           <line
-            x1={PADDING + (STAGE_WIDTH / 2) * SCALE}
+            x1={PADDING + (stageWidth / 2) * scale}
             y1={PADDING}
-            x2={PADDING + (STAGE_WIDTH / 2) * SCALE}
-            y2={PADDING + STAGE_HEIGHT * SCALE}
+            x2={PADDING + (stageWidth / 2) * scale}
+            y2={PADDING + stageHeight * scale}
             stroke="#666"
             strokeWidth={2}
             strokeDasharray="10,5"
@@ -650,8 +650,8 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
 
           {/* Dancers */}
           {localPositions.slice(0, dancerCount).map((pos, i) => {
-            const cx = PADDING + pos.x * SCALE;
-            const cy = PADDING + (STAGE_HEIGHT - pos.y) * SCALE;
+            const cx = PADDING + pos.x * scale;
+            const cy = PADDING + (stageHeight - pos.y) * scale;
             const color = DANCER_COLORS[i % DANCER_COLORS.length];
 
             return (
@@ -659,13 +659,13 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
                 <circle
                   cx={cx}
                   cy={cy}
-                  r={DANCER_RADIUS + 4}
+                  r={dancerRadius + 4}
                   fill="transparent"
                 />
                 <circle
                   cx={cx}
                   cy={cy}
-                  r={DANCER_RADIUS}
+                  r={dancerRadius}
                   fill={color}
                   stroke={draggingId === i ? '#fff' : 'rgba(255,255,255,0.3)'}
                   strokeWidth={draggingId === i ? 3 : 2}
@@ -676,7 +676,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
                   textAnchor="middle"
                   dominantBaseline="central"
                   fill="#fff"
-                  fontSize="14"
+                  fontSize={Math.max(10, dancerRadius * 0.8)}
                   fontWeight="bold"
                   style={{ pointerEvents: 'none' }}
                 >
@@ -1104,6 +1104,14 @@ export default function DanceChoreography() {
       <div className="input-section">
         <NaturalLanguageInput onGenerate={handleNLPGenerate} isLoading={isLoading} />
         <div className="divider">또는</div>
+        <StageSizeSelector
+          preset={stagePreset}
+          width={stageWidth}
+          height={stageHeight}
+          onPresetChange={handleStagePresetChange}
+          onWidthChange={(w) => { setStageWidth(w); setStagePreset('custom'); }}
+          onHeightChange={(h) => { setStageHeight(h); setStagePreset('custom'); }}
+        />
         <FormationSelector
           startFormation={startFormation}
           endFormation={endFormation}
@@ -1134,6 +1142,10 @@ export default function DanceChoreography() {
           positions={editingFormation === 'start' ? customStartPositions : customEndPositions}
           dancerCount={dancerCount}
           title={editingFormation === 'start' ? '시작 대형 편집' : '끝 대형 편집'}
+          stageWidth={stageWidth}
+          stageHeight={stageHeight}
+          scale={scale}
+          dancerRadius={dancerRadius}
           onPositionsChange={(pos) => {
             if (editingFormation === 'start') {
               setCustomStartPositions(pos);
