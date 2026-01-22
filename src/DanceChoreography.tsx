@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   generateChoreographyFromText,
   generateChoreographyDirect,
@@ -8,33 +8,46 @@ import {
   type SmoothPath,
   type FormationType,
   type Position,
-} from './algorithms';
-import { isApiKeyConfigured, type AestheticScore } from './gemini';
+} from "./algorithms";
+import { isApiKeyConfigured, type AestheticScore } from "./gemini";
+import { generateChoreographyPureAI } from "./algorithms/pipeline";
 
 // Visualization constants
-const DEFAULT_STAGE_WIDTH = 12;  // World of Dance: 40ft ≈ 12m
+const DEFAULT_STAGE_WIDTH = 12; // World of Dance: 40ft ≈ 12m
 const DEFAULT_STAGE_HEIGHT = 10; // World of Dance: 32ft ≈ 10m
 const BASE_SCALE = 50; // 기본 스케일 (스테이지 크기에 따라 조정)
 const PADDING = 40;
 const BASE_DANCER_RADIUS = 0.4; // 미터 단위 dancer 반지름 (실제 사람 어깨 폭 기준)
-const GRID_COLOR = '#2a2a3e';
-const BACKGROUND_COLOR = '#1a1a2e';
+const GRID_COLOR = "#2a2a3e";
+const BACKGROUND_COLOR = "#1a1a2e";
 
 // 스테이지 프리셋
 const STAGE_PRESETS = {
-  'world_of_dance': { width: 12, height: 10, label: 'World of Dance (40×32ft)' },
-  'small': { width: 8, height: 6, label: 'Small (26×20ft)' },
-  'medium': { width: 10, height: 8, label: 'Medium (33×26ft)' },
-  'large': { width: 15, height: 12, label: 'Large (49×39ft)' },
-  'custom': { width: 12, height: 10, label: 'Custom' },
+  world_of_dance: { width: 12, height: 10, label: "World of Dance (40×32ft)" },
+  small: { width: 8, height: 6, label: "Small (26×20ft)" },
+  medium: { width: 10, height: 8, label: "Medium (33×26ft)" },
+  large: { width: 15, height: 12, label: "Large (49×39ft)" },
+  custom: { width: 12, height: 10, label: "Custom" },
 };
 
 // Dancer colors
 const DANCER_COLORS = [
-  '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
-  '#FFD93D', '#6C5CE7', '#A8E6CF', '#FF8C42',
-  '#E056FD', '#686DE0', '#BADC58', '#F9CA24',
-  '#30336B', '#22A6B3', '#BE2EDD', '#F79F1F',
+  "#FF6B6B",
+  "#4ECDC4",
+  "#45B7D1",
+  "#96CEB4",
+  "#FFD93D",
+  "#6C5CE7",
+  "#A8E6CF",
+  "#FF8C42",
+  "#E056FD",
+  "#686DE0",
+  "#BADC58",
+  "#F9CA24",
+  "#30336B",
+  "#22A6B3",
+  "#BE2EDD",
+  "#F79F1F",
 ];
 
 interface PathPoint {
@@ -54,7 +67,11 @@ interface DancerData {
 }
 
 // Get dancer position at specific count (시간 기반 보간)
-function getDancerPositionAtCount(dancer: DancerData, count: number, _totalCounts: number): PathPoint {
+function getDancerPositionAtCount(
+  dancer: DancerData,
+  count: number,
+  _totalCounts: number,
+): PathPoint {
   const path = dancer.path;
 
   // 경로가 없거나 비어있으면 시작 위치 반환
@@ -104,7 +121,16 @@ interface DancerProps {
   dancerRadius: number;
 }
 
-function Dancer({ dancer, position, showPath, isSelected, onSelect, scale, stageHeight, dancerRadius }: DancerProps) {
+function Dancer({
+  dancer,
+  position,
+  showPath,
+  isSelected,
+  onSelect,
+  scale,
+  stageHeight,
+  dancerRadius,
+}: DancerProps) {
   const x = PADDING + position.x * scale;
   const y = PADDING + (stageHeight - position.y) * scale;
 
@@ -113,13 +139,13 @@ function Dancer({ dancer, position, showPath, isSelected, onSelect, scale, stage
       .map((p, i) => {
         const px = PADDING + p.x * scale;
         const py = PADDING + (stageHeight - p.y) * scale;
-        return `${i === 0 ? 'M' : 'L'} ${px} ${py}`;
+        return `${i === 0 ? "M" : "L"} ${px} ${py}`;
       })
-      .join(' ');
+      .join(" ");
   }, [dancer.path, scale, stageHeight]);
 
   return (
-    <g onClick={onSelect} style={{ cursor: 'pointer' }}>
+    <g onClick={onSelect} style={{ cursor: "pointer" }}>
       {showPath && (
         <motion.path
           d={pathD}
@@ -130,7 +156,7 @@ function Dancer({ dancer, position, showPath, isSelected, onSelect, scale, stage
           opacity={isSelected ? 0.9 : 0.5}
           initial={{ pathLength: 0 }}
           animate={{ pathLength: 1 }}
-          transition={{ duration: 1, ease: 'easeOut' }}
+          transition={{ duration: 1, ease: "easeOut" }}
         />
       )}
 
@@ -149,7 +175,11 @@ function Dancer({ dancer, position, showPath, isSelected, onSelect, scale, stage
       {showPath && (
         <rect
           x={PADDING + dancer.endPosition.x * scale - dancerRadius * 0.4}
-          y={PADDING + (stageHeight - dancer.endPosition.y) * scale - dancerRadius * 0.4}
+          y={
+            PADDING +
+            (stageHeight - dancer.endPosition.y) * scale -
+            dancerRadius * 0.4
+          }
           width={dancerRadius * 0.8}
           height={dancerRadius * 0.8}
           fill="none"
@@ -165,13 +195,15 @@ function Dancer({ dancer, position, showPath, isSelected, onSelect, scale, stage
         cy={y}
         r={dancerRadius}
         fill={dancer.color}
-        stroke={isSelected ? '#fff' : 'rgba(255,255,255,0.3)'}
+        stroke={isSelected ? "#fff" : "rgba(255,255,255,0.3)"}
         strokeWidth={isSelected ? 3 : 2}
         initial={false}
         animate={{ cx: x, cy: y }}
-        transition={{ type: 'tween', duration: 0.05 }}
+        transition={{ type: "tween", duration: 0.05 }}
         style={{
-          filter: isSelected ? 'drop-shadow(0 0 10px rgba(255,255,255,0.5))' : 'none',
+          filter: isSelected
+            ? "drop-shadow(0 0 10px rgba(255,255,255,0.5))"
+            : "none",
         }}
       />
 
@@ -183,10 +215,10 @@ function Dancer({ dancer, position, showPath, isSelected, onSelect, scale, stage
         fill="#fff"
         fontSize={Math.max(10, dancerRadius * 0.8)}
         fontWeight="bold"
-        style={{ pointerEvents: 'none', userSelect: 'none' }}
+        style={{ pointerEvents: "none", userSelect: "none" }}
         initial={false}
         animate={{ x, y }}
-        transition={{ type: 'tween', duration: 0.05 }}
+        transition={{ type: "tween", duration: 0.05 }}
       >
         {dancer.id}
       </motion.text>
@@ -217,7 +249,7 @@ function Stage({ children, stageWidth, stageHeight, scale }: StageProps) {
           y2={PADDING + stageHeight * scale}
           stroke={GRID_COLOR}
           strokeWidth={x % 5 === 0 ? 2 : 1}
-        />
+        />,
       );
     }
     for (let y = 0; y <= stageHeight; y++) {
@@ -230,7 +262,7 @@ function Stage({ children, stageWidth, stageHeight, scale }: StageProps) {
           y2={PADDING + y * scale}
           stroke={GRID_COLOR}
           strokeWidth={y % 5 === 0 ? 2 : 1}
-        />
+        />,
       );
     }
     return lines;
@@ -241,28 +273,67 @@ function Stage({ children, stageWidth, stageHeight, scale }: StageProps) {
     // X축 라벨 (2m 간격)
     for (let x = 0; x <= stageWidth; x += 2) {
       result.push(
-        <text key={`lx-${x}`} x={PADDING + x * scale} y={height - 10} textAnchor="middle" fill="#666" fontSize="11">
+        <text
+          key={`lx-${x}`}
+          x={PADDING + x * scale}
+          y={height - 10}
+          textAnchor="middle"
+          fill="#666"
+          fontSize="11"
+        >
           {x}m
-        </text>
+        </text>,
       );
     }
     // Y축 라벨 (2m 간격)
     for (let y = 0; y <= stageHeight; y += 2) {
       result.push(
-        <text key={`ly-${y}`} x={10} y={PADDING + (stageHeight - y) * scale + 4} textAnchor="start" fill="#666" fontSize="11">
+        <text
+          key={`ly-${y}`}
+          x={10}
+          y={PADDING + (stageHeight - y) * scale + 4}
+          textAnchor="start"
+          fill="#666"
+          fontSize="11"
+        >
           {y}m
-        </text>
+        </text>,
       );
     }
     return result;
   }, [stageWidth, stageHeight, scale, height]);
 
   return (
-    <svg width={width} height={height} style={{ background: BACKGROUND_COLOR, borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>
-      <rect x={PADDING} y={PADDING} width={stageWidth * scale} height={stageHeight * scale} fill="rgba(40, 40, 60, 0.5)" stroke="#444" strokeWidth={2} rx={4} />
+    <svg
+      width={width}
+      height={height}
+      style={{
+        background: BACKGROUND_COLOR,
+        borderRadius: "12px",
+        boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+      }}
+    >
+      <rect
+        x={PADDING}
+        y={PADDING}
+        width={stageWidth * scale}
+        height={stageHeight * scale}
+        fill="rgba(40, 40, 60, 0.5)"
+        stroke="#444"
+        strokeWidth={2}
+        rx={4}
+      />
       {gridLines}
       {labels}
-      <line x1={PADDING + (stageWidth / 2) * scale} y1={PADDING} x2={PADDING + (stageWidth / 2) * scale} y2={PADDING + stageHeight * scale} stroke="#444" strokeWidth={2} strokeDasharray="10,5" />
+      <line
+        x1={PADDING + (stageWidth / 2) * scale}
+        y1={PADDING}
+        x2={PADDING + (stageWidth / 2) * scale}
+        y2={PADDING + stageHeight * scale}
+        stroke="#444"
+        strokeWidth={2}
+        strokeDasharray="10,5"
+      />
       {children}
     </svg>
   );
@@ -273,15 +344,18 @@ interface NaturalLanguageInputProps {
   isLoading: boolean;
 }
 
-function NaturalLanguageInput({ onGenerate, isLoading }: NaturalLanguageInputProps) {
-  const [input, setInput] = useState('');
+function NaturalLanguageInput({
+  onGenerate,
+  isLoading,
+}: NaturalLanguageInputProps) {
+  const [input, setInput] = useState("");
   const apiConfigured = isApiKeyConfigured();
 
   const examples = [
-    '8명이 일렬에서 V자로 이동, 와이드하게',
-    '원형에서 하트 모양으로, dancer 4 강조',
-    '대각선에서 원형으로, 대칭 유지',
-    '두 줄에서 다이아몬드로, 부드럽게',
+    "8명이 일렬에서 V자로 이동, 와이드하게",
+    "원형에서 하트 모양으로, dancer 4 강조",
+    "대각선에서 원형으로, 대칭 유지",
+    "두 줄에서 다이아몬드로, 부드럽게",
   ];
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -298,7 +372,8 @@ function NaturalLanguageInput({ onGenerate, isLoading }: NaturalLanguageInputPro
         <div className="api-warning">
           Gemini API 키가 설정되지 않았습니다. 기본 파서를 사용합니다.
           <br />
-          <code>.env</code> 파일에 <code>VITE_GEMINI_API_KEY</code>를 설정하세요.
+          <code>.env</code> 파일에 <code>VITE_GEMINI_API_KEY</code>를
+          설정하세요.
         </div>
       )}
       <form onSubmit={handleSubmit}>
@@ -309,14 +384,23 @@ function NaturalLanguageInput({ onGenerate, isLoading }: NaturalLanguageInputPro
           rows={3}
           disabled={isLoading}
         />
-        <button type="submit" disabled={isLoading || !input.trim()} className="generate-btn">
-          {isLoading ? '생성 중...' : '안무 생성'}
+        <button
+          type="submit"
+          disabled={isLoading || !input.trim()}
+          className="generate-btn"
+        >
+          {isLoading ? "생성 중..." : "안무 생성"}
         </button>
       </form>
       <div className="examples">
         <span>예시:</span>
         {examples.map((ex, i) => (
-          <button key={i} onClick={() => setInput(ex)} className="example-btn" disabled={isLoading}>
+          <button
+            key={i}
+            onClick={() => setInput(ex)}
+            className="example-btn"
+            disabled={isLoading}
+          >
             {ex}
           </button>
         ))}
@@ -348,22 +432,31 @@ function FormationSelector({
   onGenerate,
   onEditStart,
   onEditEnd,
-  isLoading
+  isLoading,
 }: FormationSelectorProps) {
-  const formations: FormationType[] = ['line', 'circle', 'v_shape', 'diagonal', 'diamond', 'triangle', 'two_lines', 'scatter'];
+  const formations: FormationType[] = [
+    "line",
+    "circle",
+    "v_shape",
+    "diagonal",
+    "diamond",
+    "triangle",
+    "two_lines",
+    "scatter",
+  ];
 
   const formatName = (f: FormationType) => {
     const names: Record<FormationType, string> = {
-      line: '일렬',
-      circle: '원형',
-      v_shape: 'V자',
-      diagonal: '대각선',
-      scatter: '흩어짐',
-      heart: '하트',
-      diamond: '다이아몬드',
-      triangle: '삼각형',
-      two_lines: '두 줄',
-      custom: '커스텀',
+      line: "일렬",
+      circle: "원형",
+      v_shape: "V자",
+      diagonal: "대각선",
+      scatter: "흩어짐",
+      heart: "하트",
+      diamond: "다이아몬드",
+      triangle: "삼각형",
+      two_lines: "두 줄",
+      custom: "커스텀",
     };
     return names[f] || f;
   };
@@ -379,7 +472,11 @@ function FormationSelector({
           min={2}
           max={24}
           value={dancerCount}
-          onChange={(e) => onDancerCountChange(Math.max(2, Math.min(24, parseInt(e.target.value) || 2)))}
+          onChange={(e) =>
+            onDancerCountChange(
+              Math.max(2, Math.min(24, parseInt(e.target.value) || 2)),
+            )
+          }
           className="dancer-count-input"
         />
         <span className="dancer-count-label">명</span>
@@ -389,13 +486,22 @@ function FormationSelector({
         <div className="formation-select">
           <label>시작 대형:</label>
           <div className="formation-select-row">
-            <select value={startFormation} onChange={(e) => onStartChange(e.target.value as FormationType)}>
+            <select
+              value={startFormation}
+              onChange={(e) => onStartChange(e.target.value as FormationType)}
+            >
               {formations.map((f) => (
-                <option key={f} value={f}>{formatName(f)}</option>
+                <option key={f} value={f}>
+                  {formatName(f)}
+                </option>
               ))}
               <option value="custom">커스텀</option>
             </select>
-            <button onClick={onEditStart} className="edit-btn" title="커스텀 편집">
+            <button
+              onClick={onEditStart}
+              className="edit-btn"
+              title="커스텀 편집"
+            >
               ✏️
             </button>
           </div>
@@ -404,19 +510,32 @@ function FormationSelector({
         <div className="formation-select">
           <label>끝 대형:</label>
           <div className="formation-select-row">
-            <select value={endFormation} onChange={(e) => onEndChange(e.target.value as FormationType)}>
+            <select
+              value={endFormation}
+              onChange={(e) => onEndChange(e.target.value as FormationType)}
+            >
               {formations.map((f) => (
-                <option key={f} value={f}>{formatName(f)}</option>
+                <option key={f} value={f}>
+                  {formatName(f)}
+                </option>
               ))}
               <option value="custom">커스텀</option>
             </select>
-            <button onClick={onEditEnd} className="edit-btn" title="커스텀 편집">
+            <button
+              onClick={onEditEnd}
+              className="edit-btn"
+              title="커스텀 편집"
+            >
               ✏️
             </button>
           </div>
         </div>
-        <button onClick={onGenerate} disabled={isLoading} className="generate-btn small">
-          {isLoading ? '...' : '생성'}
+        <button
+          onClick={onGenerate}
+          disabled={isLoading}
+          className="generate-btn small"
+        >
+          {isLoading ? "..." : "생성"}
         </button>
       </div>
     </div>
@@ -433,21 +552,32 @@ interface StageSizeSelectorProps {
   onHeightChange: (height: number) => void;
 }
 
-function StageSizeSelector({ preset, width, height, onPresetChange, onWidthChange, onHeightChange }: StageSizeSelectorProps) {
+function StageSizeSelector({
+  preset,
+  width,
+  height,
+  onPresetChange,
+  onWidthChange,
+  onHeightChange,
+}: StageSizeSelectorProps) {
   return (
     <div className="stage-size-selector">
       <h4>스테이지 크기</h4>
       <div className="stage-preset-row">
         <select
           value={preset}
-          onChange={(e) => onPresetChange(e.target.value as keyof typeof STAGE_PRESETS)}
+          onChange={(e) =>
+            onPresetChange(e.target.value as keyof typeof STAGE_PRESETS)
+          }
         >
           {Object.entries(STAGE_PRESETS).map(([key, val]) => (
-            <option key={key} value={key}>{val.label}</option>
+            <option key={key} value={key}>
+              {val.label}
+            </option>
           ))}
         </select>
       </div>
-      {preset === 'custom' && (
+      {preset === "custom" && (
         <div className="stage-custom-inputs">
           <label>
             가로:
@@ -457,7 +587,11 @@ function StageSizeSelector({ preset, width, height, onPresetChange, onWidthChang
               max={30}
               step={0.5}
               value={width}
-              onChange={(e) => onWidthChange(Math.max(4, Math.min(30, parseFloat(e.target.value) || 12)))}
+              onChange={(e) =>
+                onWidthChange(
+                  Math.max(4, Math.min(30, parseFloat(e.target.value) || 12)),
+                )
+              }
             />
             m
           </label>
@@ -469,14 +603,19 @@ function StageSizeSelector({ preset, width, height, onPresetChange, onWidthChang
               max={25}
               step={0.5}
               value={height}
-              onChange={(e) => onHeightChange(Math.max(4, Math.min(25, parseFloat(e.target.value) || 10)))}
+              onChange={(e) =>
+                onHeightChange(
+                  Math.max(4, Math.min(25, parseFloat(e.target.value) || 10)),
+                )
+              }
             />
             m
           </label>
         </div>
       )}
       <div className="stage-info">
-        현재: {width}m × {height}m ({(width * 3.28).toFixed(0)}×{(height * 3.28).toFixed(0)} ft)
+        현재: {width}m × {height}m ({(width * 3.28).toFixed(0)}×
+        {(height * 3.28).toFixed(0)} ft)
       </div>
     </div>
   );
@@ -496,14 +635,27 @@ interface FormationEditorProps {
   onApplyPreset: (formation: FormationType, spread: number) => void;
 }
 
-function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeight, scale, dancerRadius, onPositionsChange, onClose, onApplyPreset }: FormationEditorProps) {
+function FormationEditor({
+  positions,
+  dancerCount,
+  title,
+  stageWidth,
+  stageHeight,
+  scale,
+  dancerRadius,
+  onPositionsChange,
+  onClose,
+  onApplyPreset,
+}: FormationEditorProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [localPositions, setLocalPositions] = useState<Position[]>(positions);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [snapSize, setSnapSize] = useState(0.5); // 0.5m grid snap
   const [spread, setSpread] = useState(1.0); // 대형 크기 (0.5 ~ 1.5)
-  const [currentPreset, setCurrentPreset] = useState<FormationType | null>(null);
+  const [currentPreset, setCurrentPreset] = useState<FormationType | null>(
+    null,
+  );
 
   // Undo/Redo 히스토리
   const [history, setHistory] = useState<Position[][]>([]);
@@ -518,7 +670,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
 
   // 히스토리에 현재 상태 저장
   const saveToHistory = useCallback((currentPos: Position[]) => {
-    setHistory(prev => {
+    setHistory((prev) => {
       const newHistory = [...prev, currentPos];
       if (newHistory.length > maxHistory) {
         return newHistory.slice(-maxHistory);
@@ -535,7 +687,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     const previousState = history[history.length - 1];
     const newHistory = history.slice(0, -1);
 
-    setFuture(prev => [...prev, localPositions]);
+    setFuture((prev) => [...prev, localPositions]);
     setHistory(newHistory);
     setLocalPositions(previousState);
     onPositionsChange(previousState);
@@ -548,7 +700,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     const nextState = future[future.length - 1];
     const newFuture = future.slice(0, -1);
 
-    setHistory(prev => [...prev, localPositions]);
+    setHistory((prev) => [...prev, localPositions]);
     setFuture(newFuture);
     setLocalPositions(nextState);
     onPositionsChange(nextState);
@@ -557,7 +709,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
   // 키보드 단축키 (Ctrl+Z, Ctrl+Shift+Z)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      if ((e.ctrlKey || e.metaKey) && e.key === "z") {
         e.preventDefault();
         if (e.shiftKey) {
           redo();
@@ -566,49 +718,76 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
         }
       }
       // Ctrl+Y for redo (Windows style)
-      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+      if ((e.ctrlKey || e.metaKey) && e.key === "y") {
         e.preventDefault();
         redo();
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [undo, redo]);
 
   // spread 변경 시 현재 프리셋으로 실시간 업데이트
-  const handleSpreadChange = useCallback((newSpread: number) => {
-    setSpread(newSpread);
-    if (currentPreset) {
-      saveToHistory(localPositions);
-      const newPositions = generateFormation(currentPreset, dancerCount, {
-        stageWidth,
-        stageHeight,
-        spread: newSpread
-      });
-      setLocalPositions(newPositions);
-      onPositionsChange(newPositions);
-    }
-  }, [currentPreset, dancerCount, stageWidth, stageHeight, onPositionsChange, localPositions, saveToHistory]);
+  const handleSpreadChange = useCallback(
+    (newSpread: number) => {
+      setSpread(newSpread);
+      if (currentPreset) {
+        saveToHistory(localPositions);
+        const newPositions = generateFormation(currentPreset, dancerCount, {
+          stageWidth,
+          stageHeight,
+          spread: newSpread,
+        });
+        setLocalPositions(newPositions);
+        onPositionsChange(newPositions);
+      }
+    },
+    [
+      currentPreset,
+      dancerCount,
+      stageWidth,
+      stageHeight,
+      onPositionsChange,
+      localPositions,
+      saveToHistory,
+    ],
+  );
 
   // 프리셋 적용
-  const handlePresetClick = useCallback((preset: FormationType) => {
-    setCurrentPreset(preset);
-    onApplyPreset(preset, spread);
-  }, [spread, onApplyPreset]);
+  const handlePresetClick = useCallback(
+    (preset: FormationType) => {
+      setCurrentPreset(preset);
+      onApplyPreset(preset, spread);
+    },
+    [spread, onApplyPreset],
+  );
 
   // 전체 대형 이동
-  const moveAll = useCallback((dx: number, dy: number) => {
-    saveToHistory(localPositions);
-    const newPositions = localPositions.slice(0, dancerCount).map(pos => ({
-      x: Math.max(0.5, Math.min(stageWidth - 0.5, pos.x + dx)),
-      y: Math.max(0.5, Math.min(stageHeight - 0.5, pos.y + dy)),
-    }));
-    // 나머지 포지션도 유지
-    const fullPositions = [...newPositions, ...localPositions.slice(dancerCount)];
-    setLocalPositions(fullPositions);
-    onPositionsChange(fullPositions);
-  }, [localPositions, dancerCount, stageWidth, stageHeight, onPositionsChange, saveToHistory]);
+  const moveAll = useCallback(
+    (dx: number, dy: number) => {
+      saveToHistory(localPositions);
+      const newPositions = localPositions.slice(0, dancerCount).map((pos) => ({
+        x: Math.max(0.5, Math.min(stageWidth - 0.5, pos.x + dx)),
+        y: Math.max(0.5, Math.min(stageHeight - 0.5, pos.y + dy)),
+      }));
+      // 나머지 포지션도 유지
+      const fullPositions = [
+        ...newPositions,
+        ...localPositions.slice(dancerCount),
+      ];
+      setLocalPositions(fullPositions);
+      onPositionsChange(fullPositions);
+    },
+    [
+      localPositions,
+      dancerCount,
+      stageWidth,
+      stageHeight,
+      onPositionsChange,
+      saveToHistory,
+    ],
+  );
 
   // 중앙 정렬
   const centerAll = useCallback(() => {
@@ -618,8 +797,10 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     saveToHistory(localPositions);
 
     // 현재 대형의 중심 계산
-    const centerX = activePositions.reduce((sum, p) => sum + p.x, 0) / activePositions.length;
-    const centerY = activePositions.reduce((sum, p) => sum + p.y, 0) / activePositions.length;
+    const centerX =
+      activePositions.reduce((sum, p) => sum + p.x, 0) / activePositions.length;
+    const centerY =
+      activePositions.reduce((sum, p) => sum + p.y, 0) / activePositions.length;
 
     // 무대 중앙으로 이동
     const targetCenterX = stageWidth / 2;
@@ -627,14 +808,24 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     const dx = targetCenterX - centerX;
     const dy = targetCenterY - centerY;
 
-    const newPositions = activePositions.map(pos => ({
+    const newPositions = activePositions.map((pos) => ({
       x: Math.max(0.5, Math.min(stageWidth - 0.5, pos.x + dx)),
       y: Math.max(0.5, Math.min(stageHeight - 0.5, pos.y + dy)),
     }));
-    const fullPositions = [...newPositions, ...localPositions.slice(dancerCount)];
+    const fullPositions = [
+      ...newPositions,
+      ...localPositions.slice(dancerCount),
+    ];
     setLocalPositions(fullPositions);
     onPositionsChange(fullPositions);
-  }, [localPositions, dancerCount, stageWidth, stageHeight, onPositionsChange, saveToHistory]);
+  }, [
+    localPositions,
+    dancerCount,
+    stageWidth,
+    stageHeight,
+    onPositionsChange,
+    saveToHistory,
+  ]);
 
   const svgWidth = stageWidth * scale + PADDING * 2;
   const svgHeight = stageHeight * scale + PADDING * 2;
@@ -649,28 +840,33 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     setDraggingId(id);
   };
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (draggingId === null || !svgRef.current) return;
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (draggingId === null || !svgRef.current) return;
 
-    const svg = svgRef.current;
-    const rect = svg.getBoundingClientRect();
-    let x = ((e.clientX - rect.left - PADDING) / scale);
-    let y = stageHeight - ((e.clientY - rect.top - PADDING) / scale);
+      const svg = svgRef.current;
+      const rect = svg.getBoundingClientRect();
+      let x = (e.clientX - rect.left - PADDING) / scale;
+      let y = stageHeight - (e.clientY - rect.top - PADDING) / scale;
 
-    // Apply grid snap if enabled
-    if (snapEnabled) {
-      x = snapToGrid(x, snapSize);
-      y = snapToGrid(y, snapSize);
-    }
+      // Apply grid snap if enabled
+      if (snapEnabled) {
+        x = snapToGrid(x, snapSize);
+        y = snapToGrid(y, snapSize);
+      }
 
-    // Clamp to stage bounds
-    const clampedX = Math.max(0.5, Math.min(stageWidth - 0.5, x));
-    const clampedY = Math.max(0.5, Math.min(stageHeight - 0.5, y));
+      // Clamp to stage bounds
+      const clampedX = Math.max(0.5, Math.min(stageWidth - 0.5, x));
+      const clampedY = Math.max(0.5, Math.min(stageHeight - 0.5, y));
 
-    setLocalPositions(prev => prev.map((pos, i) =>
-      i === draggingId ? { x: clampedX, y: clampedY } : pos
-    ));
-  }, [draggingId, snapEnabled, snapSize, scale, stageWidth, stageHeight]);
+      setLocalPositions((prev) =>
+        prev.map((pos, i) =>
+          i === draggingId ? { x: clampedX, y: clampedY } : pos,
+        ),
+      );
+    },
+    [draggingId, snapEnabled, snapSize, scale, stageWidth, stageHeight],
+  );
 
   const handleMouseUp = useCallback(() => {
     if (draggingId !== null) {
@@ -679,7 +875,16 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     setDraggingId(null);
   }, [draggingId, localPositions, onPositionsChange]);
 
-  const presets: FormationType[] = ['line', 'circle', 'v_shape', 'diagonal', 'diamond', 'triangle', 'two_lines', 'scatter'];
+  const presets: FormationType[] = [
+    "line",
+    "circle",
+    "v_shape",
+    "diagonal",
+    "diamond",
+    "triangle",
+    "two_lines",
+    "scatter",
+  ];
 
   return (
     <div className="formation-editor-overlay">
@@ -705,21 +910,35 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
                 ↷
               </button>
             </div>
-            <button onClick={onClose} className="close-btn">✕</button>
+            <button onClick={onClose} className="close-btn">
+              ✕
+            </button>
           </div>
         </div>
 
         <div className="editor-toolbar">
           <div className="preset-buttons">
-            {presets.map(p => (
+            {presets.map((p) => (
               <button
                 key={p}
                 onClick={() => handlePresetClick(p)}
-                className={`preset-btn ${currentPreset === p ? 'active' : ''}`}
+                className={`preset-btn ${currentPreset === p ? "active" : ""}`}
               >
-                {p === 'line' ? '일렬' : p === 'circle' ? '원형' : p === 'v_shape' ? 'V자' :
-                 p === 'diagonal' ? '대각선' : p === 'diamond' ? '다이아' : p === 'triangle' ? '삼각' :
-                 p === 'two_lines' ? '두줄' : '흩어짐'}
+                {p === "line"
+                  ? "일렬"
+                  : p === "circle"
+                    ? "원형"
+                    : p === "v_shape"
+                      ? "V자"
+                      : p === "diagonal"
+                        ? "대각선"
+                        : p === "diamond"
+                          ? "다이아"
+                          : p === "triangle"
+                            ? "삼각"
+                            : p === "two_lines"
+                              ? "두줄"
+                              : "흩어짐"}
               </button>
             ))}
           </div>
@@ -733,21 +952,43 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
               value={spread}
               onChange={(e) => handleSpreadChange(parseFloat(e.target.value))}
             />
-            <span className="spread-value">{Math.round(Math.min(spread * 60, 100))}%</span>
-            {!currentPreset && <span className="spread-hint">(프리셋 선택 후 조절)</span>}
+            <span className="spread-value">
+              {Math.round(Math.min(spread * 60, 100))}%
+            </span>
+            {!currentPreset && (
+              <span className="spread-hint">(프리셋 선택 후 조절)</span>
+            )}
           </div>
           <div className="position-control">
             <label>위치 이동:</label>
             <div className="position-pad">
-              <button className="pos-btn" onClick={() => moveAll(-0.5, 0.5)}>↖</button>
-              <button className="pos-btn" onClick={() => moveAll(0, 0.5)}>↑</button>
-              <button className="pos-btn" onClick={() => moveAll(0.5, 0.5)}>↗</button>
-              <button className="pos-btn" onClick={() => moveAll(-0.5, 0)}>←</button>
-              <button className="pos-btn center" onClick={centerAll}>◎</button>
-              <button className="pos-btn" onClick={() => moveAll(0.5, 0)}>→</button>
-              <button className="pos-btn" onClick={() => moveAll(-0.5, -0.5)}>↙</button>
-              <button className="pos-btn" onClick={() => moveAll(0, -0.5)}>↓</button>
-              <button className="pos-btn" onClick={() => moveAll(0.5, -0.5)}>↘</button>
+              <button className="pos-btn" onClick={() => moveAll(-0.5, 0.5)}>
+                ↖
+              </button>
+              <button className="pos-btn" onClick={() => moveAll(0, 0.5)}>
+                ↑
+              </button>
+              <button className="pos-btn" onClick={() => moveAll(0.5, 0.5)}>
+                ↗
+              </button>
+              <button className="pos-btn" onClick={() => moveAll(-0.5, 0)}>
+                ←
+              </button>
+              <button className="pos-btn center" onClick={centerAll}>
+                ◎
+              </button>
+              <button className="pos-btn" onClick={() => moveAll(0.5, 0)}>
+                →
+              </button>
+              <button className="pos-btn" onClick={() => moveAll(-0.5, -0.5)}>
+                ↙
+              </button>
+              <button className="pos-btn" onClick={() => moveAll(0, -0.5)}>
+                ↓
+              </button>
+              <button className="pos-btn" onClick={() => moveAll(0.5, -0.5)}>
+                ↘
+              </button>
             </div>
           </div>
           <div className="snap-controls">
@@ -761,11 +1002,11 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
             </label>
             {snapEnabled && (
               <div className="snap-size-buttons">
-                {[0.5, 1].map(size => (
+                {[0.5, 1].map((size) => (
                   <button
                     key={size}
                     onClick={() => setSnapSize(size)}
-                    className={`snap-size-btn ${snapSize === size ? 'active' : ''}`}
+                    className={`snap-size-btn ${snapSize === size ? "active" : ""}`}
                   >
                     {size}m
                   </button>
@@ -779,7 +1020,11 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
           ref={svgRef}
           width={svgWidth}
           height={svgHeight}
-          style={{ background: BACKGROUND_COLOR, borderRadius: '8px', cursor: draggingId !== null ? 'grabbing' : 'default' }}
+          style={{
+            background: BACKGROUND_COLOR,
+            borderRadius: "8px",
+            cursor: draggingId !== null ? "grabbing" : "default",
+          }}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
@@ -836,7 +1081,11 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
             const color = DANCER_COLORS[i % DANCER_COLORS.length];
 
             return (
-              <g key={i} onMouseDown={handleMouseDown(i)} style={{ cursor: 'grab' }}>
+              <g
+                key={i}
+                onMouseDown={handleMouseDown(i)}
+                style={{ cursor: "grab" }}
+              >
                 <circle
                   cx={cx}
                   cy={cy}
@@ -848,7 +1097,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
                   cy={cy}
                   r={dancerRadius}
                   fill={color}
-                  stroke={draggingId === i ? '#fff' : 'rgba(255,255,255,0.3)'}
+                  stroke={draggingId === i ? "#fff" : "rgba(255,255,255,0.3)"}
                   strokeWidth={draggingId === i ? 3 : 2}
                 />
                 <text
@@ -859,7 +1108,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
                   fill="#fff"
                   fontSize={Math.max(10, dancerRadius * 0.8)}
                   fontWeight="bold"
-                  style={{ pointerEvents: 'none' }}
+                  style={{ pointerEvents: "none" }}
                 >
                   {i + 1}
                 </text>
@@ -871,7 +1120,9 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
         <div className="position-list">
           {localPositions.slice(0, dancerCount).map((pos, i) => (
             <div key={i} className="position-item">
-              <span style={{ color: DANCER_COLORS[i % DANCER_COLORS.length] }}>●</span>
+              <span style={{ color: DANCER_COLORS[i % DANCER_COLORS.length] }}>
+                ●
+              </span>
               <span>D{i + 1}:</span>
               <input
                 type="number"
@@ -879,7 +1130,10 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
                 value={pos.x.toFixed(1)}
                 onChange={(e) => {
                   const newPos = [...localPositions];
-                  newPos[i] = { ...newPos[i], x: parseFloat(e.target.value) || 0 };
+                  newPos[i] = {
+                    ...newPos[i],
+                    x: parseFloat(e.target.value) || 0,
+                  };
                   setLocalPositions(newPos);
                   onPositionsChange(newPos);
                 }}
@@ -892,7 +1146,10 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
                 value={pos.y.toFixed(1)}
                 onChange={(e) => {
                   const newPos = [...localPositions];
-                  newPos[i] = { ...newPos[i], y: parseFloat(e.target.value) || 0 };
+                  newPos[i] = {
+                    ...newPos[i],
+                    y: parseFloat(e.target.value) || 0,
+                  };
                   setLocalPositions(newPos);
                   onPositionsChange(newPos);
                 }}
@@ -903,7 +1160,9 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
         </div>
 
         <div className="editor-footer">
-          <button onClick={onClose} className="done-btn">완료</button>
+          <button onClick={onClose} className="done-btn">
+            완료
+          </button>
         </div>
       </div>
     </div>
@@ -916,30 +1175,36 @@ interface AestheticScorePanelProps {
 
 function AestheticScorePanel({ score }: AestheticScorePanelProps) {
   const getScoreColor = (value: number) => {
-    if (value >= 80) return '#4ECDC4';
-    if (value >= 60) return '#FFD93D';
-    return '#FF6B6B';
+    if (value >= 80) return "#4ECDC4";
+    if (value >= 60) return "#FFD93D";
+    return "#FF6B6B";
   };
 
   return (
     <div className="aesthetic-panel">
       <h3>미적 평가</h3>
-      <div className="overall-score" style={{ borderColor: getScoreColor(score.overall) }}>
+      <div
+        className="overall-score"
+        style={{ borderColor: getScoreColor(score.overall) }}
+      >
         <span className="score-value">{score.overall}</span>
         <span className="score-label">종합 점수</span>
       </div>
       <div className="score-details">
         {[
-          { label: '대칭성', value: score.symmetry },
-          { label: '중심 집중', value: score.centerFocus },
-          { label: '교차 복잡도', value: score.crossingPenalty },
-          { label: '흐름 부드러움', value: score.flowSmoothness },
-          { label: '메인 강조', value: score.mainDancerEmphasis },
+          { label: "대칭성", value: score.symmetry },
+          { label: "중심 집중", value: score.centerFocus },
+          { label: "교차 복잡도", value: score.crossingPenalty },
+          { label: "흐름 부드러움", value: score.flowSmoothness },
+          { label: "메인 강조", value: score.mainDancerEmphasis },
         ].map(({ label, value }) => (
           <div key={label} className="score-row">
             <span className="score-label">{label}</span>
             <div className="score-bar">
-              <div className="score-fill" style={{ width: `${value}%`, background: getScoreColor(value) }} />
+              <div
+                className="score-fill"
+                style={{ width: `${value}%`, background: getScoreColor(value) }}
+              />
             </div>
             <span className="score-num">{value}</span>
           </div>
@@ -971,28 +1236,57 @@ interface PlaybackControlsProps {
   onSpeedChange: (speed: number) => void;
 }
 
-function PlaybackControls({ isPlaying, currentCount, totalCounts, playbackSpeed, onPlay, onPause, onReset, onSeek, onSpeedChange }: PlaybackControlsProps) {
+function PlaybackControls({
+  isPlaying,
+  currentCount,
+  totalCounts,
+  playbackSpeed,
+  onPlay,
+  onPause,
+  onReset,
+  onSeek,
+  onSpeedChange,
+}: PlaybackControlsProps) {
   return (
     <div className="controls">
       <div className="timeline-section">
         <label>
-          Timeline: <strong>{currentCount.toFixed(2)}</strong> / {totalCounts} counts
+          Timeline: <strong>{currentCount.toFixed(2)}</strong> / {totalCounts}{" "}
+          counts
         </label>
-        <input type="range" min={0} max={totalCounts} step={0.01} value={currentCount} onChange={(e) => onSeek(parseFloat(e.target.value))} className="timeline-slider" />
+        <input
+          type="range"
+          min={0}
+          max={totalCounts}
+          step={0.01}
+          value={currentCount}
+          onChange={(e) => onSeek(parseFloat(e.target.value))}
+          className="timeline-slider"
+        />
       </div>
       <div className="button-section">
-        <button onClick={onReset} className="control-btn reset">⏮ Reset</button>
+        <button onClick={onReset} className="control-btn reset">
+          ⏮ Reset
+        </button>
         {isPlaying ? (
-          <button onClick={onPause} className="control-btn pause">⏸ Pause</button>
+          <button onClick={onPause} className="control-btn pause">
+            ⏸ Pause
+          </button>
         ) : (
-          <button onClick={onPlay} className="control-btn play">▶ Play</button>
+          <button onClick={onPlay} className="control-btn play">
+            ▶ Play
+          </button>
         )}
       </div>
       <div className="speed-section">
         <label>Speed:</label>
         <div className="speed-buttons">
           {[0.5, 1, 2].map((speed) => (
-            <button key={speed} onClick={() => onSpeedChange(speed)} className={`speed-btn ${playbackSpeed === speed ? 'active' : ''}`}>
+            <button
+              key={speed}
+              onClick={() => onSpeedChange(speed)}
+              className={`speed-btn ${playbackSpeed === speed ? "active" : ""}`}
+            >
               {speed}x
             </button>
           ))}
@@ -1012,7 +1306,15 @@ interface DancerInfoPanelProps {
   onTogglePaths: () => void;
 }
 
-function DancerInfoPanel({ dancers, currentCount, totalCounts, selectedDancer, onSelectDancer, showPaths, onTogglePaths }: DancerInfoPanelProps) {
+function DancerInfoPanel({
+  dancers,
+  currentCount,
+  totalCounts,
+  selectedDancer,
+  onSelectDancer,
+  showPaths,
+  onTogglePaths,
+}: DancerInfoPanelProps) {
   return (
     <div className="info-panel">
       <div className="panel-header">
@@ -1024,23 +1326,48 @@ function DancerInfoPanel({ dancers, currentCount, totalCounts, selectedDancer, o
       </div>
       <div className="dancer-list">
         {dancers.map((dancer) => {
-          const position = getDancerPositionAtCount(dancer, currentCount, totalCounts);
+          const position = getDancerPositionAtCount(
+            dancer,
+            currentCount,
+            totalCounts,
+          );
           const isMoving = currentCount > dancer.startTime;
-          const progress = Math.min(100, Math.max(0, ((currentCount - dancer.startTime) / (totalCounts - dancer.startTime)) * 100));
+          const progress = Math.min(
+            100,
+            Math.max(
+              0,
+              ((currentCount - dancer.startTime) /
+                (totalCounts - dancer.startTime)) *
+                100,
+            ),
+          );
 
           return (
-            <div key={dancer.id} className={`dancer-info ${selectedDancer === dancer.id ? 'selected' : ''}`} onClick={() => onSelectDancer(selectedDancer === dancer.id ? null : dancer.id)}>
+            <div
+              key={dancer.id}
+              className={`dancer-info ${selectedDancer === dancer.id ? "selected" : ""}`}
+              onClick={() =>
+                onSelectDancer(selectedDancer === dancer.id ? null : dancer.id)
+              }
+            >
               <div className="dancer-header">
-                <div className="dancer-color" style={{ background: dancer.color }} />
+                <div
+                  className="dancer-color"
+                  style={{ background: dancer.color }}
+                />
                 <span className="dancer-name">Dancer {dancer.id}</span>
-                <span className={`dancer-status ${isMoving ? 'moving' : 'waiting'}`}>
-                  {isMoving ? 'Moving' : `Starts at ${dancer.startTime}`}
+                <span
+                  className={`dancer-status ${isMoving ? "moving" : "waiting"}`}
+                >
+                  {isMoving ? "Moving" : `Starts at ${dancer.startTime}`}
                 </span>
               </div>
               <div className="dancer-details">
                 <div className="detail-row">
                   <span>Position:</span>
-                  <span>({position.x.toFixed(2)}, {position.y.toFixed(2)})</span>
+                  <span>
+                    ({position.x.toFixed(2)}, {position.y.toFixed(2)})
+                  </span>
                 </div>
                 <div className="detail-row">
                   <span>Speed:</span>
@@ -1051,7 +1378,10 @@ function DancerInfoPanel({ dancers, currentCount, totalCounts, selectedDancer, o
                   <span>{dancer.distance.toFixed(2)}m</span>
                 </div>
                 <div className="progress-bar">
-                  <div className="progress-fill" style={{ width: `${progress}%`, background: dancer.color }} />
+                  <div
+                    className="progress-fill"
+                    style={{ width: `${progress}%`, background: dancer.color }}
+                  />
                 </div>
               </div>
             </div>
@@ -1088,7 +1418,7 @@ export default function DanceChoreography() {
   const [error, setError] = useState<string | null>(null);
 
   // Stage size state
-  const [stagePreset, setStagePreset] = useState<StagePreset>('world_of_dance');
+  const [stagePreset, setStagePreset] = useState<StagePreset>("world_of_dance");
   const [stageWidth, setStageWidth] = useState(DEFAULT_STAGE_WIDTH);
   const [stageHeight, setStageHeight] = useState(DEFAULT_STAGE_HEIGHT);
 
@@ -1107,14 +1437,18 @@ export default function DanceChoreography() {
   }, [scale]);
 
   // Formation state
-  const [startFormation, setStartFormation] = useState<FormationType>('line');
-  const [endFormation, setEndFormation] = useState<FormationType>('v_shape');
+  const [startFormation, setStartFormation] = useState<FormationType>("line");
+  const [endFormation, setEndFormation] = useState<FormationType>("v_shape");
   const [dancerCount, setDancerCount] = useState(8);
 
   // Custom positions
-  const [customStartPositions, setCustomStartPositions] = useState<Position[]>([]);
+  const [customStartPositions, setCustomStartPositions] = useState<Position[]>(
+    [],
+  );
   const [customEndPositions, setCustomEndPositions] = useState<Position[]>([]);
-  const [editingFormation, setEditingFormation] = useState<'start' | 'end' | null>(null);
+  const [editingFormation, setEditingFormation] = useState<
+    "start" | "end" | null
+  >(null);
 
   // Choreography result
   const [result, setResult] = useState<ChoreographyResult | null>(null);
@@ -1123,8 +1457,16 @@ export default function DanceChoreography() {
 
   // Initialize custom positions when dancer count or stage size changes
   useEffect(() => {
-    const startPos = generateFormation(startFormation === 'custom' ? 'line' : startFormation, dancerCount, { stageWidth, stageHeight });
-    const endPos = generateFormation(endFormation === 'custom' ? 'v_shape' : endFormation, dancerCount, { stageWidth, stageHeight });
+    const startPos = generateFormation(
+      startFormation === "custom" ? "line" : startFormation,
+      dancerCount,
+      { stageWidth, stageHeight },
+    );
+    const endPos = generateFormation(
+      endFormation === "custom" ? "v_shape" : endFormation,
+      dancerCount,
+      { stageWidth, stageHeight },
+    );
     setCustomStartPositions(startPos);
     setCustomEndPositions(endPos);
   }, [dancerCount, stageWidth, stageHeight]);
@@ -1144,7 +1486,7 @@ export default function DanceChoreography() {
 
     const animate = (time: number) => {
       const elapsed = time - startTime;
-      const newCount = startCount + (elapsed / countDuration);
+      const newCount = startCount + elapsed / countDuration;
 
       if (newCount >= totalCounts) {
         setCurrentCount(totalCounts);
@@ -1160,30 +1502,32 @@ export default function DanceChoreography() {
     return () => cancelAnimationFrame(frameId);
   }, [isPlaying, playbackSpeed, currentCount, totalCounts]);
 
-  const handleNLPGenerate = useCallback(async (input: string) => {
-    setIsLoading(true);
-    setError(null);
+  const handleNLPGenerate = useCallback(
+    async (input: string) => {
+      setIsLoading(true);
+      setError(null);
 
-    try {
-      const choreographyResult = await generateChoreographyFromText(input, {
-        useGeminiParser: isApiKeyConfigured(),
-        useGeminiEvaluator: false,
-        dancerCount: dancerCount,
-        stageWidth: stageWidth,
-        stageHeight: stageHeight,
-      });
+      try {
+        // [변경] 기존 generateChoreographyFromText 대신 Pure AI 함수 호출
+        const choreographyResult = await generateChoreographyPureAI(input, {
+          dancerCount: dancerCount,
+          stageWidth: stageWidth,
+          stageHeight: stageHeight,
+        });
 
-      setResult(choreographyResult);
-      setDancers(resultToDancerData(choreographyResult));
-      setTotalCounts(choreographyResult.request.totalCounts);
-      setCurrentCount(0);
-      setIsPlaying(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '안무 생성 실패');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [dancerCount, stageWidth, stageHeight]);
+        setResult(choreographyResult);
+        setDancers(resultToDancerData(choreographyResult));
+        setTotalCounts(choreographyResult.request.totalCounts);
+        setCurrentCount(0);
+        setIsPlaying(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "안무 생성 실패");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [dancerCount, stageWidth, stageHeight],
+  );
 
   const handleDirectGenerate = useCallback(() => {
     setIsLoading(true);
@@ -1197,11 +1541,17 @@ export default function DanceChoreography() {
           dancerCount: dancerCount,
           spread: 1.0,
           totalCounts: 8,
-          customStartPositions: startFormation === 'custom' ? customStartPositions.slice(0, dancerCount) : undefined,
-          customEndPositions: endFormation === 'custom' ? customEndPositions.slice(0, dancerCount) : undefined,
+          customStartPositions:
+            startFormation === "custom"
+              ? customStartPositions.slice(0, dancerCount)
+              : undefined,
+          customEndPositions:
+            endFormation === "custom"
+              ? customEndPositions.slice(0, dancerCount)
+              : undefined,
           stageWidth: stageWidth,
           stageHeight: stageHeight,
-        }
+        },
       );
 
       setResult(choreographyResult);
@@ -1210,38 +1560,68 @@ export default function DanceChoreography() {
       setCurrentCount(0);
       setIsPlaying(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '안무 생성 실패');
+      setError(err instanceof Error ? err.message : "안무 생성 실패");
     } finally {
       setIsLoading(false);
     }
-  }, [startFormation, endFormation, dancerCount, customStartPositions, customEndPositions, stageWidth, stageHeight]);
+  }, [
+    startFormation,
+    endFormation,
+    dancerCount,
+    customStartPositions,
+    customEndPositions,
+    stageWidth,
+    stageHeight,
+  ]);
 
   // Handle formation preset in editor
-  const handleApplyPreset = useCallback((formation: FormationType, target: 'start' | 'end', spread: number = 1.0) => {
-    const positions = generateFormation(formation, dancerCount, { stageWidth, stageHeight, spread });
-    if (target === 'start') {
-      setCustomStartPositions(positions);
-      setStartFormation('custom');
-    } else {
-      setCustomEndPositions(positions);
-      setEndFormation('custom');
-    }
-  }, [dancerCount, stageWidth, stageHeight]);
+  const handleApplyPreset = useCallback(
+    (
+      formation: FormationType,
+      target: "start" | "end",
+      spread: number = 1.0,
+    ) => {
+      const positions = generateFormation(formation, dancerCount, {
+        stageWidth,
+        stageHeight,
+        spread,
+      });
+      if (target === "start") {
+        setCustomStartPositions(positions);
+        setStartFormation("custom");
+      } else {
+        setCustomEndPositions(positions);
+        setEndFormation("custom");
+      }
+    },
+    [dancerCount, stageWidth, stageHeight],
+  );
 
   // Handle dancer count change
-  const handleDancerCountChange = useCallback((count: number) => {
-    setDancerCount(count);
-    // Regenerate positions for new count
-    const startPos = generateFormation(startFormation === 'custom' ? 'line' : startFormation, count, { stageWidth, stageHeight });
-    const endPos = generateFormation(endFormation === 'custom' ? 'v_shape' : endFormation, count, { stageWidth, stageHeight });
-    setCustomStartPositions(startPos);
-    setCustomEndPositions(endPos);
-  }, [startFormation, endFormation, stageWidth, stageHeight]);
+  const handleDancerCountChange = useCallback(
+    (count: number) => {
+      setDancerCount(count);
+      // Regenerate positions for new count
+      const startPos = generateFormation(
+        startFormation === "custom" ? "line" : startFormation,
+        count,
+        { stageWidth, stageHeight },
+      );
+      const endPos = generateFormation(
+        endFormation === "custom" ? "v_shape" : endFormation,
+        count,
+        { stageWidth, stageHeight },
+      );
+      setCustomStartPositions(startPos);
+      setCustomEndPositions(endPos);
+    },
+    [startFormation, endFormation, stageWidth, stageHeight],
+  );
 
   // Handle stage preset change
   const handleStagePresetChange = useCallback((preset: StagePreset) => {
     setStagePreset(preset);
-    if (preset !== 'custom') {
+    if (preset !== "custom") {
       setStageWidth(STAGE_PRESETS[preset].width);
       setStageHeight(STAGE_PRESETS[preset].height);
     }
@@ -1277,25 +1657,36 @@ export default function DanceChoreography() {
 
   const formationText = result
     ? `${result.request.startFormation.type} → ${result.request.endFormation.type}`
-    : 'Line → V-Shape';
+    : "Line → V-Shape";
 
   return (
     <div className="choreography-container">
       <header className="header">
         <h1>Dance Formation Choreography</h1>
-        <p>{formationText} | {dancerCount} Dancers | {totalCounts} Counts</p>
+        <p>
+          {formationText} | {dancerCount} Dancers | {totalCounts} Counts
+        </p>
       </header>
 
       <div className="input-section">
-        <NaturalLanguageInput onGenerate={handleNLPGenerate} isLoading={isLoading} />
+        <NaturalLanguageInput
+          onGenerate={handleNLPGenerate}
+          isLoading={isLoading}
+        />
         <div className="divider">또는</div>
         <StageSizeSelector
           preset={stagePreset}
           width={stageWidth}
           height={stageHeight}
           onPresetChange={handleStagePresetChange}
-          onWidthChange={(w) => { setStageWidth(w); setStagePreset('custom'); }}
-          onHeightChange={(h) => { setStageHeight(h); setStagePreset('custom'); }}
+          onWidthChange={(w) => {
+            setStageWidth(w);
+            setStagePreset("custom");
+          }}
+          onHeightChange={(h) => {
+            setStageHeight(h);
+            setStagePreset("custom");
+          }}
         />
         <FormationSelector
           startFormation={startFormation}
@@ -1303,20 +1694,24 @@ export default function DanceChoreography() {
           dancerCount={dancerCount}
           onStartChange={(f) => {
             setStartFormation(f);
-            if (f !== 'custom') {
-              setCustomStartPositions(generateFormation(f, dancerCount, { stageWidth, stageHeight }));
+            if (f !== "custom") {
+              setCustomStartPositions(
+                generateFormation(f, dancerCount, { stageWidth, stageHeight }),
+              );
             }
           }}
           onEndChange={(f) => {
             setEndFormation(f);
-            if (f !== 'custom') {
-              setCustomEndPositions(generateFormation(f, dancerCount, { stageWidth, stageHeight }));
+            if (f !== "custom") {
+              setCustomEndPositions(
+                generateFormation(f, dancerCount, { stageWidth, stageHeight }),
+              );
             }
           }}
           onDancerCountChange={handleDancerCountChange}
           onGenerate={handleDirectGenerate}
-          onEditStart={() => setEditingFormation('start')}
-          onEditEnd={() => setEditingFormation('end')}
+          onEditStart={() => setEditingFormation("start")}
+          onEditEnd={() => setEditingFormation("end")}
           isLoading={isLoading}
         />
       </div>
@@ -1324,24 +1719,32 @@ export default function DanceChoreography() {
       {/* Formation Editor Modal */}
       {editingFormation && (
         <FormationEditor
-          positions={editingFormation === 'start' ? customStartPositions : customEndPositions}
+          positions={
+            editingFormation === "start"
+              ? customStartPositions
+              : customEndPositions
+          }
           dancerCount={dancerCount}
-          title={editingFormation === 'start' ? '시작 대형 편집' : '끝 대형 편집'}
+          title={
+            editingFormation === "start" ? "시작 대형 편집" : "끝 대형 편집"
+          }
           stageWidth={stageWidth}
           stageHeight={stageHeight}
           scale={scale}
           dancerRadius={dancerRadius}
           onPositionsChange={(pos) => {
-            if (editingFormation === 'start') {
+            if (editingFormation === "start") {
               setCustomStartPositions(pos);
-              setStartFormation('custom');
+              setStartFormation("custom");
             } else {
               setCustomEndPositions(pos);
-              setEndFormation('custom');
+              setEndFormation("custom");
             }
           }}
           onClose={() => setEditingFormation(null)}
-          onApplyPreset={(f, spread) => handleApplyPreset(f, editingFormation, spread)}
+          onApplyPreset={(f, spread) =>
+            handleApplyPreset(f, editingFormation, spread)
+          }
         />
       )}
 
@@ -1349,7 +1752,11 @@ export default function DanceChoreography() {
 
       <div className="main-content">
         <div className="stage-wrapper">
-          <Stage stageWidth={stageWidth} stageHeight={stageHeight} scale={scale}>
+          <Stage
+            stageWidth={stageWidth}
+            stageHeight={stageHeight}
+            scale={scale}
+          >
             <AnimatePresence>
               {dancerPositions.map(({ dancer, position }) => (
                 <Dancer
@@ -1358,7 +1765,11 @@ export default function DanceChoreography() {
                   position={position}
                   showPath={showPaths}
                   isSelected={selectedDancer === dancer.id}
-                  onSelect={() => setSelectedDancer(selectedDancer === dancer.id ? null : dancer.id)}
+                  onSelect={() =>
+                    setSelectedDancer(
+                      selectedDancer === dancer.id ? null : dancer.id,
+                    )
+                  }
                   scale={scale}
                   stageHeight={stageHeight}
                   dancerRadius={dancerRadius}
@@ -1391,7 +1802,9 @@ export default function DanceChoreography() {
             onTogglePaths={() => setShowPaths(!showPaths)}
           />
 
-          {result?.aestheticScore && <AestheticScorePanel score={result.aestheticScore} />}
+          {result?.aestheticScore && (
+            <AestheticScorePanel score={result.aestheticScore} />
+          )}
         </div>
       </div>
 
@@ -1411,8 +1824,12 @@ export default function DanceChoreography() {
           </div>
           <div className="metadata-item">
             <span>충돌:</span>
-            <strong style={{ color: result.validation.valid ? '#4ECDC4' : '#FF6B6B' }}>
-              {result.validation.valid ? '없음' : `${result.validation.collisions.length}건`}
+            <strong
+              style={{ color: result.validation.valid ? "#4ECDC4" : "#FF6B6B" }}
+            >
+              {result.validation.valid
+                ? "없음"
+                : `${result.validation.collisions.length}건`}
             </strong>
           </div>
         </div>
