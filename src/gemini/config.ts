@@ -1,13 +1,17 @@
 /**
  * Gemini API Configuration
  *
- * API 키를 여기에 설정하거나 환경 변수로 관리
+ * 서버리스 함수를 통해 API 호출 (키 보안)
  */
 
-// TODO: 실제 API 키로 교체
-export const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || 'YOUR_GEMINI_API_KEY_HERE';
+// 서버 API 엔드포인트 (Vercel serverless function)
+const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:3000' : '';
 
-export const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+export const GEMINI_API_URL = `${API_BASE_URL}/api/gemini`;
+export const HEALTH_API_URL = `${API_BASE_URL}/api/health`;
+
+// 레거시 호환성 (사용하지 않음)
+export const GEMINI_API_KEY = '';
 
 export const GEMINI_CONFIG = {
   temperature: 0.7,
@@ -17,8 +21,49 @@ export const GEMINI_CONFIG = {
 };
 
 /**
- * API 키가 설정되었는지 확인
+ * API 키가 서버에 설정되었는지 확인 (health check)
  */
-export function isApiKeyConfigured(): boolean {
-  return GEMINI_API_KEY !== 'YOUR_GEMINI_API_KEY_HERE' && GEMINI_API_KEY.length > 10;
+export async function isApiKeyConfigured(): Promise<boolean> {
+  try {
+    const response = await fetch(HEALTH_API_URL);
+    if (!response.ok) return false;
+    const data = await response.json();
+    return data.apiConfigured === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 서버를 통해 Gemini API 호출
+ */
+export async function callGeminiAPI(prompt: string, config?: Partial<typeof GEMINI_CONFIG>): Promise<string> {
+  const response = await fetch(GEMINI_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [{ text: prompt }],
+        },
+      ],
+      generationConfig: { ...GEMINI_CONFIG, ...config },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(`Gemini API 오류: ${response.status} - ${errorData.error || 'Unknown error'}`);
+  }
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!text) {
+    throw new Error('Gemini API 응답이 비어있습니다.');
+  }
+
+  return text;
 }

@@ -8,6 +8,7 @@ export {
   GEMINI_API_URL,
   GEMINI_CONFIG,
   isApiKeyConfigured,
+  callGeminiAPI,
 } from './config';
 
 // Parser
@@ -28,3 +29,12 @@ export {
   type AestheticScore,
   type ImprovementSuggestion,
 } from './evaluator';
+
+// Ranker (후보 랭킹)
+export {
+  rankCandidatesWithGemini,
+  rankCandidatesLocal,
+  generateComparisonSummary,
+  type UserPreference,
+  type RankingResult,
+} from './ranker';

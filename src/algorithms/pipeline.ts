@@ -16,6 +16,11 @@ import type { DancerPath } from './pathfinder';
 import { generateFormation, applySpread } from './formations';
 import type { FormationType } from './formations';
 import {
+  generateAllCandidates,
+  summarizeCandidatesForGemini,
+} from './candidateGenerator';
+import type { CandidateResult } from './candidateGenerator';
+import {
   parseChoreographyRequest,
   parseChoreographyRequestMock,
 } from '../gemini/parser';
@@ -24,6 +29,11 @@ import {
   evaluateChoreographyLocal,
 } from '../gemini/evaluator';
 import type { AestheticScore } from '../gemini/evaluator';
+import {
+  rankCandidatesWithGemini,
+  rankCandidatesLocal,
+} from '../gemini/ranker';
+import type { UserPreference, RankingResult } from '../gemini/ranker';
 import { isApiKeyConfigured } from '../gemini/config';
 
 /**
@@ -99,8 +109,10 @@ export async function generateChoreographyFromText(
     stageHeight?: number;
   } = {}
 ): Promise<ChoreographyResult> {
+  // isApiKeyConfigured is async, so resolve default values
+  const apiConfigured = options.useGeminiParser !== undefined ? options.useGeminiParser : await isApiKeyConfigured();
   const {
-    useGeminiParser = isApiKeyConfigured(),
+    useGeminiParser = apiConfigured,
     dancerCount = 8,
     stageWidth = 12,
     stageHeight = 10,
@@ -318,4 +330,220 @@ export function toVisualizationData(result: ChoreographyResult) {
  */
 export function exportToJSON(result: ChoreographyResult): string {
   return JSON.stringify(toVisualizationData(result), null, 2);
+}
+
+/**
+ * 다중 후보 파이프라인 결과
+ */
+export interface MultiCandidateResult {
+  // 선택된 최종 결과
+  selectedResult: ChoreographyResult;
+
+  // 모든 후보들
+  candidates: CandidateResult[];
+
+  // 랭킹 결과
+  ranking: RankingResult;
+
+  // 후보 요약 (Gemini용)
+  candidatesSummary: object;
+
+  // 메타데이터
+  metadata: {
+    totalCandidates: number;
+    selectedStrategy: string;
+    computeTimeMs: number;
+    usedGeminiRanking: boolean;
+  };
+}
+
+/**
+ * 다중 후보 생성 + Gemini 랭킹 파이프라인
+ *
+ * 1. 여러 전략으로 후보 생성
+ * 2. 각 후보의 메트릭 계산
+ * 3. Gemini (또는 로컬)로 최적 후보 선택
+ * 4. 선택된 후보로 최종 결과 생성
+ */
+export async function generateChoreographyWithCandidates(
+  startFormation: FormationType,
+  endFormation: FormationType,
+  options: {
+    dancerCount?: number;
+    spread?: number;
+    totalCounts?: number;
+    mainDancer?: number;
+    customStartPositions?: Position[];
+    customEndPositions?: Position[];
+    stageWidth?: number;
+    stageHeight?: number;
+    userPreference?: UserPreference;
+    useGeminiRanking?: boolean;
+  } = {}
+): Promise<MultiCandidateResult> {
+  const {
+    dancerCount = 8,
+    spread = 1.0,
+    totalCounts = 8,
+    mainDancer = null,
+    customStartPositions,
+    customEndPositions,
+    stageWidth = 12,
+    stageHeight = 10,
+    userPreference = {},
+    useGeminiRanking = isApiKeyConfigured(),
+  } = options;
+
+  const startTime = performance.now();
+
+  // 1. 대형 생성
+  const startPositions = customStartPositions || generateFormation(startFormation, dancerCount, { spread, stageWidth, stageHeight });
+  const endPositions = customEndPositions || generateFormation(endFormation, dancerCount, { spread, stageWidth, stageHeight });
+
+  // 2. 모든 전략으로 후보 생성
+  const candidates = generateAllCandidates(startPositions, endPositions, {
+    totalCounts,
+    collisionRadius: 0.5,
+    stageWidth,
+    stageHeight,
+  });
+
+  // 3. Gemini 또는 로컬 랭킹
+  let ranking: RankingResult;
+  let usedGeminiRanking = false;
+
+  if (useGeminiRanking) {
+    try {
+      ranking = await rankCandidatesWithGemini(candidates, userPreference);
+      usedGeminiRanking = true;
+    } catch (error) {
+      console.warn('Gemini 랭킹 실패, 로컬 랭킹 사용:', error);
+      ranking = rankCandidatesLocal(candidates, userPreference);
+    }
+  } else {
+    ranking = rankCandidatesLocal(candidates, userPreference);
+  }
+
+  // 4. 선택된 후보 찾기
+  const selectedCandidate = candidates.find(c => c.id === ranking.selectedId) || candidates[0];
+
+  // 5. ChoreographyResult 형태로 변환
+  const smoothPaths = pathsToSmoothPaths(selectedCandidate.paths);
+  const validation = validatePathsSimple(selectedCandidate.paths, 0.5, totalCounts);
+
+  const request: ChoreographyRequest = {
+    startFormation: { type: startFormation },
+    endFormation: { type: endFormation },
+    constraints: [],
+    style: { spread, symmetry: false, smoothness: 0.7, speed: 'normal', dramatic: false },
+    mainDancer,
+    keyframes: [],
+    totalCounts,
+    originalInput: '',
+  };
+
+  const distances = selectedCandidate.paths.map(p => p.totalDistance);
+  const resultMetadata = {
+    totalDistance: distances.reduce((sum, d) => sum + d, 0),
+    averageDistance: distances.reduce((sum, d) => sum + d, 0) / distances.length,
+    maxDistance: Math.max(...distances),
+    minDistance: Math.min(...distances),
+    computeTimeMs: performance.now() - startTime,
+  };
+
+  const pathResults = selectedCandidate.paths.map(p => ({
+    dancerId: p.dancerId,
+    path: p.path,
+    totalDistance: p.totalDistance,
+    collisionFree: true,
+  }));
+  const aestheticScore = evaluateChoreographyLocal(pathResults, mainDancer);
+
+  const selectedResult: ChoreographyResult = {
+    request,
+    startPositions,
+    endPositions,
+    assignments: selectedCandidate.assignments,
+    paths: selectedCandidate.paths,
+    smoothPaths,
+    validation,
+    aestheticScore,
+    metadata: resultMetadata,
+  };
+
+  return {
+    selectedResult,
+    candidates,
+    ranking,
+    candidatesSummary: summarizeCandidatesForGemini(candidates),
+    metadata: {
+      totalCandidates: candidates.length,
+      selectedStrategy: selectedCandidate.strategy,
+      computeTimeMs: performance.now() - startTime,
+      usedGeminiRanking,
+    },
+  };
+}
+
+/**
+ * 자연어 입력 + 다중 후보 파이프라인
+ */
+export async function generateChoreographyFromTextWithCandidates(
+  userInput: string,
+  options: {
+    dancerCount?: number;
+    stageWidth?: number;
+    stageHeight?: number;
+    useGeminiParser?: boolean;
+    useGeminiRanking?: boolean;
+  } = {}
+): Promise<MultiCandidateResult> {
+  // isApiKeyConfigured is async, so resolve default values
+  const apiConfigured = await isApiKeyConfigured();
+  const {
+    dancerCount = 8,
+    stageWidth = 12,
+    stageHeight = 10,
+    useGeminiParser = apiConfigured,
+    useGeminiRanking = apiConfigured,
+  } = options;
+
+  // 1. 자연어 파싱
+  let request: ChoreographyRequest;
+  if (useGeminiParser) {
+    request = await parseChoreographyRequest(userInput);
+  } else {
+    request = parseChoreographyRequestMock(userInput);
+  }
+
+  // 2. 사용자 선호도 추출
+  const userPreference: UserPreference = {
+    description: userInput,
+  };
+
+  if (request.style.symmetry) {
+    userPreference.priority = 'symmetry';
+  }
+  if (request.style.smoothness > 0.8) {
+    userPreference.style = 'smooth';
+  }
+  if (request.style.dramatic) {
+    userPreference.style = 'dynamic';
+  }
+
+  // 3. 다중 후보 파이프라인 실행
+  return generateChoreographyWithCandidates(
+    request.startFormation.type as FormationType,
+    request.endFormation.type as FormationType,
+    {
+      dancerCount,
+      spread: request.style.spread,
+      totalCounts: request.totalCounts,
+      mainDancer: request.mainDancer ?? undefined,
+      stageWidth,
+      stageHeight,
+      userPreference,
+      useGeminiRanking,
+    }
+  );
 }

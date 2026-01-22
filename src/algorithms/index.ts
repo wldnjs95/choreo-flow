@@ -18,6 +18,7 @@ export {
   type PathPoint,
   type DancerPath,
   type PathfinderConfig,
+  type SortStrategy,
 } from './pathfinder';
 
 // Formation Generator
@@ -30,12 +31,27 @@ export {
   type FormationParams,
 } from './formations';
 
+// Candidate Generator (다중 후보 생성)
+export {
+  generateCandidate,
+  generateAllCandidates,
+  calculateMetrics,
+  summarizeCandidatesForGemini,
+  type CandidateStrategy,
+  type CandidateMetrics,
+  type CandidateResult,
+  type CandidateGeneratorConfig,
+} from './candidateGenerator';
+
 // Pipeline
 export {
   generateChoreographyFromText,
   generateChoreographyDirect,
+  generateChoreographyWithCandidates,
+  generateChoreographyFromTextWithCandidates,
   toVisualizationData,
   exportToJSON,
   type ChoreographyResult,
   type SmoothPath,
+  type MultiCandidateResult,
 } from './pipeline';

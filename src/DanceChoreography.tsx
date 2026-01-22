@@ -3,17 +3,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   generateChoreographyFromText,
   generateChoreographyDirect,
+  generateChoreographyWithCandidates,
   generateFormation,
   type ChoreographyResult,
   type SmoothPath,
   type FormationType,
   type Position,
+  type CandidateResult,
 } from './algorithms';
-import { isApiKeyConfigured, type AestheticScore } from './gemini';
+import { isApiKeyConfigured, type AestheticScore, type RankingResult } from './gemini';
 
 // Visualization constants
-const DEFAULT_STAGE_WIDTH = 12;  // World of Dance: 40ft ≈ 12m
-const DEFAULT_STAGE_HEIGHT = 10; // World of Dance: 32ft ≈ 10m
+const DEFAULT_STAGE_WIDTH = 15;  // Large: 49ft ≈ 15m
+const DEFAULT_STAGE_HEIGHT = 12; // Large: 39ft ≈ 12m
 const BASE_SCALE = 50; // 기본 스케일 (스테이지 크기에 따라 조정)
 const PADDING = 40;
 const BASE_DANCER_RADIUS = 0.4; // 미터 단위 dancer 반지름 (실제 사람 어깨 폭 기준)
@@ -22,11 +24,10 @@ const BACKGROUND_COLOR = '#1a1a2e';
 
 // 스테이지 프리셋
 const STAGE_PRESETS = {
-  'world_of_dance': { width: 12, height: 10, label: 'World of Dance (40×32ft)' },
   'small': { width: 8, height: 6, label: 'Small (26×20ft)' },
   'medium': { width: 10, height: 8, label: 'Medium (33×26ft)' },
   'large': { width: 15, height: 12, label: 'Large (49×39ft)' },
-  'custom': { width: 12, height: 10, label: 'Custom' },
+  'custom': { width: 15, height: 12, label: 'Custom' },
 };
 
 // Dancer colors
@@ -275,7 +276,11 @@ interface NaturalLanguageInputProps {
 
 function NaturalLanguageInput({ onGenerate, isLoading }: NaturalLanguageInputProps) {
   const [input, setInput] = useState('');
-  const apiConfigured = isApiKeyConfigured();
+  const [apiConfigured, setApiConfigured] = useState(false);
+
+  useEffect(() => {
+    isApiKeyConfigured().then(setApiConfigured);
+  }, []);
 
   const examples = [
     '8명이 일렬에서 V자로 이동, 와이드하게',
@@ -491,26 +496,52 @@ interface FormationEditorProps {
   stageHeight: number;
   scale: number;
   dancerRadius: number;
+  initialFormation: FormationType; // 초기 대형 타입
   onPositionsChange: (positions: Position[]) => void;
   onClose: () => void;
   onApplyPreset: (formation: FormationType, spread: number) => void;
 }
 
-function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeight, scale, dancerRadius, onPositionsChange, onClose, onApplyPreset }: FormationEditorProps) {
+function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeight, scale, dancerRadius, initialFormation, onPositionsChange, onClose, onApplyPreset }: FormationEditorProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [localPositions, setLocalPositions] = useState<Position[]>(positions);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [snapSize, setSnapSize] = useState(0.5); // 0.5m grid snap
   const [spread, setSpread] = useState(1.0); // 대형 크기 (0.5 ~ 1.5)
-  const [currentPreset, setCurrentPreset] = useState<FormationType | null>(null);
+  // 초기 대형 타입으로 currentPreset 설정 (custom이 아닌 경우)
+  const [currentPreset, setCurrentPreset] = useState<FormationType | null>(
+    initialFormation !== 'custom' ? initialFormation : null
+  );
+
+  // 다중 선택 상태
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  // 선택 박스 드래그 상태
+  const [selectionBox, setSelectionBox] = useState<{
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
+  } | null>(null);
+  const [isDraggingSelection, setIsDraggingSelection] = useState(false);
+  // 드래그 시작 위치 (오프셋 계산용)
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const initialPositionsRef = useRef<Position[]>([]);
 
   // Undo/Redo 히스토리
   const [history, setHistory] = useState<Position[][]>([]);
   const [future, setFuture] = useState<Position[][]>([]);
   const maxHistory = 50; // 최대 히스토리 개수
+  const isInternalChange = useRef(false); // 내부 변경인지 추적
 
+  // positions prop이 변경될 때 (에디터 열림 / 외부 변경)
   useEffect(() => {
+    // 내부 변경(드래그, undo 등)에 의한 prop 변경이면 history 유지
+    if (isInternalChange.current) {
+      isInternalChange.current = false;
+      return;
+    }
+    // 외부에서 positions가 변경된 경우 (에디터 처음 열림 등)
     setLocalPositions(positions);
     setHistory([]);
     setFuture([]);
@@ -538,6 +569,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     setFuture(prev => [...prev, localPositions]);
     setHistory(newHistory);
     setLocalPositions(previousState);
+    isInternalChange.current = true;
     onPositionsChange(previousState);
   }, [history, localPositions, onPositionsChange]);
 
@@ -551,6 +583,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     setHistory(prev => [...prev, localPositions]);
     setFuture(newFuture);
     setLocalPositions(nextState);
+    isInternalChange.current = true;
     onPositionsChange(nextState);
   }, [future, localPositions, onPositionsChange]);
 
@@ -587,6 +620,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
         spread: newSpread
       });
       setLocalPositions(newPositions);
+      isInternalChange.current = true;
       onPositionsChange(newPositions);
     }
   }, [currentPreset, dancerCount, stageWidth, stageHeight, onPositionsChange, localPositions, saveToHistory]);
@@ -594,8 +628,23 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
   // 프리셋 적용
   const handlePresetClick = useCallback((preset: FormationType) => {
     setCurrentPreset(preset);
+    setSelectedIds(new Set()); // 선택 초기화
     onApplyPreset(preset, spread);
   }, [spread, onApplyPreset]);
+
+  // 전체 선택
+  const selectAll = useCallback(() => {
+    const allIds = new Set<number>();
+    for (let i = 0; i < dancerCount; i++) {
+      allIds.add(i);
+    }
+    setSelectedIds(allIds);
+  }, [dancerCount]);
+
+  // 선택 해제
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
 
   // 전체 대형 이동
   const moveAll = useCallback((dx: number, dy: number) => {
@@ -607,6 +656,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     // 나머지 포지션도 유지
     const fullPositions = [...newPositions, ...localPositions.slice(dancerCount)];
     setLocalPositions(fullPositions);
+    isInternalChange.current = true;
     onPositionsChange(fullPositions);
   }, [localPositions, dancerCount, stageWidth, stageHeight, onPositionsChange, saveToHistory]);
 
@@ -633,6 +683,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     }));
     const fullPositions = [...newPositions, ...localPositions.slice(dancerCount)];
     setLocalPositions(fullPositions);
+    isInternalChange.current = true;
     onPositionsChange(fullPositions);
   }, [localPositions, dancerCount, stageWidth, stageHeight, onPositionsChange, saveToHistory]);
 
@@ -643,41 +694,161 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     return Math.round(value / gridSize) * gridSize;
   };
 
-  const handleMouseDown = (id: number) => (e: React.MouseEvent) => {
+  // Dancer 클릭 핸들러
+  const handleDancerMouseDown = (id: number) => (e: React.MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const rect = svg.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left - PADDING) / scale;
+    const mouseY = stageHeight - ((e.clientY - rect.top - PADDING) / scale);
+
+    if (e.shiftKey) {
+      // Shift+클릭: 선택에 추가/제거
+      setSelectedIds(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(id)) {
+          newSet.delete(id);
+        } else {
+          newSet.add(id);
+        }
+        return newSet;
+      });
+    } else {
+      // 일반 클릭: 단일 선택 또는 선택된 그룹 드래그
+      if (!selectedIds.has(id)) {
+        // 선택되지 않은 dancer 클릭 → 해당 dancer만 선택
+        setSelectedIds(new Set([id]));
+      }
+      // 이미 선택된 dancer를 클릭하면 그룹 드래그 시작
+    }
+
     saveToHistory(localPositions); // 드래그 시작 전 히스토리 저장
     setDraggingId(id);
+    dragStartRef.current = { x: mouseX, y: mouseY };
+    initialPositionsRef.current = [...localPositions];
+  };
+
+  // 빈 공간 클릭 핸들러 (선택 박스 시작)
+  const handleSvgMouseDown = (e: React.MouseEvent) => {
+    // dancer를 클릭한 경우가 아닌 경우에만
+    if ((e.target as HTMLElement).tagName !== 'svg' &&
+        !(e.target as HTMLElement).classList.contains('stage-background')) {
+      return;
+    }
+
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const rect = svg.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // 빈 공간 클릭 → 선택 해제 및 선택 박스 시작
+    if (!e.shiftKey) {
+      setSelectedIds(new Set());
+    }
+
+    setSelectionBox({ startX: x, startY: y, endX: x, endY: y });
+    setIsDraggingSelection(true);
   };
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (draggingId === null || !svgRef.current) return;
-
     const svg = svgRef.current;
-    const rect = svg.getBoundingClientRect();
-    let x = ((e.clientX - rect.left - PADDING) / scale);
-    let y = stageHeight - ((e.clientY - rect.top - PADDING) / scale);
+    if (!svg) return;
 
-    // Apply grid snap if enabled
-    if (snapEnabled) {
-      x = snapToGrid(x, snapSize);
-      y = snapToGrid(y, snapSize);
+    const rect = svg.getBoundingClientRect();
+
+    // 선택 박스 드래그 중
+    if (isDraggingSelection && selectionBox) {
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      setSelectionBox(prev => prev ? { ...prev, endX: x, endY: y } : null);
+      return;
     }
 
-    // Clamp to stage bounds
-    const clampedX = Math.max(0.5, Math.min(stageWidth - 0.5, x));
-    const clampedY = Math.max(0.5, Math.min(stageHeight - 0.5, y));
+    // Dancer 드래그 중
+    if (draggingId === null || !dragStartRef.current) return;
 
-    setLocalPositions(prev => prev.map((pos, i) =>
-      i === draggingId ? { x: clampedX, y: clampedY } : pos
-    ));
-  }, [draggingId, snapEnabled, snapSize, scale, stageWidth, stageHeight]);
+    const mouseX = (e.clientX - rect.left - PADDING) / scale;
+    const mouseY = stageHeight - ((e.clientY - rect.top - PADDING) / scale);
+
+    // 이동량 계산
+    let deltaX = mouseX - dragStartRef.current.x;
+    let deltaY = mouseY - dragStartRef.current.y;
+
+    // 선택된 dancer들 함께 이동
+    const idsToMove = selectedIds.has(draggingId) ? selectedIds : new Set([draggingId]);
+    const isGroupMove = idsToMove.size > 1;
+
+    // 그룹 이동 시: delta 자체를 snap (대형 유지)
+    // 단일 이동 시: 개별 위치를 snap
+    if (snapEnabled && isGroupMove) {
+      deltaX = snapToGrid(deltaX, snapSize);
+      deltaY = snapToGrid(deltaY, snapSize);
+    }
+
+    setLocalPositions(prev => prev.map((pos, i) => {
+      if (!idsToMove.has(i)) return pos;
+
+      const initialPos = initialPositionsRef.current[i];
+      let newX = initialPos.x + deltaX;
+      let newY = initialPos.y + deltaY;
+
+      // 단일 dancer 이동 시에만 개별 위치 snap
+      if (snapEnabled && !isGroupMove) {
+        newX = snapToGrid(newX, snapSize);
+        newY = snapToGrid(newY, snapSize);
+      }
+
+      // Clamp to stage bounds
+      const clampedX = Math.max(0.5, Math.min(stageWidth - 0.5, newX));
+      const clampedY = Math.max(0.5, Math.min(stageHeight - 0.5, newY));
+
+      return { x: clampedX, y: clampedY };
+    }));
+  }, [draggingId, isDraggingSelection, selectionBox, selectedIds, snapEnabled, snapSize, scale, stageWidth, stageHeight]);
 
   const handleMouseUp = useCallback(() => {
+    // 선택 박스 완료
+    if (isDraggingSelection && selectionBox) {
+      const svg = svgRef.current;
+      if (svg) {
+        // 선택 박스 영역 계산 (픽셀 → 월드 좌표)
+        const minX = Math.min(selectionBox.startX, selectionBox.endX);
+        const maxX = Math.max(selectionBox.startX, selectionBox.endX);
+        const minY = Math.min(selectionBox.startY, selectionBox.endY);
+        const maxY = Math.max(selectionBox.startY, selectionBox.endY);
+
+        // 선택 박스 안에 있는 dancer들 찾기
+        const newSelected = new Set<number>();
+        localPositions.slice(0, dancerCount).forEach((pos, i) => {
+          const px = PADDING + pos.x * scale;
+          const py = PADDING + (stageHeight - pos.y) * scale;
+
+          if (px >= minX && px <= maxX && py >= minY && py <= maxY) {
+            newSelected.add(i);
+          }
+        });
+
+        setSelectedIds(newSelected);
+      }
+      setSelectionBox(null);
+      setIsDraggingSelection(false);
+      return;
+    }
+
+    // Dancer 드래그 완료
     if (draggingId !== null) {
+      isInternalChange.current = true;
       onPositionsChange(localPositions);
     }
     setDraggingId(null);
-  }, [draggingId, localPositions, onPositionsChange]);
+    dragStartRef.current = null;
+  }, [draggingId, isDraggingSelection, selectionBox, localPositions, dancerCount, scale, stageHeight, onPositionsChange]);
 
   const presets: FormationType[] = ['line', 'circle', 'v_shape', 'diagonal', 'diamond', 'triangle', 'two_lines', 'scatter'];
 
@@ -773,18 +944,31 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
               </div>
             )}
           </div>
+          <div className="selection-controls">
+            <span className="selection-info">
+              {selectedIds.size > 0 ? `${selectedIds.size}명 선택됨` : '드래그로 선택'}
+            </span>
+            <button onClick={selectAll} className="selection-btn">전체 선택</button>
+            <button onClick={clearSelection} className="selection-btn" disabled={selectedIds.size === 0}>선택 해제</button>
+          </div>
         </div>
 
         <svg
           ref={svgRef}
           width={svgWidth}
           height={svgHeight}
-          style={{ background: BACKGROUND_COLOR, borderRadius: '8px', cursor: draggingId !== null ? 'grabbing' : 'default' }}
+          style={{
+            background: BACKGROUND_COLOR,
+            borderRadius: '8px',
+            cursor: isDraggingSelection ? 'crosshair' : draggingId !== null ? 'grabbing' : 'default'
+          }}
+          onMouseDown={handleSvgMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         >
           <rect
+            className="stage-background"
             x={PADDING}
             y={PADDING}
             width={stageWidth * scale}
@@ -834,9 +1018,23 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
             const cx = PADDING + pos.x * scale;
             const cy = PADDING + (stageHeight - pos.y) * scale;
             const color = DANCER_COLORS[i % DANCER_COLORS.length];
+            const isSelected = selectedIds.has(i);
+            const isDragging = draggingId === i;
 
             return (
-              <g key={i} onMouseDown={handleMouseDown(i)} style={{ cursor: 'grab' }}>
+              <g key={i} onMouseDown={handleDancerMouseDown(i)} style={{ cursor: 'grab' }}>
+                {/* 선택된 dancer 배경 하이라이트 */}
+                {isSelected && (
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={dancerRadius + 8}
+                    fill="rgba(78, 205, 196, 0.2)"
+                    stroke="#4ECDC4"
+                    strokeWidth={2}
+                    strokeDasharray="4,2"
+                  />
+                )}
                 <circle
                   cx={cx}
                   cy={cy}
@@ -848,8 +1046,11 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
                   cy={cy}
                   r={dancerRadius}
                   fill={color}
-                  stroke={draggingId === i ? '#fff' : 'rgba(255,255,255,0.3)'}
-                  strokeWidth={draggingId === i ? 3 : 2}
+                  stroke={isDragging ? '#fff' : isSelected ? '#4ECDC4' : 'rgba(255,255,255,0.3)'}
+                  strokeWidth={isDragging ? 3 : isSelected ? 3 : 2}
+                  style={{
+                    filter: isSelected ? 'drop-shadow(0 0 6px rgba(78, 205, 196, 0.6))' : 'none',
+                  }}
                 />
                 <text
                   x={cx}
@@ -866,6 +1067,21 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
               </g>
             );
           })}
+
+          {/* 선택 박스 */}
+          {selectionBox && (
+            <rect
+              x={Math.min(selectionBox.startX, selectionBox.endX)}
+              y={Math.min(selectionBox.startY, selectionBox.endY)}
+              width={Math.abs(selectionBox.endX - selectionBox.startX)}
+              height={Math.abs(selectionBox.endY - selectionBox.startY)}
+              fill="rgba(78, 205, 196, 0.1)"
+              stroke="#4ECDC4"
+              strokeWidth={1}
+              strokeDasharray="5,3"
+              style={{ pointerEvents: 'none' }}
+            />
+          )}
         </svg>
 
         <div className="position-list">
@@ -878,9 +1094,11 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
                 step="0.1"
                 value={pos.x.toFixed(1)}
                 onChange={(e) => {
+                  saveToHistory(localPositions);
                   const newPos = [...localPositions];
                   newPos[i] = { ...newPos[i], x: parseFloat(e.target.value) || 0 };
                   setLocalPositions(newPos);
+                  isInternalChange.current = true;
                   onPositionsChange(newPos);
                 }}
                 className="coord-input"
@@ -891,9 +1109,11 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
                 step="0.1"
                 value={pos.y.toFixed(1)}
                 onChange={(e) => {
+                  saveToHistory(localPositions);
                   const newPos = [...localPositions];
                   newPos[i] = { ...newPos[i], y: parseFloat(e.target.value) || 0 };
                   setLocalPositions(newPos);
+                  isInternalChange.current = true;
                   onPositionsChange(newPos);
                 }}
                 className="coord-input"
@@ -910,6 +1130,27 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
   );
 }
 
+// 접을 수 있는 패널
+interface CollapsiblePanelProps {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}
+
+function CollapsiblePanel({ title, defaultOpen = true, children }: CollapsiblePanelProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <div className={`collapsible-panel ${isOpen ? 'open' : 'closed'}`}>
+      <div className="collapsible-header" onClick={() => setIsOpen(!isOpen)}>
+        <span className="collapsible-title">{title}</span>
+        <span className="collapsible-icon">{isOpen ? '▼' : '▶'}</span>
+      </div>
+      {isOpen && <div className="collapsible-content">{children}</div>}
+    </div>
+  );
+}
+
 interface AestheticScorePanelProps {
   score: AestheticScore;
 }
@@ -922,8 +1163,7 @@ function AestheticScorePanel({ score }: AestheticScorePanelProps) {
   };
 
   return (
-    <div className="aesthetic-panel">
-      <h3>미적 평가</h3>
+    <div className="aesthetic-panel compact">
       <div className="overall-score" style={{ borderColor: getScoreColor(score.overall) }}>
         <span className="score-value">{score.overall}</span>
         <span className="score-label">종합 점수</span>
@@ -955,6 +1195,149 @@ function AestheticScorePanel({ score }: AestheticScorePanelProps) {
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+// 후보 비교 패널
+interface CandidateComparisonPanelProps {
+  candidates: CandidateResult[];
+  ranking: RankingResult | null;
+  selectedId: string;
+  onSelectCandidate: (id: string) => void;
+  usedGeminiRanking: boolean;
+}
+
+function CandidateComparisonPanel({ candidates, ranking, selectedId, onSelectCandidate, usedGeminiRanking }: CandidateComparisonPanelProps) {
+  const getStrategyLabel = (strategy: string) => {
+    const labels: Record<string, string> = {
+      'distance_longest_first': '긴 거리 우선',
+      'distance_shortest_first': '짧은 거리 우선',
+      'timing_priority': '타이밍 우선',
+      'curve_allowed': '곡선 허용',
+      'center_priority': '센터 우선',
+    };
+    return labels[strategy] || strategy;
+  };
+
+  const getMetricColor = (value: number, isLowerBetter: boolean = false) => {
+    const normalized = isLowerBetter ? 100 - value : value;
+    if (normalized >= 80) return '#4ECDC4';
+    if (normalized >= 60) return '#FFD93D';
+    return '#FF6B6B';
+  };
+
+  const getRankInfo = (candidateId: string) => {
+    if (!ranking) return null;
+    return ranking.rankings.find(r => r.id === candidateId);
+  };
+
+  return (
+    <div className="candidate-panel">
+      <div className="candidate-panel-header">
+        <h3>후보 비교</h3>
+        <span className={`ranking-badge ${usedGeminiRanking ? 'gemini' : 'local'}`}>
+          {usedGeminiRanking ? '🤖 Gemini 랭킹' : '📊 로컬 랭킹'}
+        </span>
+      </div>
+
+      {ranking && (
+        <div className="ranking-explanation">
+          <p>{ranking.explanation}</p>
+        </div>
+      )}
+
+      <div className="candidate-list">
+        {candidates.map((candidate) => {
+          const rankInfo = getRankInfo(candidate.id);
+          const isSelected = candidate.id === selectedId;
+          const { metrics } = candidate;
+
+          return (
+            <div
+              key={candidate.id}
+              className={`candidate-card ${isSelected ? 'selected' : ''}`}
+              onClick={() => onSelectCandidate(candidate.id)}
+            >
+              <div className="candidate-header">
+                <span className="candidate-strategy">{getStrategyLabel(candidate.strategy)}</span>
+                {rankInfo && (
+                  <span className={`candidate-rank rank-${rankInfo.rank}`}>
+                    #{rankInfo.rank}
+                  </span>
+                )}
+                {isSelected && <span className="selected-badge">✓ 선택됨</span>}
+              </div>
+
+              <div className="candidate-metrics">
+                <div className="metric-row">
+                  <span className="metric-label">충돌</span>
+                  <span
+                    className="metric-value"
+                    style={{ color: metrics.collisionCount === 0 ? '#4ECDC4' : '#FF6B6B' }}
+                  >
+                    {metrics.collisionCount === 0 ? '없음 ✓' : `${metrics.collisionCount}건`}
+                  </span>
+                </div>
+                <div className="metric-row">
+                  <span className="metric-label">대칭성</span>
+                  <div className="metric-bar">
+                    <div
+                      className="metric-fill"
+                      style={{
+                        width: `${metrics.symmetryScore}%`,
+                        background: getMetricColor(metrics.symmetryScore)
+                      }}
+                    />
+                  </div>
+                  <span className="metric-num">{metrics.symmetryScore}</span>
+                </div>
+                <div className="metric-row">
+                  <span className="metric-label">부드러움</span>
+                  <div className="metric-bar">
+                    <div
+                      className="metric-fill"
+                      style={{
+                        width: `${metrics.pathSmoothness}%`,
+                        background: getMetricColor(metrics.pathSmoothness)
+                      }}
+                    />
+                  </div>
+                  <span className="metric-num">{metrics.pathSmoothness}</span>
+                </div>
+                <div className="metric-row">
+                  <span className="metric-label">교차</span>
+                  <span
+                    className="metric-value"
+                    style={{ color: metrics.crossingCount <= 2 ? '#4ECDC4' : '#FFD93D' }}
+                  >
+                    {metrics.crossingCount}회
+                  </span>
+                </div>
+                <div className="metric-row">
+                  <span className="metric-label">동시도착</span>
+                  <div className="metric-bar">
+                    <div
+                      className="metric-fill"
+                      style={{
+                        width: `${metrics.simultaneousArrival}%`,
+                        background: getMetricColor(metrics.simultaneousArrival)
+                      }}
+                    />
+                  </div>
+                  <span className="metric-num">{metrics.simultaneousArrival}</span>
+                </div>
+              </div>
+
+              {rankInfo && rankInfo.reason && (
+                <div className="candidate-reason">
+                  {rankInfo.reason}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1088,7 +1471,7 @@ export default function DanceChoreography() {
   const [error, setError] = useState<string | null>(null);
 
   // Stage size state
-  const [stagePreset, setStagePreset] = useState<StagePreset>('world_of_dance');
+  const [stagePreset, setStagePreset] = useState<StagePreset>('large');
   const [stageWidth, setStageWidth] = useState(DEFAULT_STAGE_WIDTH);
   const [stageHeight, setStageHeight] = useState(DEFAULT_STAGE_HEIGHT);
 
@@ -1120,6 +1503,19 @@ export default function DanceChoreography() {
   const [result, setResult] = useState<ChoreographyResult | null>(null);
   const [dancers, setDancers] = useState<DancerData[]>([]);
   const [totalCounts, setTotalCounts] = useState(8);
+
+  // Multi-candidate state
+  const [candidates, setCandidates] = useState<CandidateResult[]>([]);
+  const [ranking, setRanking] = useState<RankingResult | null>(null);
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string>('');
+  const [usedGeminiRanking, setUsedGeminiRanking] = useState(false);
+  const [useMultiCandidate, setUseMultiCandidate] = useState(true); // 다중 후보 모드 토글
+  const [apiConfigured, setApiConfigured] = useState(false);
+
+  // Check API configuration on mount
+  useEffect(() => {
+    isApiKeyConfigured().then(setApiConfigured);
+  }, []);
 
   // Initialize custom positions when dancer count or stage size changes
   useEffect(() => {
@@ -1165,8 +1561,9 @@ export default function DanceChoreography() {
     setError(null);
 
     try {
+      const isConfigured = await isApiKeyConfigured();
       const choreographyResult = await generateChoreographyFromText(input, {
-        useGeminiParser: isApiKeyConfigured(),
+        useGeminiParser: isConfigured,
         useGeminiEvaluator: false,
         dancerCount: dancerCount,
         stageWidth: stageWidth,
@@ -1185,28 +1582,59 @@ export default function DanceChoreography() {
     }
   }, [dancerCount, stageWidth, stageHeight]);
 
-  const handleDirectGenerate = useCallback(() => {
+  const handleDirectGenerate = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const choreographyResult = generateChoreographyDirect(
-        startFormation,
-        endFormation,
-        {
-          dancerCount: dancerCount,
-          spread: 1.0,
-          totalCounts: 8,
-          customStartPositions: startFormation === 'custom' ? customStartPositions.slice(0, dancerCount) : undefined,
-          customEndPositions: endFormation === 'custom' ? customEndPositions.slice(0, dancerCount) : undefined,
-          stageWidth: stageWidth,
-          stageHeight: stageHeight,
-        }
-      );
+      if (useMultiCandidate) {
+        // 다중 후보 모드
+        const isConfigured = await isApiKeyConfigured();
+        const multiResult = await generateChoreographyWithCandidates(
+          startFormation,
+          endFormation,
+          {
+            dancerCount: dancerCount,
+            spread: 1.0,
+            totalCounts: 8,
+            customStartPositions: startFormation === 'custom' ? customStartPositions.slice(0, dancerCount) : undefined,
+            customEndPositions: endFormation === 'custom' ? customEndPositions.slice(0, dancerCount) : undefined,
+            stageWidth: stageWidth,
+            stageHeight: stageHeight,
+            useGeminiRanking: isConfigured,
+          }
+        );
 
-      setResult(choreographyResult);
-      setDancers(resultToDancerData(choreographyResult));
-      setTotalCounts(choreographyResult.request.totalCounts);
+        setCandidates(multiResult.candidates);
+        setRanking(multiResult.ranking);
+        setSelectedCandidateId(multiResult.ranking.selectedId);
+        setUsedGeminiRanking(multiResult.metadata.usedGeminiRanking);
+        setResult(multiResult.selectedResult);
+        setDancers(resultToDancerData(multiResult.selectedResult));
+        setTotalCounts(multiResult.selectedResult.request.totalCounts);
+      } else {
+        // 기존 단일 결과 모드
+        const choreographyResult = generateChoreographyDirect(
+          startFormation,
+          endFormation,
+          {
+            dancerCount: dancerCount,
+            spread: 1.0,
+            totalCounts: 8,
+            customStartPositions: startFormation === 'custom' ? customStartPositions.slice(0, dancerCount) : undefined,
+            customEndPositions: endFormation === 'custom' ? customEndPositions.slice(0, dancerCount) : undefined,
+            stageWidth: stageWidth,
+            stageHeight: stageHeight,
+          }
+        );
+
+        setCandidates([]);
+        setRanking(null);
+        setResult(choreographyResult);
+        setDancers(resultToDancerData(choreographyResult));
+        setTotalCounts(choreographyResult.request.totalCounts);
+      }
+
       setCurrentCount(0);
       setIsPlaying(false);
     } catch (err) {
@@ -1214,7 +1642,36 @@ export default function DanceChoreography() {
     } finally {
       setIsLoading(false);
     }
-  }, [startFormation, endFormation, dancerCount, customStartPositions, customEndPositions, stageWidth, stageHeight]);
+  }, [startFormation, endFormation, dancerCount, customStartPositions, customEndPositions, stageWidth, stageHeight, useMultiCandidate]);
+
+  // 후보 선택 핸들러
+  const handleSelectCandidate = useCallback((candidateId: string) => {
+    const candidate = candidates.find(c => c.id === candidateId);
+    if (!candidate) return;
+
+    setSelectedCandidateId(candidateId);
+
+    // 선택된 후보로 결과 업데이트
+    const smoothPaths = candidate.paths.map(p => ({
+      dancerId: p.dancerId,
+      color: ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFD93D', '#6C5CE7', '#A8E6CF', '#FF8C42'][(p.dancerId - 1) % 8],
+      points: p.path,
+      startTime: p.startTime,
+      speed: p.speed,
+      distance: p.totalDistance,
+    }));
+
+    if (result) {
+      const newResult: ChoreographyResult = {
+        ...result,
+        paths: candidate.paths,
+        smoothPaths,
+        assignments: candidate.assignments,
+      };
+      setResult(newResult);
+      setDancers(resultToDancerData(newResult));
+    }
+  }, [candidates, result]);
 
   // Handle formation preset in editor
   const handleApplyPreset = useCallback((formation: FormationType, target: 'start' | 'end', spread: number = 1.0) => {
@@ -1319,6 +1776,22 @@ export default function DanceChoreography() {
           onEditEnd={() => setEditingFormation('end')}
           isLoading={isLoading}
         />
+
+        <div className="multi-candidate-toggle">
+          <label className="toggle-label">
+            <input
+              type="checkbox"
+              checked={useMultiCandidate}
+              onChange={(e) => setUseMultiCandidate(e.target.checked)}
+            />
+            <span>🤖 다중 후보 + Gemini 랭킹</span>
+          </label>
+          {useMultiCandidate && (
+            <span className="toggle-hint">
+              5개 전략으로 후보 생성 → {apiConfigured ? 'Gemini' : '로컬'} 랭킹
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Formation Editor Modal */}
@@ -1331,6 +1804,7 @@ export default function DanceChoreography() {
           stageHeight={stageHeight}
           scale={scale}
           dancerRadius={dancerRadius}
+          initialFormation={editingFormation === 'start' ? startFormation : endFormation}
           onPositionsChange={(pos) => {
             if (editingFormation === 'start') {
               setCustomStartPositions(pos);
@@ -1381,17 +1855,36 @@ export default function DanceChoreography() {
         </div>
 
         <div className="side-panels">
-          <DancerInfoPanel
-            dancers={dancers}
-            currentCount={currentCount}
-            totalCounts={totalCounts}
-            selectedDancer={selectedDancer}
-            onSelectDancer={setSelectedDancer}
-            showPaths={showPaths}
-            onTogglePaths={() => setShowPaths(!showPaths)}
-          />
+          {/* 후보 비교 패널 - 가장 중요한 위치 */}
+          {useMultiCandidate && candidates.length > 0 && (
+            <CandidateComparisonPanel
+              candidates={candidates}
+              ranking={ranking}
+              selectedId={selectedCandidateId}
+              onSelectCandidate={handleSelectCandidate}
+              usedGeminiRanking={usedGeminiRanking}
+            />
+          )}
 
-          {result?.aestheticScore && <AestheticScorePanel score={result.aestheticScore} />}
+          {/* 미적 평가 - 접을 수 있음 */}
+          {result?.aestheticScore && (
+            <CollapsiblePanel title="미적 평가" defaultOpen={false}>
+              <AestheticScorePanel score={result.aestheticScore} />
+            </CollapsiblePanel>
+          )}
+
+          {/* Dancer 정보 - 접을 수 있음 */}
+          <CollapsiblePanel title="Dancers 실시간 정보" defaultOpen={false}>
+            <DancerInfoPanel
+              dancers={dancers}
+              currentCount={currentCount}
+              totalCounts={totalCounts}
+              selectedDancer={selectedDancer}
+              onSelectDancer={setSelectedDancer}
+              showPaths={showPaths}
+              onTogglePaths={() => setShowPaths(!showPaths)}
+            />
+          </CollapsiblePanel>
         </div>
       </div>
 

@@ -25,10 +25,21 @@ export interface DancerPath {
   totalDistance: number;
 }
 
+/**
+ * 정렬 전략 (경로 처리 순서 결정)
+ */
+export type SortStrategy =
+  | 'distance_longest_first'   // 긴 거리 우선 (기본)
+  | 'distance_shortest_first'  // 짧은 거리 우선
+  | 'none';                    // 정렬 없음 (입력 순서 유지)
+
 export interface PathfinderConfig {
   totalCounts: number;
   collisionRadius: number;
   numPoints: number;  // 경로당 포인트 수
+  sortStrategy?: SortStrategy;  // 정렬 전략 (기본: distance_longest_first)
+  maxCurveOffset?: number;      // 곡선 최대 offset (기본: 0.5)
+  preferTiming?: boolean;       // 타이밍 조정 우선 (기본: true)
 }
 
 const DEFAULT_CONFIG: PathfinderConfig = {
@@ -189,8 +200,22 @@ export function computeAllPathsSimple(
   const cfg = { ...DEFAULT_CONFIG, ...config };
   const results: DancerPath[] = [];
 
-  // 거리 기준 정렬 (긴 거리 먼저 - 우선권 부여)
-  const sorted = [...assignments].sort((a, b) => b.distance - a.distance);
+  // 정렬 전략에 따라 처리 순서 결정
+  let sorted: Assignment[];
+  const sortStrategy = cfg.sortStrategy || 'distance_longest_first';
+
+  switch (sortStrategy) {
+    case 'distance_shortest_first':
+      sorted = [...assignments].sort((a, b) => a.distance - b.distance);
+      break;
+    case 'none':
+      sorted = [...assignments];  // 입력 순서 유지
+      break;
+    case 'distance_longest_first':
+    default:
+      sorted = [...assignments].sort((a, b) => b.distance - a.distance);
+      break;
+  }
 
   // 이미 계산된 경로들
   const computedPaths: { dancerId: number; path: PathPoint[] }[] = [];
@@ -301,9 +326,11 @@ export function computeAllPathsSimple(
         }
       }
 
-      // 방법 4: 마지막 수단 - 최소한의 곡선 (offset 아주 작게)
+      // 방법 4: 마지막 수단 - 최소한의 곡선 (maxCurveOffset으로 제한)
       if (hasConflict) {
-        for (const offset of [0.2, -0.2, 0.35, -0.35, 0.5, -0.5]) {
+        const maxOffset = cfg.maxCurveOffset ?? 0.5;
+        const curveOffsets = [0.2, -0.2, 0.35, -0.35, 0.5, -0.5].filter(o => Math.abs(o) <= maxOffset);
+        for (const offset of curveOffsets) {
           path = generateCurvedPath(startPosition, endPosition, startTime, endTime, cfg.numPoints, offset);
 
           hasConflict = false;

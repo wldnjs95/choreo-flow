@@ -4,7 +4,7 @@
  * 사용자의 자연어 입력을 알고리즘 파라미터로 변환
  */
 
-import { GEMINI_API_KEY, GEMINI_API_URL, GEMINI_CONFIG, isApiKeyConfigured } from './config';
+import { callGeminiAPI } from './config';
 import type { Position } from '../algorithms/hungarian';
 
 /**
@@ -139,44 +139,6 @@ const PARSER_PROMPT = `당신은 댄스 안무 파라미터 변환기입니다.
 
 사용자 입력:
 `;
-
-/**
- * Gemini API 호출
- */
-async function callGeminiAPI(prompt: string): Promise<string> {
-  if (!isApiKeyConfigured()) {
-    throw new Error('Gemini API 키가 설정되지 않았습니다. src/gemini/config.ts 또는 환경 변수를 확인하세요.');
-  }
-
-  const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [{ text: prompt }],
-        },
-      ],
-      generationConfig: GEMINI_CONFIG,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Gemini API 오류: ${response.status} - ${errorText}`);
-  }
-
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-  if (!text) {
-    throw new Error('Gemini API 응답이 비어있습니다.');
-  }
-
-  return text;
-}
 
 /**
  * JSON 추출 (마크다운 코드 블록 처리)
