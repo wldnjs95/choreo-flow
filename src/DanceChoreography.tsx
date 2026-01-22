@@ -380,11 +380,21 @@ function FormationSelector({
       <div className="dancer-count-row">
         <label>인원 수:</label>
         <input
-          type="number"
-          min={2}
-          max={24}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
           value={dancerCount}
-          onChange={(e) => onDancerCountChange(Math.max(2, Math.min(24, parseInt(e.target.value) || 2)))}
+          onChange={(e) => {
+            const val = e.target.value.replace(/[^0-9]/g, '');
+            if (val === '') return;
+            const num = parseInt(val, 10);
+            onDancerCountChange(Math.max(2, Math.min(24, num)));
+          }}
+          onBlur={(e) => {
+            const val = parseInt(e.target.value, 10);
+            if (isNaN(val) || val < 2) onDancerCountChange(2);
+            else if (val > 24) onDancerCountChange(24);
+          }}
           className="dancer-count-input"
         />
         <span className="dancer-count-label">명</span>
@@ -1525,10 +1535,7 @@ export default function DanceChoreography() {
     setCustomEndPositions(endPos);
   }, [dancerCount, stageWidth, stageHeight]);
 
-  // Initialize with default choreography
-  useEffect(() => {
-    handleDirectGenerate();
-  }, []);
+  // 초기에는 대형을 생성하지 않음 (사용자가 직접 생성 버튼 클릭)
 
   // Animation loop
   useEffect(() => {
