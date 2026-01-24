@@ -35,6 +35,8 @@ export {
 export {
   generateCandidate,
   generateAllCandidates,
+  generateCandidateWithConstraint,
+  generateCandidatesWithConstraint,
   calculateMetrics,
   summarizeCandidatesForGemini,
   type CandidateStrategy,
@@ -54,4 +56,5 @@ export {
   type ChoreographyResult,
   type SmoothPath,
   type MultiCandidateResult,
+  type GeminiPipelineMode,
 } from './pipeline';

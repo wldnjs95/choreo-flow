@@ -1305,6 +1305,126 @@ body {
   margin-left: 26px;
 }
 
+.pipeline-mode-selector {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 4px 26px;
+}
+
+.pipeline-mode-selector .mode-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex: 1;
+}
+
+.pipeline-mode-selector .mode-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.pipeline-mode-selector .mode-option.active {
+  background: rgba(78, 205, 196, 0.2);
+  border-color: #4ECDC4;
+}
+
+.pipeline-mode-selector .mode-option input[type="radio"] {
+  display: none;
+}
+
+.pipeline-mode-selector .mode-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.pipeline-mode-selector .mode-desc {
+  font-size: 0.7rem;
+  color: #888;
+}
+
+.pipeline-mode-selector .mode-option.active .mode-label {
+  color: #4ECDC4;
+}
+
+/* Pre-Constraint Info */
+.pre-constraint-info {
+  background: rgba(108, 92, 231, 0.15);
+  border: 1px solid rgba(108, 92, 231, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.pre-constraint-info .constraint-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.pre-constraint-info .constraint-label {
+  font-weight: 600;
+  color: #6C5CE7;
+  font-size: 0.85rem;
+}
+
+.pre-constraint-info .gemini-badge {
+  background: rgba(108, 92, 231, 0.3);
+  color: #6C5CE7;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+}
+
+.pre-constraint-info .constraint-strategy {
+  color: #e0e0e0;
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.pre-constraint-info .constraint-details {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  color: #888;
+}
+
+.pre-constraint-info .constraint-details span {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.header-badges {
+  display: flex;
+  gap: 6px;
+}
+
+.pipeline-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.pipeline-badge.ranking_only {
+  background: rgba(78, 205, 196, 0.2);
+  color: #4ECDC4;
+}
+
+.pipeline-badge.pre_and_ranking {
+  background: rgba(108, 92, 231, 0.2);
+  color: #6C5CE7;
+}
+
 /* Candidate Comparison Panel */
 .candidate-panel {
   background: rgba(30, 30, 50, 0.9);

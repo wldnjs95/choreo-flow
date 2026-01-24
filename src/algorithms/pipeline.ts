@@ -17,6 +17,7 @@ import { generateFormation, applySpread } from './formations';
 import type { FormationType } from './formations';
 import {
   generateAllCandidates,
+  generateCandidatesWithConstraint,
   summarizeCandidatesForGemini,
 } from './candidateGenerator';
 import type { CandidateResult } from './candidateGenerator';
@@ -34,7 +35,19 @@ import {
   rankCandidatesLocal,
 } from '../gemini/ranker';
 import type { UserPreference, RankingResult } from '../gemini/ranker';
+import {
+  generatePreConstraint,
+  generateDefaultConstraint,
+} from '../gemini/preConstraint';
+import type { GeminiPreConstraint } from '../gemini/preConstraint';
 import { isApiKeyConfigured } from '../gemini/config';
+
+/**
+ * Gemini 파이프라인 모드
+ */
+export type GeminiPipelineMode =
+  | 'ranking_only'      // Gemini Ranking Only: 알고리즘 → Gemini 랭킹만
+  | 'pre_and_ranking';  // Gemini Pre + Ranking: Gemini 사전제약 → 알고리즘 → Gemini 랭킹
 
 /**
  * 파이프라인 결과
@@ -348,22 +361,26 @@ export interface MultiCandidateResult {
   // 후보 요약 (Gemini용)
   candidatesSummary: object;
 
+  // Gemini 사전 제약 (pre_and_ranking 모드에서만)
+  preConstraint?: GeminiPreConstraint;
+
   // 메타데이터
   metadata: {
     totalCandidates: number;
     selectedStrategy: string;
     computeTimeMs: number;
     usedGeminiRanking: boolean;
+    pipelineMode: GeminiPipelineMode;
+    usedGeminiPreConstraint: boolean;
   };
 }
 
 /**
  * 다중 후보 생성 + Gemini 랭킹 파이프라인
  *
- * 1. 여러 전략으로 후보 생성
- * 2. 각 후보의 메트릭 계산
- * 3. Gemini (또는 로컬)로 최적 후보 선택
- * 4. 선택된 후보로 최종 결과 생성
+ * 모드:
+ * - ranking_only: 알고리즘 → Gemini 랭킹만
+ * - pre_and_ranking: Gemini 사전제약 → 알고리즘 → Gemini 랭킹
  */
 export async function generateChoreographyWithCandidates(
   startFormation: FormationType,
@@ -379,6 +396,7 @@ export async function generateChoreographyWithCandidates(
     stageHeight?: number;
     userPreference?: UserPreference;
     useGeminiRanking?: boolean;
+    pipelineMode?: GeminiPipelineMode;
   } = {}
 ): Promise<MultiCandidateResult> {
   const {
@@ -391,7 +409,8 @@ export async function generateChoreographyWithCandidates(
     stageWidth = 12,
     stageHeight = 10,
     userPreference = {},
-    useGeminiRanking = isApiKeyConfigured(),
+    useGeminiRanking = false,
+    pipelineMode = 'ranking_only',
   } = options;
 
   const startTime = performance.now();
@@ -400,13 +419,37 @@ export async function generateChoreographyWithCandidates(
   const startPositions = customStartPositions || generateFormation(startFormation, dancerCount, { spread, stageWidth, stageHeight });
   const endPositions = customEndPositions || generateFormation(endFormation, dancerCount, { spread, stageWidth, stageHeight });
 
-  // 2. 모든 전략으로 후보 생성
-  const candidates = generateAllCandidates(startPositions, endPositions, {
-    totalCounts,
-    collisionRadius: 0.5,
-    stageWidth,
-    stageHeight,
-  });
+  // 2. 후보 생성 (모드에 따라 다름)
+  let candidates: CandidateResult[];
+  let preConstraint: GeminiPreConstraint | undefined;
+  let usedGeminiPreConstraint = false;
+
+  if (pipelineMode === 'pre_and_ranking') {
+    // Pre + Ranking 모드: Gemini 사전 제약 생성 → 제약 기반 후보 생성
+    try {
+      preConstraint = await generatePreConstraint(startPositions, endPositions, stageWidth, stageHeight);
+      usedGeminiPreConstraint = true;
+      console.log('Gemini Pre-constraint 생성 완료:', preConstraint.overallStrategy);
+    } catch (error) {
+      console.warn('Gemini Pre-constraint 실패, 기본 제약 사용:', error);
+      preConstraint = generateDefaultConstraint(startPositions, endPositions, stageWidth, stageHeight);
+    }
+
+    candidates = generateCandidatesWithConstraint(preConstraint, startPositions, endPositions, {
+      totalCounts,
+      collisionRadius: 0.5,
+      stageWidth,
+      stageHeight,
+    });
+  } else {
+    // Ranking Only 모드: 기존 방식 (5가지 전략)
+    candidates = generateAllCandidates(startPositions, endPositions, {
+      totalCounts,
+      collisionRadius: 0.5,
+      stageWidth,
+      stageHeight,
+    });
+  }
 
   // 3. Gemini 또는 로컬 랭킹
   let ranking: RankingResult;
@@ -476,11 +519,14 @@ export async function generateChoreographyWithCandidates(
     candidates,
     ranking,
     candidatesSummary: summarizeCandidatesForGemini(candidates),
+    preConstraint,
     metadata: {
       totalCandidates: candidates.length,
       selectedStrategy: selectedCandidate.strategy,
       computeTimeMs: performance.now() - startTime,
       usedGeminiRanking,
+      pipelineMode,
+      usedGeminiPreConstraint,
     },
   };
 }

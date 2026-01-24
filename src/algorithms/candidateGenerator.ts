@@ -494,3 +494,215 @@ export function summarizeCandidatesForGemini(candidates: CandidateResult[]): obj
     })),
   };
 }
+
+// ============================================
+// Gemini Pre-Constraint 기반 후보 생성
+// ============================================
+
+import type { GeminiPreConstraint } from '../gemini/preConstraint';
+
+/**
+ * 제약조건 기반 전략 매핑
+ */
+function constraintToStrategy(constraint: GeminiPreConstraint): CandidateStrategy {
+  switch (constraint.movementOrder) {
+    case 'longest_first':
+      return 'distance_longest_first';
+    case 'shortest_first':
+      return 'distance_shortest_first';
+    case 'center_first':
+      return 'center_priority';
+    case 'wave_outward':
+    case 'outer_first':
+      return 'distance_longest_first';  // 외곽부터 = 긴 거리 우선과 유사
+    case 'wave_inward':
+      return 'center_priority';
+    default:
+      return 'distance_longest_first';
+  }
+}
+
+/**
+ * 제약조건에 따라 assignment 정렬
+ */
+function sortAssignmentsByConstraint(
+  assignments: Assignment[],
+  constraint: GeminiPreConstraint
+): Assignment[] {
+  const sorted = [...assignments];
+
+  // dancerHints의 priority에 따라 정렬
+  sorted.sort((a, b) => {
+    const hintA = constraint.dancerHints.find(h => h.dancerId === a.dancerId + 1);
+    const hintB = constraint.dancerHints.find(h => h.dancerId === b.dancerId + 1);
+
+    const priorityA = hintA?.priority ?? 999;
+    const priorityB = hintB?.priority ?? 999;
+
+    return priorityA - priorityB;
+  });
+
+  return sorted;
+}
+
+/**
+ * 제약조건에 따른 Pathfinder 설정
+ */
+function getPathfinderConfigFromConstraint(constraint: GeminiPreConstraint, totalCounts: number) {
+  return {
+    totalCounts,
+    collisionRadius: 0.5,
+    numPoints: 20,
+    sortStrategy: 'none' as SortStrategy,  // 이미 정렬됨
+    maxCurveOffset: constraint.suggestedCurveAmount,
+    preferTiming: constraint.preferSmoothPaths,
+  };
+}
+
+/**
+ * 제약조건 기반 단일 후보 생성
+ */
+export function generateCandidateWithConstraint(
+  constraint: GeminiPreConstraint,
+  startPositions: Position[],
+  endPositions: Position[],
+  config: {
+    totalCounts: number;
+    collisionRadius: number;
+    stageWidth: number;
+    stageHeight: number;
+  }
+): CandidateResult {
+  // 1. 최적 할당 (Hungarian)
+  const assignments = computeOptimalAssignment(startPositions, endPositions);
+
+  // 2. 제약조건에 따라 assignment 정렬
+  const sortedAssignments = sortAssignmentsByConstraint(assignments, constraint);
+
+  // 3. delay 적용 (dancerHints의 delayRatio 반영)
+  const adjustedAssignments = sortedAssignments.map(a => {
+    const hint = constraint.dancerHints.find(h => h.dancerId === a.dancerId + 1);
+    const delayRatio = hint?.delayRatio ?? 0;
+
+    return {
+      ...a,
+      delayStart: delayRatio * config.totalCounts * 0.3,  // 최대 30% 지연
+    };
+  });
+
+  // 4. 경로 생성
+  const pathfinderConfig = getPathfinderConfigFromConstraint(constraint, config.totalCounts);
+  const paths = computeAllPathsSimple(adjustedAssignments, pathfinderConfig);
+
+  // 5. 메트릭 계산
+  const metrics = calculateMetrics(
+    paths,
+    config.totalCounts,
+    config.collisionRadius,
+    config.stageWidth
+  );
+
+  const strategy = constraintToStrategy(constraint);
+
+  return {
+    id: `candidate_constrained_${constraint.movementOrder}`,
+    strategy,
+    paths,
+    metrics,
+    assignments: adjustedAssignments,
+  };
+}
+
+/**
+ * 제약조건 + 변형 전략으로 다중 후보 생성
+ */
+export function generateCandidatesWithConstraint(
+  constraint: GeminiPreConstraint,
+  startPositions: Position[],
+  endPositions: Position[],
+  config: Partial<CandidateGeneratorConfig> = {}
+): CandidateResult[] {
+  const fullConfig: CandidateGeneratorConfig = {
+    strategies: config.strategies || DEFAULT_STRATEGIES,
+    totalCounts: config.totalCounts || 8,
+    collisionRadius: config.collisionRadius || 0.5,
+    stageWidth: config.stageWidth || 12,
+    stageHeight: config.stageHeight || 10,
+  };
+
+  const candidates: CandidateResult[] = [];
+
+  // 1. 제약조건 기반 메인 후보
+  const mainCandidate = generateCandidateWithConstraint(
+    constraint,
+    startPositions,
+    endPositions,
+    {
+      totalCounts: fullConfig.totalCounts,
+      collisionRadius: fullConfig.collisionRadius,
+      stageWidth: fullConfig.stageWidth,
+      stageHeight: fullConfig.stageHeight,
+    }
+  );
+  mainCandidate.id = 'candidate_gemini_constrained';
+  candidates.push(mainCandidate);
+
+  // 2. 제약조건 변형 (곡선량 조절)
+  const curveVariants = [0.2, 0.5, 0.8];
+  for (const curveAmount of curveVariants) {
+    if (Math.abs(curveAmount - constraint.suggestedCurveAmount) < 0.1) continue;
+
+    const variantConstraint = {
+      ...constraint,
+      suggestedCurveAmount: curveAmount,
+    };
+
+    const variant = generateCandidateWithConstraint(
+      variantConstraint,
+      startPositions,
+      endPositions,
+      {
+        totalCounts: fullConfig.totalCounts,
+        collisionRadius: fullConfig.collisionRadius,
+        stageWidth: fullConfig.stageWidth,
+        stageHeight: fullConfig.stageHeight,
+      }
+    );
+    variant.id = `candidate_constrained_curve_${curveAmount}`;
+    candidates.push(variant);
+  }
+
+  // 3. 기존 전략 일부 추가 (비교용)
+  const additionalStrategies: CandidateStrategy[] = ['distance_longest_first', 'timing_priority'];
+  for (const strategy of additionalStrategies) {
+    const candidate = generateCandidate(strategy, startPositions, endPositions, {
+      totalCounts: fullConfig.totalCounts,
+      collisionRadius: fullConfig.collisionRadius,
+      stageWidth: fullConfig.stageWidth,
+      stageHeight: fullConfig.stageHeight,
+    });
+    candidate.id = `candidate_baseline_${strategy}`;
+    candidates.push(candidate);
+  }
+
+  // 중복 제거
+  const uniqueCandidates: CandidateResult[] = [];
+  for (const candidate of candidates) {
+    const isDuplicate = uniqueCandidates.some(existing =>
+      arePathsEqual(existing.paths, candidate.paths)
+    );
+    if (!isDuplicate) {
+      uniqueCandidates.push(candidate);
+    }
+  }
+
+  // 정렬
+  uniqueCandidates.sort((a, b) => {
+    if (a.metrics.collisionCount !== b.metrics.collisionCount) {
+      return a.metrics.collisionCount - b.metrics.collisionCount;
+    }
+    return a.metrics.crossingCount - b.metrics.crossingCount;
+  });
+
+  return uniqueCandidates;
+}

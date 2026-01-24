@@ -10,8 +10,9 @@ import {
   type FormationType,
   type Position,
   type CandidateResult,
+  type GeminiPipelineMode,
 } from './algorithms';
-import { isApiKeyConfigured, type AestheticScore, type RankingResult } from './gemini';
+import { isApiKeyConfigured, type AestheticScore, type RankingResult, type GeminiPreConstraint } from './gemini';
 
 // Visualization constants
 const DEFAULT_STAGE_WIDTH = 15;  // Large: 49ft ≈ 15m
@@ -356,6 +357,14 @@ function FormationSelector({
   isLoading
 }: FormationSelectorProps) {
   const formations: FormationType[] = ['line', 'circle', 'v_shape', 'diagonal', 'diamond', 'triangle', 'two_lines', 'scatter'];
+  
+  // 입력 중간 상태를 보존하기 위한 로컬 state
+  const [inputValue, setInputValue] = useState<string>(dancerCount.toString());
+  
+  // dancerCount가 외부에서 변경되면 inputValue도 업데이트
+  useEffect(() => {
+    setInputValue(dancerCount.toString());
+  }, [dancerCount]);
 
   const formatName = (f: FormationType) => {
     const names: Record<FormationType, string> = {
@@ -383,17 +392,39 @@ function FormationSelector({
           type="text"
           inputMode="numeric"
           pattern="[0-9]*"
-          value={dancerCount}
+          value={inputValue}
           onChange={(e) => {
+            // 숫자만 허용하고 입력값을 그대로 보존
             const val = e.target.value.replace(/[^0-9]/g, '');
-            if (val === '') return;
-            const num = parseInt(val, 10);
-            onDancerCountChange(Math.max(2, Math.min(24, num)));
+            setInputValue(val);
           }}
           onBlur={(e) => {
-            const val = parseInt(e.target.value, 10);
-            if (isNaN(val) || val < 2) onDancerCountChange(2);
-            else if (val > 24) onDancerCountChange(24);
+            // 포커스를 잃을 때만 검증 및 적용
+            const val = e.target.value.trim();
+            if (val === '') {
+              // 빈 값이면 기본값으로 복원
+              setInputValue(dancerCount.toString());
+              return;
+            }
+            
+            const num = parseInt(val, 10);
+            if (isNaN(num) || num < 2) {
+              setInputValue('2');
+              onDancerCountChange(2);
+            } else if (num > 24) {
+              setInputValue('24');
+              onDancerCountChange(24);
+            } else {
+              // 유효한 값이면 적용
+              setInputValue(num.toString());
+              onDancerCountChange(num);
+            }
+          }}
+          onKeyDown={(e) => {
+            // Enter 키를 누르면 blur와 동일하게 처리
+            if (e.key === 'Enter') {
+              e.currentTarget.blur();
+            }
           }}
           className="dancer-count-input"
         />
@@ -1216,9 +1247,21 @@ interface CandidateComparisonPanelProps {
   selectedId: string;
   onSelectCandidate: (id: string) => void;
   usedGeminiRanking: boolean;
+  preConstraint: GeminiPreConstraint | null;
+  usedGeminiPreConstraint: boolean;
+  pipelineMode: GeminiPipelineMode;
 }
 
-function CandidateComparisonPanel({ candidates, ranking, selectedId, onSelectCandidate, usedGeminiRanking }: CandidateComparisonPanelProps) {
+function CandidateComparisonPanel({
+  candidates,
+  ranking,
+  selectedId,
+  onSelectCandidate,
+  usedGeminiRanking,
+  preConstraint,
+  usedGeminiPreConstraint,
+  pipelineMode,
+}: CandidateComparisonPanelProps) {
   const getStrategyLabel = (strategy: string) => {
     const labels: Record<string, string> = {
       'distance_longest_first': '긴 거리 우선',
@@ -1226,6 +1269,12 @@ function CandidateComparisonPanel({ candidates, ranking, selectedId, onSelectCan
       'timing_priority': '타이밍 우선',
       'curve_allowed': '곡선 허용',
       'center_priority': '센터 우선',
+      'candidate_gemini_constrained': 'Gemini 제약',
+      'candidate_constrained_curve_0.2': '제약 + 곡선 0.2',
+      'candidate_constrained_curve_0.5': '제약 + 곡선 0.5',
+      'candidate_constrained_curve_0.8': '제약 + 곡선 0.8',
+      'candidate_baseline_distance_longest_first': '기준: 긴 거리',
+      'candidate_baseline_timing_priority': '기준: 타이밍',
     };
     return labels[strategy] || strategy;
   };
@@ -1246,10 +1295,30 @@ function CandidateComparisonPanel({ candidates, ranking, selectedId, onSelectCan
     <div className="candidate-panel">
       <div className="candidate-panel-header">
         <h3>후보 비교</h3>
-        <span className={`ranking-badge ${usedGeminiRanking ? 'gemini' : 'local'}`}>
-          {usedGeminiRanking ? '🤖 Gemini 랭킹' : '📊 로컬 랭킹'}
-        </span>
+        <div className="header-badges">
+          <span className={`pipeline-badge ${pipelineMode}`}>
+            {pipelineMode === 'pre_and_ranking' ? '🧠 Pre+Ranking' : '📊 Ranking Only'}
+          </span>
+          <span className={`ranking-badge ${usedGeminiRanking ? 'gemini' : 'local'}`}>
+            {usedGeminiRanking ? '🤖 Gemini' : '📊 로컬'}
+          </span>
+        </div>
       </div>
+
+      {pipelineMode === 'pre_and_ranking' && preConstraint && (
+        <div className="pre-constraint-info">
+          <div className="constraint-header">
+            <span className="constraint-label">Gemini 사전 제약</span>
+            {usedGeminiPreConstraint && <span className="gemini-badge">✓ Gemini</span>}
+          </div>
+          <p className="constraint-strategy">{preConstraint.overallStrategy}</p>
+          <div className="constraint-details">
+            <span>이동순서: {preConstraint.movementOrder}</span>
+            <span>곡선량: {(preConstraint.suggestedCurveAmount * 100).toFixed(0)}%</span>
+            <span>신뢰도: {(preConstraint.confidence * 100).toFixed(0)}%</span>
+          </div>
+        </div>
+      )}
 
       {ranking && (
         <div className="ranking-explanation">
@@ -1521,6 +1590,9 @@ export default function DanceChoreography() {
   const [usedGeminiRanking, setUsedGeminiRanking] = useState(false);
   const [useMultiCandidate, setUseMultiCandidate] = useState(true); // 다중 후보 모드 토글
   const [apiConfigured, setApiConfigured] = useState(false);
+  const [pipelineMode, setPipelineMode] = useState<GeminiPipelineMode>('ranking_only');
+  const [preConstraint, setPreConstraint] = useState<GeminiPreConstraint | null>(null);
+  const [usedGeminiPreConstraint, setUsedGeminiPreConstraint] = useState(false);
 
   // Check API configuration on mount
   useEffect(() => {
@@ -1609,6 +1681,7 @@ export default function DanceChoreography() {
             stageWidth: stageWidth,
             stageHeight: stageHeight,
             useGeminiRanking: isConfigured,
+            pipelineMode: pipelineMode,
           }
         );
 
@@ -1616,6 +1689,8 @@ export default function DanceChoreography() {
         setRanking(multiResult.ranking);
         setSelectedCandidateId(multiResult.ranking.selectedId);
         setUsedGeminiRanking(multiResult.metadata.usedGeminiRanking);
+        setPreConstraint(multiResult.preConstraint || null);
+        setUsedGeminiPreConstraint(multiResult.metadata.usedGeminiPreConstraint);
         setResult(multiResult.selectedResult);
         setDancers(resultToDancerData(multiResult.selectedResult));
         setTotalCounts(multiResult.selectedResult.request.totalCounts);
@@ -1649,7 +1724,7 @@ export default function DanceChoreography() {
     } finally {
       setIsLoading(false);
     }
-  }, [startFormation, endFormation, dancerCount, customStartPositions, customEndPositions, stageWidth, stageHeight, useMultiCandidate]);
+  }, [startFormation, endFormation, dancerCount, customStartPositions, customEndPositions, stageWidth, stageHeight, useMultiCandidate, pipelineMode]);
 
   // 후보 선택 핸들러
   const handleSelectCandidate = useCallback((candidateId: string) => {
@@ -1791,11 +1866,37 @@ export default function DanceChoreography() {
               checked={useMultiCandidate}
               onChange={(e) => setUseMultiCandidate(e.target.checked)}
             />
-            <span>🤖 다중 후보 + Gemini 랭킹</span>
+            <span>🤖 다중 후보 모드</span>
           </label>
           {useMultiCandidate && (
+            <div className="pipeline-mode-selector">
+              <label className={`mode-option ${pipelineMode === 'ranking_only' ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="pipelineMode"
+                  value="ranking_only"
+                  checked={pipelineMode === 'ranking_only'}
+                  onChange={() => setPipelineMode('ranking_only')}
+                />
+                <span className="mode-label">Ranking Only</span>
+                <span className="mode-desc">알고리즘 → Gemini 랭킹</span>
+              </label>
+              <label className={`mode-option ${pipelineMode === 'pre_and_ranking' ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="pipelineMode"
+                  value="pre_and_ranking"
+                  checked={pipelineMode === 'pre_and_ranking'}
+                  onChange={() => setPipelineMode('pre_and_ranking')}
+                />
+                <span className="mode-label">Pre + Ranking</span>
+                <span className="mode-desc">Gemini 사전제약 → 알고리즘 → Gemini 랭킹</span>
+              </label>
+            </div>
+          )}
+          {useMultiCandidate && (
             <span className="toggle-hint">
-              5개 전략으로 후보 생성 → {apiConfigured ? 'Gemini' : '로컬'} 랭킹
+              {pipelineMode === 'ranking_only' ? '5개 전략' : 'Gemini 제약 기반'}으로 후보 생성 → {apiConfigured ? 'Gemini' : '로컬'} 랭킹
             </span>
           )}
         </div>
@@ -1870,6 +1971,9 @@ export default function DanceChoreography() {
               selectedId={selectedCandidateId}
               onSelectCandidate={handleSelectCandidate}
               usedGeminiRanking={usedGeminiRanking}
+              preConstraint={preConstraint}
+              usedGeminiPreConstraint={usedGeminiPreConstraint}
+              pipelineMode={pipelineMode}
             />
           )}
 

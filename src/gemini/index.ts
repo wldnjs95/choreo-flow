@@ -38,3 +38,12 @@ export {
   type UserPreference,
   type RankingResult,
 } from './ranker';
+
+// Pre-Constraint (사전 제약)
+export {
+  generatePreConstraint,
+  generateDefaultConstraint,
+  type GeminiPreConstraint,
+  type DancerHint,
+  type MovementOrder,
+} from './preConstraint';
