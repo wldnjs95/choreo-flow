@@ -399,6 +399,7 @@ export async function generateChoreographyWithCandidates(
     useGeminiRanking?: boolean;
     pipelineMode?: GeminiPipelineMode;
     assignmentMode?: AssignmentMode;
+    lockedDancers?: Set<number>;
   } = {}
 ): Promise<MultiCandidateResult> {
   const {
@@ -414,6 +415,7 @@ export async function generateChoreographyWithCandidates(
     useGeminiRanking = false,
     pipelineMode = 'ranking_only',
     assignmentMode = 'fixed',
+    lockedDancers,
   } = options;
 
   const startTime = performance.now();
@@ -444,6 +446,7 @@ export async function generateChoreographyWithCandidates(
       stageWidth,
       stageHeight,
       assignmentMode,
+      lockedDancers,
     });
   } else {
     // Without Gemini or Ranking Only mode: standard 5 strategies
@@ -453,6 +456,7 @@ export async function generateChoreographyWithCandidates(
       stageWidth,
       stageHeight,
       assignmentMode,
+      lockedDancers,
     });
   }
 

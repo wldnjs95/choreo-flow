@@ -560,9 +560,32 @@ interface FormationEditorProps {
   onPositionsChange: (positions: Position[]) => void;
   onClose: () => void;
   onApplyPreset: (formation: FormationType, spread: number) => void;
+  // End formation specific props
+  isEndFormation?: boolean;
+  assignmentMode?: AssignmentMode;
+  lockedDancers?: Set<number>; // Dancer IDs with fixed end positions
+  onAssignmentModeChange?: (mode: AssignmentMode) => void;
+  onLockedDancersChange?: (locked: Set<number>) => void;
 }
 
-function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeight, scale, dancerRadius, initialFormation, onPositionsChange, onClose, onApplyPreset }: FormationEditorProps) {
+function FormationEditor({
+  positions,
+  dancerCount,
+  title,
+  stageWidth,
+  stageHeight,
+  scale,
+  dancerRadius,
+  initialFormation,
+  onPositionsChange,
+  onClose,
+  onApplyPreset,
+  isEndFormation = false,
+  assignmentMode = 'fixed',
+  lockedDancers = new Set(),
+  onAssignmentModeChange,
+  onLockedDancersChange,
+}: FormationEditorProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [localPositions, setLocalPositions] = useState<Position[]>(positions);
@@ -573,6 +596,8 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
   const [currentPreset, setCurrentPreset] = useState<FormationType | null>(
     initialFormation !== 'custom' ? initialFormation : null
   );
+  // Local state for locked dancers (for partial assignment)
+  const [localLockedDancers, setLocalLockedDancers] = useState<Set<number>>(lockedDancers);
 
   // Multi-selection state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -1013,6 +1038,53 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
           </div>
         </div>
 
+        {/* Assignment Mode (End Formation Only) */}
+        {isEndFormation && onAssignmentModeChange && (
+          <div className="assignment-mode-section">
+            <div className="assignment-mode-header">
+              <span className="section-label">End Position Assignment:</span>
+            </div>
+            <div className="assignment-mode-options">
+              <label className={`assignment-option ${assignmentMode === 'fixed' ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="editorAssignmentMode"
+                  checked={assignmentMode === 'fixed'}
+                  onChange={() => onAssignmentModeChange('fixed')}
+                />
+                <span className="option-label">Fixed</span>
+                <span className="option-desc">All dancers have fixed end positions</span>
+              </label>
+              <label className={`assignment-option ${assignmentMode === 'partial' ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="editorAssignmentMode"
+                  checked={assignmentMode === 'partial'}
+                  onChange={() => onAssignmentModeChange('partial')}
+                />
+                <span className="option-label">Partial</span>
+                <span className="option-desc">Lock some, auto-assign others</span>
+              </label>
+              <label className={`assignment-option ${assignmentMode === 'optimal' ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="editorAssignmentMode"
+                  checked={assignmentMode === 'optimal'}
+                  onChange={() => onAssignmentModeChange('optimal')}
+                />
+                <span className="option-label">Auto</span>
+                <span className="option-desc">Optimize all assignments</span>
+              </label>
+            </div>
+            {assignmentMode === 'partial' && (
+              <div className="partial-assignment-hint">
+                <span>🔒 Click dancers to lock/unlock their end positions</span>
+                <span className="locked-count">Locked: {localLockedDancers.size} / {dancerCount}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         <svg
           ref={svgRef}
           width={svgWidth}
@@ -1080,9 +1152,44 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
             const color = DANCER_COLORS[i % DANCER_COLORS.length];
             const isSelected = selectedIds.has(i);
             const isDragging = draggingId === i;
+            const isLocked = localLockedDancers.has(i);
+            const showLockIndicator = isEndFormation && assignmentMode === 'partial';
+
+            const handleDancerClick = (e: React.MouseEvent) => {
+              // In partial mode, right-click or ctrl+click toggles lock
+              if (showLockIndicator && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                e.stopPropagation();
+                const newLocked = new Set(localLockedDancers);
+                if (newLocked.has(i)) {
+                  newLocked.delete(i);
+                } else {
+                  newLocked.add(i);
+                }
+                setLocalLockedDancers(newLocked);
+                onLockedDancersChange?.(newLocked);
+              }
+            };
 
             return (
-              <g key={i} onMouseDown={handleDancerMouseDown(i)} style={{ cursor: 'grab' }}>
+              <g
+                key={i}
+                onMouseDown={handleDancerMouseDown(i)}
+                onClick={handleDancerClick}
+                style={{ cursor: showLockIndicator ? 'pointer' : 'grab' }}
+              >
+                {/* Locked dancer indicator */}
+                {showLockIndicator && isLocked && (
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={dancerRadius + 10}
+                    fill="none"
+                    stroke="#FFD93D"
+                    strokeWidth={3}
+                    strokeDasharray="none"
+                  />
+                )}
                 {/* Selected dancer background highlight */}
                 {isSelected && (
                   <circle
@@ -1106,10 +1213,10 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
                   cy={cy}
                   r={dancerRadius}
                   fill={color}
-                  stroke={isDragging ? '#fff' : isSelected ? '#4ECDC4' : 'rgba(255,255,255,0.3)'}
-                  strokeWidth={isDragging ? 3 : isSelected ? 3 : 2}
+                  stroke={isDragging ? '#fff' : isSelected ? '#4ECDC4' : isLocked && showLockIndicator ? '#FFD93D' : 'rgba(255,255,255,0.3)'}
+                  strokeWidth={isDragging ? 3 : isSelected ? 3 : isLocked && showLockIndicator ? 3 : 2}
                   style={{
-                    filter: isSelected ? 'drop-shadow(0 0 6px rgba(78, 205, 196, 0.6))' : 'none',
+                    filter: isSelected ? 'drop-shadow(0 0 6px rgba(78, 205, 196, 0.6))' : isLocked && showLockIndicator ? 'drop-shadow(0 0 6px rgba(255, 217, 61, 0.6))' : 'none',
                   }}
                 />
                 <text
@@ -1124,6 +1231,18 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
                 >
                   {i + 1}
                 </text>
+                {/* Lock icon */}
+                {showLockIndicator && isLocked && (
+                  <text
+                    x={cx + dancerRadius}
+                    y={cy - dancerRadius}
+                    fontSize={10}
+                    fill="#FFD93D"
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    🔒
+                  </text>
+                )}
               </g>
             );
           })}
@@ -1611,6 +1730,7 @@ export default function DanceChoreography() {
   const [apiConfigured, setApiConfigured] = useState(false);
   const [pipelineMode, setPipelineMode] = useState<GeminiPipelineMode>('ranking_only');
   const [assignmentMode, setAssignmentMode] = useState<AssignmentMode>('fixed');
+  const [lockedDancers, setLockedDancers] = useState<Set<number>>(new Set());
   const [preConstraint, setPreConstraint] = useState<GeminiPreConstraint | null>(null);
   const [usedGeminiPreConstraint, setUsedGeminiPreConstraint] = useState(false);
 
@@ -1703,6 +1823,7 @@ export default function DanceChoreography() {
             useGeminiRanking: isConfigured,
             pipelineMode: pipelineMode,
             assignmentMode: assignmentMode,
+            lockedDancers: assignmentMode === 'partial' ? lockedDancers : undefined,
           }
         );
 
@@ -1928,34 +2049,7 @@ export default function DanceChoreography() {
             </div>
           )}
           {useMultiCandidate && (
-            <div className="assignment-mode-selector">
-              <span className="mode-section-label">Assignment:</span>
-              <label className={`mode-option small ${assignmentMode === 'fixed' ? 'active' : ''}`}>
-                <input
-                  type="radio"
-                  name="assignmentMode"
-                  value="fixed"
-                  checked={assignmentMode === 'fixed'}
-                  onChange={() => setAssignmentMode('fixed')}
-                />
-                <span className="mode-label">Fixed</span>
-              </label>
-              <label className={`mode-option small ${assignmentMode === 'optimal' ? 'active' : ''}`}>
-                <input
-                  type="radio"
-                  name="assignmentMode"
-                  value="optimal"
-                  checked={assignmentMode === 'optimal'}
-                  onChange={() => setAssignmentMode('optimal')}
-                />
-                <span className="mode-label">Auto</span>
-              </label>
-            </div>
-          )}
-          {useMultiCandidate && (
             <span className="toggle-hint">
-              {assignmentMode === 'fixed' ? 'Dancer i → Position i' : 'Hungarian algorithm optimizes assignment'}
-              {' | '}
               {pipelineMode === 'without_gemini'
                 ? '5 strategies → Local ranking'
                 : pipelineMode === 'ranking_only'
@@ -1988,6 +2082,12 @@ export default function DanceChoreography() {
           }}
           onClose={() => setEditingFormation(null)}
           onApplyPreset={(f, spread) => handleApplyPreset(f, editingFormation, spread)}
+          // End formation specific props
+          isEndFormation={editingFormation === 'end'}
+          assignmentMode={assignmentMode}
+          lockedDancers={lockedDancers}
+          onAssignmentModeChange={editingFormation === 'end' ? setAssignmentMode : undefined}
+          onLockedDancersChange={editingFormation === 'end' ? setLockedDancers : undefined}
         />
       )}
 

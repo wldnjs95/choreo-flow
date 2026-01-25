@@ -1399,6 +1399,90 @@ body {
   color: #4ECDC4;
 }
 
+/* Assignment Mode Section in Formation Editor */
+.assignment-mode-section {
+  background: rgba(78, 205, 196, 0.1);
+  border: 1px solid rgba(78, 205, 196, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.assignment-mode-header {
+  margin-bottom: 10px;
+}
+
+.assignment-mode-header .section-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #4ECDC4;
+}
+
+.assignment-mode-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.assignment-option {
+  flex: 1;
+  min-width: 120px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.assignment-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.assignment-option.active {
+  background: rgba(78, 205, 196, 0.2);
+  border-color: #4ECDC4;
+}
+
+.assignment-option input[type="radio"] {
+  display: none;
+}
+
+.assignment-option .option-label {
+  font-weight: 600;
+  color: #ccc;
+  font-size: 0.85rem;
+}
+
+.assignment-option.active .option-label {
+  color: #4ECDC4;
+}
+
+.assignment-option .option-desc {
+  font-size: 0.7rem;
+  color: #888;
+}
+
+.partial-assignment-hint {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: rgba(255, 217, 61, 0.15);
+  border: 1px solid rgba(255, 217, 61, 0.3);
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  color: #FFD93D;
+}
+
+.partial-assignment-hint .locked-count {
+  font-weight: 600;
+}
+
 /* Pre-Constraint Info */
 .pre-constraint-info {
   background: rgba(108, 92, 231, 0.15);

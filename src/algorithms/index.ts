@@ -7,6 +7,7 @@ export {
   computeAssignment,
   computeFixedAssignment,
   computeOptimalAssignment,
+  computePartialAssignment,
   calculateTotalDistance,
   summarizeAssignment,
   type Position,

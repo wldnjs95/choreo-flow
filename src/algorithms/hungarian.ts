@@ -252,7 +252,7 @@ function countBits(n: number): number {
 /**
  * Assignment mode
  */
-export type AssignmentMode = 'fixed' | 'optimal';
+export type AssignmentMode = 'fixed' | 'partial' | 'optimal';
 
 /**
  * Fixed assignment: Dancer i → End position i (direct 1:1 mapping)
@@ -313,15 +313,87 @@ export function computeOptimalAssignment(
 }
 
 /**
+ * Partial assignment: Some dancers are fixed, others are optimally assigned
+ * lockedDancers: Set of dancer indices (0-based) with fixed end positions
+ */
+export function computePartialAssignment(
+  startPositions: Position[],
+  endPositions: Position[],
+  lockedDancers: Set<number>
+): Assignment[] {
+  if (startPositions.length !== endPositions.length) {
+    throw new Error('Number of start and end positions must be equal.');
+  }
+
+  const n = startPositions.length;
+  const result: Assignment[] = [];
+  const usedEndPositions = new Set<number>();
+
+  // First, assign locked dancers (fixed mapping)
+  for (let i = 0; i < n; i++) {
+    if (lockedDancers.has(i)) {
+      result.push({
+        dancerId: i + 1,
+        startPosition: startPositions[i],
+        endPosition: endPositions[i],
+        distance: euclideanDistance(startPositions[i], endPositions[i]),
+      });
+      usedEndPositions.add(i);
+    }
+  }
+
+  // Find unlocked dancers and available end positions
+  const unlockedDancers: number[] = [];
+  const availableEndPositions: number[] = [];
+
+  for (let i = 0; i < n; i++) {
+    if (!lockedDancers.has(i)) {
+      unlockedDancers.push(i);
+    }
+    if (!usedEndPositions.has(i)) {
+      availableEndPositions.push(i);
+    }
+  }
+
+  // If there are unlocked dancers, use Hungarian on the subproblem
+  if (unlockedDancers.length > 0 && availableEndPositions.length > 0) {
+    const subStartPositions = unlockedDancers.map(i => startPositions[i]);
+    const subEndPositions = availableEndPositions.map(i => endPositions[i]);
+
+    const subCostMatrix = createCostMatrix(subStartPositions, subEndPositions);
+    const subAssignment = hungarianSimple(subCostMatrix);
+
+    for (let j = 0; j < unlockedDancers.length; j++) {
+      const dancerIdx = unlockedDancers[j];
+      const endIdx = availableEndPositions[subAssignment[j]];
+
+      result.push({
+        dancerId: dancerIdx + 1,
+        startPosition: startPositions[dancerIdx],
+        endPosition: endPositions[endIdx],
+        distance: euclideanDistance(startPositions[dancerIdx], endPositions[endIdx]),
+      });
+    }
+  }
+
+  // Sort by dancerId
+  return result.sort((a, b) => a.dancerId - b.dancerId);
+}
+
+/**
  * Compute assignment based on mode
  */
 export function computeAssignment(
   startPositions: Position[],
   endPositions: Position[],
-  mode: AssignmentMode = 'fixed'
+  mode: AssignmentMode = 'fixed',
+  lockedDancers?: Set<number>
 ): Assignment[] {
   if (mode === 'optimal') {
     return computeOptimalAssignment(startPositions, endPositions);
+  }
+  if (mode === 'partial' && lockedDancers) {
+    return computePartialAssignment(startPositions, endPositions, lockedDancers);
   }
   return computeFixedAssignment(startPositions, endPositions);
 }

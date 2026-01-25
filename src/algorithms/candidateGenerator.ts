@@ -56,7 +56,8 @@ export interface CandidateGeneratorConfig {
   collisionRadius: number;
   stageWidth: number;
   stageHeight: number;
-  assignmentMode: AssignmentMode;  // 'fixed' (default) or 'optimal'
+  assignmentMode: AssignmentMode;  // 'fixed', 'partial', or 'optimal'
+  lockedDancers?: Set<number>;     // For partial mode: locked dancer indices
 }
 
 const DEFAULT_STRATEGIES: CandidateStrategy[] = [
@@ -400,11 +401,12 @@ export function generateCandidate(
     stageWidth: number;
     stageHeight: number;
     assignmentMode?: AssignmentMode;
+    lockedDancers?: Set<number>;
   }
 ): CandidateResult {
   // 1. Assignment (fixed by default, optimal for large groups)
   const assignmentMode = config.assignmentMode || 'fixed';
-  const assignments = computeAssignment(startPositions, endPositions, assignmentMode);
+  const assignments = computeAssignment(startPositions, endPositions, assignmentMode, config.lockedDancers);
 
   // 2. Sort assignment only for center_priority strategy, others handled by pathfinder
   const processedAssignments = strategy === 'center_priority'
@@ -447,6 +449,7 @@ export function generateAllCandidates(
     stageWidth: config.stageWidth || 12,
     stageHeight: config.stageHeight || 10,
     assignmentMode: config.assignmentMode || 'fixed',  // Default: fixed assignment
+    lockedDancers: config.lockedDancers,
   };
 
   const allCandidates: CandidateResult[] = [];
@@ -458,6 +461,7 @@ export function generateAllCandidates(
       stageWidth: fullConfig.stageWidth,
       stageHeight: fullConfig.stageHeight,
       assignmentMode: fullConfig.assignmentMode,
+      lockedDancers: fullConfig.lockedDancers,
     });
     allCandidates.push(candidate);
   }
@@ -593,11 +597,12 @@ export function generateCandidateWithConstraint(
     stageWidth: number;
     stageHeight: number;
     assignmentMode?: AssignmentMode;
+    lockedDancers?: Set<number>;
   }
 ): CandidateResult {
   // 1. Assignment (fixed by default)
   const assignmentMode = config.assignmentMode || 'fixed';
-  const assignments = computeAssignment(startPositions, endPositions, assignmentMode);
+  const assignments = computeAssignment(startPositions, endPositions, assignmentMode, config.lockedDancers);
 
   // 2. Sort assignments by constraint
   const sortedAssignments = sortAssignmentsByConstraint(assignments, constraint);
@@ -652,6 +657,7 @@ export function generateCandidatesWithConstraint(
     stageWidth: config.stageWidth || 12,
     stageHeight: config.stageHeight || 10,
     assignmentMode: config.assignmentMode || 'fixed',
+    lockedDancers: config.lockedDancers,
   };
 
   const candidates: CandidateResult[] = [];
@@ -667,6 +673,7 @@ export function generateCandidatesWithConstraint(
       stageWidth: fullConfig.stageWidth,
       stageHeight: fullConfig.stageHeight,
       assignmentMode: fullConfig.assignmentMode,
+      lockedDancers: fullConfig.lockedDancers,
     }
   );
   mainCandidate.id = 'candidate_gemini_constrained';
@@ -692,6 +699,7 @@ export function generateCandidatesWithConstraint(
         stageWidth: fullConfig.stageWidth,
         stageHeight: fullConfig.stageHeight,
         assignmentMode: fullConfig.assignmentMode,
+        lockedDancers: fullConfig.lockedDancers,
       }
     );
     variant.id = `candidate_constrained_curve_${curveAmount}`;
@@ -707,6 +715,7 @@ export function generateCandidatesWithConstraint(
       stageWidth: fullConfig.stageWidth,
       stageHeight: fullConfig.stageHeight,
       assignmentMode: fullConfig.assignmentMode,
+      lockedDancers: fullConfig.lockedDancers,
     });
     candidate.id = `candidate_baseline_${strategy}`;
     candidates.push(candidate);
