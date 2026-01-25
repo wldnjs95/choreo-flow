@@ -356,8 +356,8 @@ export interface MultiCandidateResult {
   // All candidates
   candidates: CandidateResult[];
 
-  // Ranking result
-  ranking: RankingResult;
+  // Ranking result (null in without_gemini mode)
+  ranking: RankingResult | null;
 
   // Candidates summary (for Gemini)
   candidatesSummary: object;
@@ -453,27 +453,21 @@ export async function generateChoreographyWithCandidates(
   }
 
   // 3. Ranking (Gemini or Local)
-  let ranking: RankingResult;
+  let ranking: RankingResult | null = null;
   let usedGeminiRanking = false;
-
-  // Without Gemini mode: always use local ranking
-  const shouldUseGeminiRanking = pipelineMode !== 'without_gemini' && useGeminiRanking;
 
   // Debug logging
   console.log('=== Pipeline Debug ===');
   console.log('Pipeline Mode:', pipelineMode);
-  console.log('useGeminiRanking param:', useGeminiRanking);
-  console.log('shouldUseGeminiRanking:', shouldUseGeminiRanking);
   console.log('Candidates count:', candidates.length);
   console.log('Candidate IDs:', candidates.map(c => c.id));
-  console.log('Candidate metrics:', candidates.map(c => ({
-    id: c.id,
-    collisions: c.metrics.collisionCount,
-    crossings: c.metrics.crossingCount,
-    smoothness: c.metrics.pathSmoothness,
-  })));
 
-  if (shouldUseGeminiRanking) {
+  if (pipelineMode === 'without_gemini') {
+    // Without Gemini: No ranking, just use first candidate (already sorted by best metrics)
+    console.log('Without Gemini mode: using first candidate (best metrics)');
+    console.log('Selected:', candidates[0]?.id);
+  } else if (useGeminiRanking) {
+    // Gemini ranking
     try {
       console.log('Calling Gemini ranking...');
       ranking = await rankCandidatesWithGemini(candidates, userPreference);
@@ -485,6 +479,7 @@ export async function generateChoreographyWithCandidates(
       console.log('Local ranking fallback, selected:', ranking.selectedId);
     }
   } else {
+    // Local ranking (for ranking_only mode without API key)
     console.log('Using local ranking...');
     ranking = rankCandidatesLocal(candidates, userPreference);
     console.log('Local ranking selected:', ranking.selectedId);
@@ -492,7 +487,9 @@ export async function generateChoreographyWithCandidates(
   console.log('=== End Pipeline Debug ===')
 
   // 4. Find selected candidate
-  const selectedCandidate = candidates.find(c => c.id === ranking.selectedId) || candidates[0];
+  const selectedCandidate = ranking
+    ? candidates.find(c => c.id === ranking.selectedId) || candidates[0]
+    : candidates[0];  // Without ranking, use first (best metrics)
 
   // 5. Convert to ChoreographyResult format
   const smoothPaths = pathsToSmoothPaths(selectedCandidate.paths);

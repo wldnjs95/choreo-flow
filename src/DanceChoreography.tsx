@@ -1687,7 +1687,8 @@ export default function DanceChoreography() {
 
         setCandidates(multiResult.candidates);
         setRanking(multiResult.ranking);
-        setSelectedCandidateId(multiResult.ranking.selectedId);
+        // Without ranking, use first candidate (best metrics)
+        setSelectedCandidateId(multiResult.ranking?.selectedId || multiResult.candidates[0]?.id);
         setUsedGeminiRanking(multiResult.metadata.usedGeminiRanking);
         setPreConstraint(multiResult.preConstraint || null);
         setUsedGeminiPreConstraint(multiResult.metadata.usedGeminiPreConstraint);
