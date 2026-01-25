@@ -1,16 +1,16 @@
 /**
  * Gemini API Configuration
  *
- * 서버리스 함수를 통해 API 호출 (키 보안)
+ * API calls through serverless functions (key security)
  */
 
-// 서버 API 엔드포인트 (Vercel serverless function)
+// Server API endpoint (Vercel serverless function)
 const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:3000' : '';
 
 export const GEMINI_API_URL = `${API_BASE_URL}/api/gemini`;
 export const HEALTH_API_URL = `${API_BASE_URL}/api/health`;
 
-// 레거시 호환성 (사용하지 않음)
+// Legacy compatibility (not used)
 export const GEMINI_API_KEY = '';
 
 export const GEMINI_CONFIG = {
@@ -21,7 +21,7 @@ export const GEMINI_CONFIG = {
 };
 
 /**
- * API 키가 서버에 설정되었는지 확인 (health check)
+ * Check if API key is configured on server (health check)
  */
 export async function isApiKeyConfigured(): Promise<boolean> {
   try {
@@ -35,7 +35,7 @@ export async function isApiKeyConfigured(): Promise<boolean> {
 }
 
 /**
- * 서버를 통해 Gemini API 호출
+ * Call Gemini API through server
  */
 export async function callGeminiAPI(prompt: string, config?: Partial<typeof GEMINI_CONFIG>): Promise<string> {
   const response = await fetch(GEMINI_API_URL, {
@@ -55,14 +55,14 @@ export async function callGeminiAPI(prompt: string, config?: Partial<typeof GEMI
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(`Gemini API 오류: ${response.status} - ${errorData.error || 'Unknown error'}`);
+    throw new Error(`Gemini API error: ${response.status} - ${errorData.error || 'Unknown error'}`);
   }
 
   const data = await response.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
   if (!text) {
-    throw new Error('Gemini API 응답이 비어있습니다.');
+    throw new Error('Gemini API response is empty.');
   }
 
   return text;

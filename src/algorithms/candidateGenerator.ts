@@ -1,43 +1,43 @@
 /**
- * 다중 후보 생성기 (Candidate Generator)
+ * Multi-Candidate Generator
  *
- * 전략:
- * 1. 다양한 파라미터 조합으로 여러 경로 후보 생성
- * 2. 각 후보의 메트릭 계산
- * 3. Gemini가 메트릭 기반으로 최적 후보 선택
+ * Strategy:
+ * 1. Generate multiple path candidates with various parameter combinations
+ * 2. Calculate metrics for each candidate
+ * 3. Gemini selects optimal candidate based on metrics
  */
 
 import { computeOptimalAssignment } from './hungarian';
 import type { Position, Assignment } from './hungarian';
 import { computeAllPathsSimple, validatePathsSimple } from './pathfinder';
-import type { DancerPath, PathPoint, SortStrategy } from './pathfinder';
+import type { DancerPath, PathPoint, SortStrategy, TimingMode } from './pathfinder';
 
 /**
- * 후보 생성 전략
+ * Candidate generation strategy
  */
 export type CandidateStrategy =
-  | 'distance_longest_first'   // 긴 거리 우선 처리 (기본)
-  | 'distance_shortest_first'  // 짧은 거리 우선 처리
-  | 'timing_priority'          // 타이밍 조정 우선 (곡선 최소화)
-  | 'curve_allowed'            // 곡선 허용 (타이밍 고정)
-  | 'center_priority';         // 센터 dancer 우선 처리
+  | 'distance_longest_first'   // Long distance first (default)
+  | 'distance_shortest_first'  // Short distance first
+  | 'synchronized_arrival'     // All dancers arrive at same time
+  | 'staggered_wave'           // Sequential start with wave effect
+  | 'center_priority';         // Center dancer first
 
 /**
- * 후보 메트릭
+ * Candidate metrics
  */
 export interface CandidateMetrics {
-  collisionCount: number;      // 충돌 횟수 (0이 최고)
-  symmetryScore: number;       // 대칭성 점수 (0-100)
-  pathSmoothness: number;      // 경로 부드러움 (0-100, 직선일수록 높음)
-  crossingCount: number;       // 경로 교차 횟수
-  maxDelay: number;            // 최대 출발 지연 시간
-  avgDelay: number;            // 평균 출발 지연 시간
-  simultaneousArrival: number; // 동시 도착 점수 (0-100)
-  totalDistance: number;       // 총 이동 거리
+  collisionCount: number;      // Collision count (0 is best)
+  symmetryScore: number;       // Symmetry score (0-100)
+  pathSmoothness: number;      // Path smoothness (0-100, higher for straighter)
+  crossingCount: number;       // Path crossing count
+  maxDelay: number;            // Maximum start delay time
+  avgDelay: number;            // Average start delay time
+  simultaneousArrival: number; // Simultaneous arrival score (0-100)
+  totalDistance: number;       // Total travel distance
 }
 
 /**
- * 후보 결과
+ * Candidate result
  */
 export interface CandidateResult {
   id: string;
@@ -48,7 +48,7 @@ export interface CandidateResult {
 }
 
 /**
- * 다중 후보 생성 설정
+ * Multi-candidate generation config
  */
 export interface CandidateGeneratorConfig {
   strategies: CandidateStrategy[];
@@ -61,25 +61,25 @@ export interface CandidateGeneratorConfig {
 const DEFAULT_STRATEGIES: CandidateStrategy[] = [
   'distance_longest_first',
   'distance_shortest_first',
-  'timing_priority',
-  'curve_allowed',
+  'synchronized_arrival',
+  'staggered_wave',
   'center_priority',
 ];
 
 /**
- * 두 점 사이 거리
+ * Distance between two points
  */
 function distance(a: Position, b: Position): number {
   return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 }
 
 /**
- * 두 경로 배열이 동일한지 비교 (허용 오차 포함)
+ * Compare if two path arrays are equal (with tolerance)
  */
 function arePathsEqual(paths1: DancerPath[], paths2: DancerPath[], tolerance: number = 0.01): boolean {
   if (paths1.length !== paths2.length) return false;
 
-  // dancerId로 정렬해서 비교
+  // Sort by dancerId for comparison
   const sorted1 = [...paths1].sort((a, b) => a.dancerId - b.dancerId);
   const sorted2 = [...paths2].sort((a, b) => a.dancerId - b.dancerId);
 
@@ -91,7 +91,7 @@ function arePathsEqual(paths1: DancerPath[], paths2: DancerPath[], tolerance: nu
     if (Math.abs(p1.startTime - p2.startTime) > tolerance) return false;
     if (p1.path.length !== p2.path.length) return false;
 
-    // 경로의 주요 포인트 비교 (시작, 중간, 끝)
+    // Compare main points of path (start, middle, end)
     const checkIndices = [0, Math.floor(p1.path.length / 2), p1.path.length - 1];
     for (const idx of checkIndices) {
       if (idx < p1.path.length && idx < p2.path.length) {
@@ -108,7 +108,7 @@ function arePathsEqual(paths1: DancerPath[], paths2: DancerPath[], tolerance: nu
 }
 
 /**
- * 경로의 곡률 계산 (직선에서 얼마나 벗어났는지)
+ * Calculate path curvature (deviation from straight line)
  */
 function calculatePathCurvature(path: PathPoint[]): number {
   if (path.length < 3) return 0;
@@ -121,7 +121,7 @@ function calculatePathCurvature(path: PathPoint[]): number {
 
   let maxDeviation = 0;
   for (let i = 1; i < path.length - 1; i++) {
-    // 점에서 직선까지의 거리 계산
+    // Calculate distance from point to line
     const t = ((path[i].x - start.x) * (end.x - start.x) +
                (path[i].y - start.y) * (end.y - start.y)) / (directDistance * directDistance);
     const projX = start.x + t * (end.x - start.x);
@@ -134,7 +134,7 @@ function calculatePathCurvature(path: PathPoint[]): number {
 }
 
 /**
- * 경로 교차 횟수 계산
+ * Calculate path crossing count
  */
 function countPathCrossings(paths: DancerPath[], totalCounts: number): number {
   let crossings = 0;
@@ -142,7 +142,7 @@ function countPathCrossings(paths: DancerPath[], totalCounts: number): number {
 
   for (let i = 0; i < paths.length; i++) {
     for (let j = i + 1; j < paths.length; j++) {
-      // 두 경로가 교차하는지 검사
+      // Check if two paths cross
       let prevOrder: number | null = null;
 
       for (let t = 0; t <= totalCounts; t += timeStep) {
@@ -151,7 +151,7 @@ function countPathCrossings(paths: DancerPath[], totalCounts: number): number {
 
         if (!pos1 || !pos2) continue;
 
-        // X 좌표 기준 순서
+        // Order based on X coordinate
         const currentOrder = pos1.x < pos2.x ? 1 : -1;
 
         if (prevOrder !== null && prevOrder !== currentOrder) {
@@ -166,7 +166,7 @@ function countPathCrossings(paths: DancerPath[], totalCounts: number): number {
 }
 
 /**
- * 특정 시간의 위치 보간
+ * Interpolate position at specific time
  */
 function getPositionAtTime(path: PathPoint[], time: number): Position | null {
   if (path.length === 0) return null;
@@ -188,7 +188,7 @@ function getPositionAtTime(path: PathPoint[], time: number): Position | null {
 }
 
 /**
- * 대칭성 점수 계산
+ * Calculate symmetry score
  */
 function calculateSymmetryScore(paths: DancerPath[], stageWidth: number, totalCounts: number): number {
   const centerX = stageWidth / 2;
@@ -200,7 +200,7 @@ function calculateSymmetryScore(paths: DancerPath[], stageWidth: number, totalCo
 
     if (positions.length === 0) continue;
 
-    // 각 위치에 대해 중심선 기준 대칭 위치에 dancer가 있는지 확인
+    // Check if there's a dancer at the symmetric position relative to center line
     let matchedPairs = 0;
     const used = new Set<number>();
 
@@ -209,7 +209,7 @@ function calculateSymmetryScore(paths: DancerPath[], stageWidth: number, totalCo
 
       const mirrorX = 2 * centerX - positions[i].x;
 
-      // 대칭 위치에 가장 가까운 dancer 찾기
+      // Find closest dancer to symmetric position
       let bestMatch = -1;
       let bestDist = Infinity;
 
@@ -217,7 +217,7 @@ function calculateSymmetryScore(paths: DancerPath[], stageWidth: number, totalCo
         if (i === j || used.has(j)) continue;
 
         const dist = distance(positions[j], { x: mirrorX, y: positions[i].y });
-        if (dist < bestDist && dist < 1.0) { // 1m 이내면 대칭으로 인정
+        if (dist < bestDist && dist < 1.0) { // Within 1m counts as symmetric
           bestDist = dist;
           bestMatch = j;
         }
@@ -241,12 +241,12 @@ function calculateSymmetryScore(paths: DancerPath[], stageWidth: number, totalCo
 }
 
 /**
- * 동시 도착 점수 계산
+ * Calculate simultaneous arrival score
  */
 function calculateSimultaneousArrivalScore(paths: DancerPath[], totalCounts: number): number {
   if (paths.length === 0) return 100;
 
-  // 각 dancer의 도착 시간 (마지막으로 움직인 시간)
+  // Each dancer's arrival time (last movement time)
   const arrivalTimes = paths.map(p => {
     const lastPoint = p.path[p.path.length - 1];
     return lastPoint ? lastPoint.t : totalCounts;
@@ -256,14 +256,14 @@ function calculateSimultaneousArrivalScore(paths: DancerPath[], totalCounts: num
   const minArrival = Math.min(...arrivalTimes);
   const spread = maxArrival - minArrival;
 
-  // spread가 0이면 완벽한 동시 도착
-  // spread가 totalCounts면 최악
+  // spread 0 = perfect simultaneous arrival
+  // spread = totalCounts = worst
   const score = Math.max(0, 100 - (spread / totalCounts) * 100);
   return Math.round(score);
 }
 
 /**
- * 메트릭 계산
+ * Calculate metrics
  */
 export function calculateMetrics(
   paths: DancerPath[],
@@ -271,29 +271,29 @@ export function calculateMetrics(
   collisionRadius: number,
   stageWidth: number
 ): CandidateMetrics {
-  // 충돌 검사
+  // Collision check
   const validation = validatePathsSimple(paths, collisionRadius, totalCounts);
 
-  // 경로 부드러움 (곡률의 역수)
+  // Path smoothness (inverse of curvature)
   const curvatures = paths.map(p => calculatePathCurvature(p.path));
   const avgCurvature = curvatures.reduce((a, b) => a + b, 0) / curvatures.length;
   const smoothness = Math.max(0, Math.round(100 - avgCurvature * 50));
 
-  // 교차 횟수
+  // Crossing count
   const crossingCount = countPathCrossings(paths, totalCounts);
 
-  // 지연 시간
+  // Delay time
   const delays = paths.map(p => p.startTime);
   const maxDelay = Math.max(...delays);
   const avgDelay = delays.reduce((a, b) => a + b, 0) / delays.length;
 
-  // 대칭성
+  // Symmetry
   const symmetryScore = calculateSymmetryScore(paths, stageWidth, totalCounts);
 
-  // 동시 도착
+  // Simultaneous arrival
   const simultaneousArrival = calculateSimultaneousArrivalScore(paths, totalCounts);
 
-  // 총 거리
+  // Total distance
   const totalDistance = paths.reduce((sum, p) => sum + p.totalDistance, 0);
 
   return {
@@ -309,8 +309,8 @@ export function calculateMetrics(
 }
 
 /**
- * 전략별 Assignment 정렬 (center_priority 전용)
- * 다른 전략들은 pathfinder의 sortStrategy로 처리
+ * Sort assignments by strategy (center_priority only)
+ * Other strategies are handled by pathfinder's sortStrategy
  */
 function sortAssignmentsForCenterPriority(
   assignments: Assignment[],
@@ -321,7 +321,7 @@ function sortAssignmentsForCenterPriority(
   const centerX = stageWidth / 2;
   const centerY = stageHeight / 2;
 
-  // 센터에 가까운 dancer 우선
+  // Prioritize dancers closer to center
   sorted.sort((a, b) => {
     const distA = distance(a.startPosition, { x: centerX, y: centerY });
     const distB = distance(b.startPosition, { x: centerX, y: centerY });
@@ -332,7 +332,7 @@ function sortAssignmentsForCenterPriority(
 }
 
 /**
- * 전략별 Pathfinder 설정
+ * Pathfinder config by strategy
  */
 function getPathfinderConfig(strategy: CandidateStrategy, totalCounts: number) {
   const baseConfig = {
@@ -346,35 +346,39 @@ function getPathfinderConfig(strategy: CandidateStrategy, totalCounts: number) {
       return {
         ...baseConfig,
         sortStrategy: 'distance_longest_first' as SortStrategy,
+        timingMode: 'proportional' as TimingMode,
       };
 
     case 'distance_shortest_first':
       return {
         ...baseConfig,
         sortStrategy: 'distance_shortest_first' as SortStrategy,
+        timingMode: 'proportional' as TimingMode,
       };
 
     case 'center_priority':
-      // center_priority는 assignment 자체를 정렬해서 전달하므로 none 사용
+      // center_priority sorts assignments directly, so use 'none'
       return {
         ...baseConfig,
         sortStrategy: 'none' as SortStrategy,
+        timingMode: 'proportional' as TimingMode,
       };
 
-    case 'timing_priority':
+    case 'synchronized_arrival':
+      // All dancers arrive at the same time
       return {
         ...baseConfig,
         sortStrategy: 'distance_longest_first' as SortStrategy,
-        preferTiming: true,
-        maxCurveOffset: 0.2,   // 곡선 최소화
+        timingMode: 'synchronized' as TimingMode,
       };
 
-    case 'curve_allowed':
+    case 'staggered_wave':
+      // Sequential start times with wave effect
       return {
         ...baseConfig,
         sortStrategy: 'distance_longest_first' as SortStrategy,
-        preferTiming: false,
-        maxCurveOffset: 0.8,   // 더 큰 곡선 허용
+        timingMode: 'staggered' as TimingMode,
+        staggerDelay: 0.5,
       };
 
     default:
@@ -383,7 +387,7 @@ function getPathfinderConfig(strategy: CandidateStrategy, totalCounts: number) {
 }
 
 /**
- * 단일 후보 생성
+ * Generate single candidate
  */
 export function generateCandidate(
   strategy: CandidateStrategy,
@@ -396,19 +400,19 @@ export function generateCandidate(
     stageHeight: number;
   }
 ): CandidateResult {
-  // 1. 최적 할당 (Hungarian)
+  // 1. Optimal assignment (Hungarian)
   const assignments = computeOptimalAssignment(startPositions, endPositions);
 
-  // 2. center_priority 전략만 assignment 정렬, 나머지는 pathfinder가 처리
+  // 2. Sort assignment only for center_priority strategy, others handled by pathfinder
   const processedAssignments = strategy === 'center_priority'
     ? sortAssignmentsForCenterPriority(assignments, config.stageWidth, config.stageHeight)
     : assignments;
 
-  // 3. 경로 생성 (전략별 sortStrategy 포함)
+  // 3. Generate paths (with strategy-specific sortStrategy)
   const pathfinderConfig = getPathfinderConfig(strategy, config.totalCounts);
   const paths = computeAllPathsSimple(processedAssignments, pathfinderConfig);
 
-  // 4. 메트릭 계산
+  // 4. Calculate metrics
   const metrics = calculateMetrics(
     paths,
     config.totalCounts,
@@ -426,7 +430,7 @@ export function generateCandidate(
 }
 
 /**
- * 모든 전략으로 후보 생성 (중복 제거)
+ * Generate candidates with all strategies (remove duplicates)
  */
 export function generateAllCandidates(
   startPositions: Position[],
@@ -453,18 +457,30 @@ export function generateAllCandidates(
     allCandidates.push(candidate);
   }
 
-  // 중복 제거: 동일한 경로를 가진 후보는 첫 번째만 유지
+  // Remove duplicates: keep only first candidate with same paths
   const uniqueCandidates: CandidateResult[] = [];
+  const duplicateInfo: string[] = [];
   for (const candidate of allCandidates) {
-    const isDuplicate = uniqueCandidates.some(existing =>
+    const duplicateOf = uniqueCandidates.find(existing =>
       arePathsEqual(existing.paths, candidate.paths)
     );
-    if (!isDuplicate) {
+    if (!duplicateOf) {
       uniqueCandidates.push(candidate);
+    } else {
+      duplicateInfo.push(`${candidate.strategy} = duplicate of ${duplicateOf.strategy}`);
     }
   }
 
-  // 충돌 없는 후보 우선, 그 다음 교차 적은 순
+  // Debug logging
+  console.log('=== Candidate Generation Debug ===');
+  console.log('Total strategies:', allCandidates.length);
+  console.log('Unique candidates:', uniqueCandidates.length);
+  if (duplicateInfo.length > 0) {
+    console.log('Duplicates removed:', duplicateInfo);
+  }
+  console.log('=================================');
+
+  // Prioritize collision-free candidates, then by fewer crossings
   uniqueCandidates.sort((a, b) => {
     if (a.metrics.collisionCount !== b.metrics.collisionCount) {
       return a.metrics.collisionCount - b.metrics.collisionCount;
@@ -476,7 +492,7 @@ export function generateAllCandidates(
 }
 
 /**
- * 메트릭 요약 (Gemini용)
+ * Summarize metrics (for Gemini)
  */
 export function summarizeCandidatesForGemini(candidates: CandidateResult[]): object {
   return {
@@ -496,13 +512,13 @@ export function summarizeCandidatesForGemini(candidates: CandidateResult[]): obj
 }
 
 // ============================================
-// Gemini Pre-Constraint 기반 후보 생성
+// Gemini Pre-Constraint based candidate generation
 // ============================================
 
 import type { GeminiPreConstraint } from '../gemini/preConstraint';
 
 /**
- * 제약조건 기반 전략 매핑
+ * Map constraint to strategy
  */
 function constraintToStrategy(constraint: GeminiPreConstraint): CandidateStrategy {
   switch (constraint.movementOrder) {
@@ -514,7 +530,7 @@ function constraintToStrategy(constraint: GeminiPreConstraint): CandidateStrateg
       return 'center_priority';
     case 'wave_outward':
     case 'outer_first':
-      return 'distance_longest_first';  // 외곽부터 = 긴 거리 우선과 유사
+      return 'distance_longest_first';  // Outer first = similar to longest first
     case 'wave_inward':
       return 'center_priority';
     default:
@@ -523,7 +539,7 @@ function constraintToStrategy(constraint: GeminiPreConstraint): CandidateStrateg
 }
 
 /**
- * 제약조건에 따라 assignment 정렬
+ * Sort assignments by constraint
  */
 function sortAssignmentsByConstraint(
   assignments: Assignment[],
@@ -531,7 +547,7 @@ function sortAssignmentsByConstraint(
 ): Assignment[] {
   const sorted = [...assignments];
 
-  // dancerHints의 priority에 따라 정렬
+  // Sort by priority in dancerHints
   sorted.sort((a, b) => {
     const hintA = constraint.dancerHints.find(h => h.dancerId === a.dancerId + 1);
     const hintB = constraint.dancerHints.find(h => h.dancerId === b.dancerId + 1);
@@ -546,21 +562,21 @@ function sortAssignmentsByConstraint(
 }
 
 /**
- * 제약조건에 따른 Pathfinder 설정
+ * Pathfinder config from constraint
  */
 function getPathfinderConfigFromConstraint(constraint: GeminiPreConstraint, totalCounts: number) {
   return {
     totalCounts,
     collisionRadius: 0.5,
     numPoints: 20,
-    sortStrategy: 'none' as SortStrategy,  // 이미 정렬됨
+    sortStrategy: 'none' as SortStrategy,  // Already sorted
     maxCurveOffset: constraint.suggestedCurveAmount,
     preferTiming: constraint.preferSmoothPaths,
   };
 }
 
 /**
- * 제약조건 기반 단일 후보 생성
+ * Generate single candidate based on constraint
  */
 export function generateCandidateWithConstraint(
   constraint: GeminiPreConstraint,
@@ -573,28 +589,28 @@ export function generateCandidateWithConstraint(
     stageHeight: number;
   }
 ): CandidateResult {
-  // 1. 최적 할당 (Hungarian)
+  // 1. Optimal assignment (Hungarian)
   const assignments = computeOptimalAssignment(startPositions, endPositions);
 
-  // 2. 제약조건에 따라 assignment 정렬
+  // 2. Sort assignments by constraint
   const sortedAssignments = sortAssignmentsByConstraint(assignments, constraint);
 
-  // 3. delay 적용 (dancerHints의 delayRatio 반영)
+  // 3. Apply delay (reflect delayRatio from dancerHints)
   const adjustedAssignments = sortedAssignments.map(a => {
     const hint = constraint.dancerHints.find(h => h.dancerId === a.dancerId + 1);
     const delayRatio = hint?.delayRatio ?? 0;
 
     return {
       ...a,
-      delayStart: delayRatio * config.totalCounts * 0.3,  // 최대 30% 지연
+      delayStart: delayRatio * config.totalCounts * 0.3,  // Max 30% delay
     };
   });
 
-  // 4. 경로 생성
+  // 4. Generate paths
   const pathfinderConfig = getPathfinderConfigFromConstraint(constraint, config.totalCounts);
   const paths = computeAllPathsSimple(adjustedAssignments, pathfinderConfig);
 
-  // 5. 메트릭 계산
+  // 5. Calculate metrics
   const metrics = calculateMetrics(
     paths,
     config.totalCounts,
@@ -614,7 +630,7 @@ export function generateCandidateWithConstraint(
 }
 
 /**
- * 제약조건 + 변형 전략으로 다중 후보 생성
+ * Generate multiple candidates with constraint + variations
  */
 export function generateCandidatesWithConstraint(
   constraint: GeminiPreConstraint,
@@ -632,7 +648,7 @@ export function generateCandidatesWithConstraint(
 
   const candidates: CandidateResult[] = [];
 
-  // 1. 제약조건 기반 메인 후보
+  // 1. Main candidate based on constraint
   const mainCandidate = generateCandidateWithConstraint(
     constraint,
     startPositions,
@@ -647,7 +663,7 @@ export function generateCandidatesWithConstraint(
   mainCandidate.id = 'candidate_gemini_constrained';
   candidates.push(mainCandidate);
 
-  // 2. 제약조건 변형 (곡선량 조절)
+  // 2. Constraint variations (curve amount adjustment)
   const curveVariants = [0.2, 0.5, 0.8];
   for (const curveAmount of curveVariants) {
     if (Math.abs(curveAmount - constraint.suggestedCurveAmount) < 0.1) continue;
@@ -672,8 +688,8 @@ export function generateCandidatesWithConstraint(
     candidates.push(variant);
   }
 
-  // 3. 기존 전략 일부 추가 (비교용)
-  const additionalStrategies: CandidateStrategy[] = ['distance_longest_first', 'timing_priority'];
+  // 3. Add some existing strategies (for comparison)
+  const additionalStrategies: CandidateStrategy[] = ['distance_longest_first', 'synchronized_arrival'];
   for (const strategy of additionalStrategies) {
     const candidate = generateCandidate(strategy, startPositions, endPositions, {
       totalCounts: fullConfig.totalCounts,
@@ -685,7 +701,7 @@ export function generateCandidatesWithConstraint(
     candidates.push(candidate);
   }
 
-  // 중복 제거
+  // Remove duplicates
   const uniqueCandidates: CandidateResult[] = [];
   for (const candidate of candidates) {
     const isDuplicate = uniqueCandidates.some(existing =>
@@ -696,7 +712,7 @@ export function generateCandidatesWithConstraint(
     }
   }
 
-  // 정렬
+  // Sort
   uniqueCandidates.sort((a, b) => {
     if (a.metrics.collisionCount !== b.metrics.collisionCount) {
       return a.metrics.collisionCount - b.metrics.collisionCount;

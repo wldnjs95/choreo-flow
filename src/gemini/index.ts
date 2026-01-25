@@ -1,5 +1,5 @@
 /**
- * Gemini 모듈 통합 내보내기
+ * Gemini module exports
  */
 
 // Config
@@ -30,7 +30,7 @@ export {
   type ImprovementSuggestion,
 } from './evaluator';
 
-// Ranker (후보 랭킹)
+// Ranker (candidate ranking)
 export {
   rankCandidatesWithGemini,
   rankCandidatesLocal,
@@ -39,7 +39,7 @@ export {
   type RankingResult,
 } from './ranker';
 
-// Pre-Constraint (사전 제약)
+// Pre-Constraint (pre-constraint)
 export {
   generatePreConstraint,
   generateDefaultConstraint,

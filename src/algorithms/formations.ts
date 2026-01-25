@@ -1,7 +1,7 @@
 /**
- * 대형 생성기 (Formation Generator)
+ * Formation Generator
  *
- * 다양한 대형 타입에 대한 좌표 생성
+ * Generate coordinates for various formation types
  */
 
 import type { Position } from './hungarian';
@@ -31,12 +31,12 @@ export interface FormationParams {
   stageHeight?: number;
 }
 
-// 기본 스테이지 크기 (World of Dance 기준)
+// Default stage size
 const DEFAULT_STAGE_WIDTH = 12;
 const DEFAULT_STAGE_HEIGHT = 10;
 
 /**
- * 대형 좌표 생성
+ * Generate formation coordinates
  */
 export function generateFormation(
   type: FormationType,
@@ -47,7 +47,7 @@ export function generateFormation(
   const stageWidth = params.stageWidth ?? DEFAULT_STAGE_WIDTH;
   const stageHeight = params.stageHeight ?? DEFAULT_STAGE_HEIGHT;
 
-  // 동적 스테이지 크기를 포함한 파라미터
+  // Parameters including dynamic stage size
   const fullParams = { ...params, stageWidth, stageHeight };
 
   switch (type) {
@@ -75,21 +75,21 @@ export function generateFormation(
 }
 
 /**
- * 일렬 대형
- * spread: 무대 사용 비율 (1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
+ * Line formation
+ * spread: stage usage ratio (1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
  */
 function generateLine(count: number, params: FormationParams, spread: number, stageWidth: number, stageHeight: number): Position[] {
   const direction = params.direction ?? 'horizontal';
   const centerX = params.centerX ?? stageWidth / 2;
-  const centerY = params.centerY ?? 1;  // 기본 y = 1 (무대 아래쪽)
-  const minSpacing = 0.8; // 최소 dancer 간 간격
+  const centerY = params.centerY ?? 1;  // Default y = 1 (bottom of stage)
+  const minSpacing = 0.8; // Minimum spacing between dancers
 
-  // 무대 크기 대비 사용 비율 계산 (spread 1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
-  const usageRatio = Math.min(spread * 0.6, 1.0); // 최대 100%
+  // Calculate usage ratio relative to stage size (spread 1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
+  const usageRatio = Math.min(spread * 0.6, 1.0); // Max 100%
   const maxAvailable = direction === 'horizontal' ? stageWidth - 1 : stageHeight - 1;
   const targetWidth = maxAvailable * usageRatio;
 
-  // 최소 간격 보장
+  // Ensure minimum spacing
   const minWidth = (count - 1) * minSpacing;
   const width = Math.max(targetWidth, minWidth);
 
@@ -116,17 +116,17 @@ function generateLine(count: number, params: FormationParams, spread: number, st
 }
 
 /**
- * 원형 대형
- * spread: 무대 사용 비율 (1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
+ * Circle formation
+ * spread: stage usage ratio (1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
  */
 function generateCircle(count: number, params: FormationParams, spread: number, stageWidth: number, stageHeight: number): Position[] {
   const centerX = params.centerX ?? stageWidth / 2;
   const centerY = params.centerY ?? stageHeight / 2;
-  const minSpacing = 0.9; // 최소 dancer 간 간격
+  const minSpacing = 0.9; // Minimum spacing between dancers
 
-  // 원둘레에서 필요한 최소 반지름: 둘레 = 2πr >= count * minSpacing
+  // Minimum radius needed on circumference: circumference = 2πr >= count * minSpacing
   const minRadius = (count * minSpacing) / (2 * Math.PI);
-  // 무대 범위 내 최대 반지름
+  // Maximum radius within stage bounds
   const maxAvailableRadius = Math.min(
     centerX - 0.5,
     stageWidth - centerX - 0.5,
@@ -134,7 +134,7 @@ function generateCircle(count: number, params: FormationParams, spread: number, 
     stageHeight - centerY - 0.5
   );
 
-  // 무대 크기 대비 사용 비율 계산
+  // Calculate usage ratio relative to stage size
   const usageRatio = Math.min(spread * 0.6, 1.0);
   const targetRadius = maxAvailableRadius * usageRatio;
   const radius = Math.max(targetRadius, minRadius);
@@ -143,7 +143,7 @@ function generateCircle(count: number, params: FormationParams, spread: number, 
   const angleStep = (2 * Math.PI) / count;
 
   for (let i = 0; i < count; i++) {
-    const angle = -Math.PI / 2 + i * angleStep;  // 12시 방향부터 시작
+    const angle = -Math.PI / 2 + i * angleStep;  // Start from 12 o'clock
     positions.push({
       x: clamp(centerX + radius * Math.cos(angle), 0.5, stageWidth - 0.5),
       y: clamp(centerY + radius * Math.sin(angle), 0.5, stageHeight - 0.5),
@@ -154,21 +154,21 @@ function generateCircle(count: number, params: FormationParams, spread: number, 
 }
 
 /**
- * V자 대형
- * spread: 무대 사용 비율 (1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
+ * V-shape formation
+ * spread: stage usage ratio (1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
  */
 function generateVShape(count: number, params: FormationParams, spread: number, stageWidth: number, stageHeight: number): Position[] {
   const centerX = params.centerX ?? stageWidth / 2;
-  const minSpacing = 1.0; // 최소 dancer 간 간격 (충돌 방지)
+  const minSpacing = 1.0; // Minimum spacing between dancers (collision prevention)
 
-  // 한쪽 라인의 dancer 수
+  // Number of dancers on each line
   const half = Math.floor(count / 2);
   const hasApex = count % 2 === 1;
 
-  // 최소 필요 크기
+  // Minimum required size
   const minLineLength = half > 0 ? (half) * minSpacing * 1.2 : minSpacing;
 
-  // 무대 크기 대비 사용 비율 계산
+  // Calculate usage ratio relative to stage size
   const usageRatio = Math.min(spread * 0.6, 1.0);
   const maxAvailableWidth = stageWidth - 1;
   const maxAvailableHeight = stageHeight - 2;
@@ -179,13 +179,13 @@ function generateVShape(count: number, params: FormationParams, spread: number, 
   const width = Math.max(targetWidth, minLineLength);
   const height = Math.max(targetHeight * 0.8, minLineLength * 0.8);
 
-  // V의 꼭지점 위치 (무대 상단 쪽)
+  // V apex position (toward top of stage)
   const apexY = Math.min(stageHeight - 1, 1 + height);
   const centerY = params.centerY ?? apexY;
 
   const positions: Position[] = [];
 
-  // 꼭지점 dancer (홀수일 때)
+  // Apex dancer (when odd count)
   if (hasApex) {
     positions.push({
       x: centerX,
@@ -193,35 +193,35 @@ function generateVShape(count: number, params: FormationParams, spread: number, 
     });
   }
 
-  // 왼쪽, 오른쪽 라인 동시 생성
+  // Generate left and right lines simultaneously
   for (let i = 0; i < half; i++) {
-    // 꼭지점에서 시작해서 바깥으로 퍼지도록
+    // Spread outward from apex
     const ratio = (i + 1) / (half + (hasApex ? 0 : 1));
 
     const leftX = centerX - (width / 2) * ratio;
     const rightX = centerX + (width / 2) * ratio;
     const y = centerY - height * ratio;
 
-    // 왼쪽
+    // Left
     positions.push({
       x: clamp(leftX, 0.5, stageWidth - 0.5),
       y: clamp(y, 0.5, stageHeight - 0.5),
     });
 
-    // 오른쪽
+    // Right
     positions.push({
       x: clamp(rightX, 0.5, stageWidth - 0.5),
       y: clamp(y, 0.5, stageHeight - 0.5),
     });
   }
 
-  // X좌표 기준 정렬 (시각적 일관성)
+  // Sort by X coordinate (visual consistency)
   return sortByX(positions);
 }
 
 /**
- * 대각선 대형
- * spread: 무대 사용 비율 (1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
+ * Diagonal formation
+ * spread: stage usage ratio (1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
  */
 function generateDiagonal(count: number, params: FormationParams, spread: number, stageWidth: number, stageHeight: number): Position[] {
   const usageRatio = Math.min(spread * 0.6, 1.0);
@@ -244,8 +244,8 @@ function generateDiagonal(count: number, params: FormationParams, spread: number
 }
 
 /**
- * 흩어진 대형 (랜덤 but 균등 분포)
- * spread: 무대 사용 비율 (1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
+ * Scatter formation (random but evenly distributed)
+ * spread: stage usage ratio (1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
  */
 function generateScatter(count: number, params: FormationParams, spread: number, stageWidth: number, stageHeight: number): Position[] {
   const centerX = params.centerX ?? stageWidth / 2;
@@ -255,7 +255,7 @@ function generateScatter(count: number, params: FormationParams, spread: number,
   const maxRadius = Math.min(stageWidth, stageHeight) / 2 - 0.5;
   const radius = maxRadius * usageRatio;
 
-  // 골든 앵글을 사용한 균등 분포
+  // Even distribution using golden angle
   const positions: Position[] = [];
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
 
@@ -272,8 +272,8 @@ function generateScatter(count: number, params: FormationParams, spread: number,
 }
 
 /**
- * 하트 대형
- * spread: 무대 사용 비율 (1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
+ * Heart formation
+ * spread: stage usage ratio (1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
  */
 function generateHeart(count: number, params: FormationParams, spread: number, stageWidth: number, stageHeight: number): Position[] {
   const centerX = params.centerX ?? stageWidth / 2;
@@ -287,7 +287,7 @@ function generateHeart(count: number, params: FormationParams, spread: number, s
 
   for (let i = 0; i < count; i++) {
     const t = (i / count) * 2 * Math.PI;
-    // 하트 방정식
+    // Heart equation
     const x = 16 * Math.pow(Math.sin(t), 3);
     const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
 
@@ -301,8 +301,8 @@ function generateHeart(count: number, params: FormationParams, spread: number, s
 }
 
 /**
- * 다이아몬드 대형
- * spread: 무대 사용 비율 (1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
+ * Diamond formation
+ * spread: stage usage ratio (1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
  */
 function generateDiamond(count: number, params: FormationParams, spread: number, stageWidth: number, stageHeight: number): Position[] {
   const centerX = params.centerX ?? stageWidth / 2;
@@ -314,12 +314,12 @@ function generateDiamond(count: number, params: FormationParams, spread: number,
 
   const positions: Position[] = [];
 
-  // 4개의 꼭지점에 dancer 배치
+  // Place dancers at 4 vertices
   const vertices = [
-    { x: centerX, y: centerY + height / 2 },        // 위
-    { x: centerX + width / 2, y: centerY },          // 오른쪽
-    { x: centerX, y: centerY - height / 2 },         // 아래
-    { x: centerX - width / 2, y: centerY },          // 왼쪽
+    { x: centerX, y: centerY + height / 2 },        // Top
+    { x: centerX + width / 2, y: centerY },          // Right
+    { x: centerX, y: centerY - height / 2 },         // Bottom
+    { x: centerX - width / 2, y: centerY },          // Left
   ];
 
   if (count <= 4) {
@@ -329,7 +329,7 @@ function generateDiamond(count: number, params: FormationParams, spread: number,
     }));
   }
 
-  // 꼭지점 + 변 위에 dancer 배치
+  // Place dancers at vertices + on edges
   const perSide = Math.floor((count - 4) / 4);
   const remainder = (count - 4) % 4;
 
@@ -362,8 +362,8 @@ function generateDiamond(count: number, params: FormationParams, spread: number,
 }
 
 /**
- * 삼각형 대형
- * spread: 무대 사용 비율 (1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
+ * Triangle formation
+ * spread: stage usage ratio (1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
  */
 function generateTriangle(count: number, params: FormationParams, spread: number, stageWidth: number, stageHeight: number): Position[] {
   const centerX = params.centerX ?? stageWidth / 2;
@@ -375,11 +375,11 @@ function generateTriangle(count: number, params: FormationParams, spread: number
 
   const positions: Position[] = [];
 
-  // 삼각형 꼭지점
+  // Triangle vertices
   const vertices = [
-    { x: centerX, y: centerY + size },                                    // 위
-    { x: centerX - size * Math.cos(Math.PI / 6), y: centerY - size / 2 }, // 왼쪽 아래
-    { x: centerX + size * Math.cos(Math.PI / 6), y: centerY - size / 2 }, // 오른쪽 아래
+    { x: centerX, y: centerY + size },                                    // Top
+    { x: centerX - size * Math.cos(Math.PI / 6), y: centerY - size / 2 }, // Bottom left
+    { x: centerX + size * Math.cos(Math.PI / 6), y: centerY - size / 2 }, // Bottom right
   ];
 
   if (count <= 3) {
@@ -389,7 +389,7 @@ function generateTriangle(count: number, params: FormationParams, spread: number
     }));
   }
 
-  // 변 위에 dancer 분배
+  // Distribute dancers on edges
   const perSide = Math.floor((count - 3) / 3);
   const remainder = (count - 3) % 3;
 
@@ -422,18 +422,18 @@ function generateTriangle(count: number, params: FormationParams, spread: number
 }
 
 /**
- * 두 줄 대형
- * spread: 무대 사용 비율 (1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
+ * Two lines formation
+ * spread: stage usage ratio (1.0 = 60%, 1.5 = 90%, 2.0 = 100%)
  */
 function generateTwoLines(count: number, params: FormationParams, spread: number, stageWidth: number, stageHeight: number): Position[] {
   const centerX = params.centerX ?? stageWidth / 2;
   const centerY = params.centerY ?? stageHeight / 2;
-  const minSpacing = 0.8; // 최소 dancer 간 간격
+  const minSpacing = 0.8; // Minimum spacing between dancers
 
   const perLine = Math.ceil(count / 2);
   const backCount = count - perLine;
 
-  // 무대 크기 대비 사용 비율 계산
+  // Calculate usage ratio relative to stage size
   const usageRatio = Math.min(spread * 0.6, 1.0);
   const maxAvailableWidth = stageWidth - 1;
   const maxAvailableHeight = stageHeight - 2;
@@ -445,7 +445,7 @@ function generateTwoLines(count: number, params: FormationParams, spread: number
 
   const positions: Position[] = [];
 
-  // 앞줄
+  // Front row
   for (let i = 0; i < perLine && positions.length < count; i++) {
     const step = perLine > 1 ? width / (perLine - 1) : 0;
     const x = perLine > 1 ? centerX - width / 2 + step * i : centerX;
@@ -455,7 +455,7 @@ function generateTwoLines(count: number, params: FormationParams, spread: number
     });
   }
 
-  // 뒷줄
+  // Back row
   for (let i = 0; i < backCount; i++) {
     const step = backCount > 1 ? width / (backCount - 1) : 0;
     const x = backCount > 1 ? centerX - width / 2 + step * i : centerX;
@@ -469,21 +469,21 @@ function generateTwoLines(count: number, params: FormationParams, spread: number
 }
 
 /**
- * 값 범위 제한
+ * Clamp value to range
  */
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
 /**
- * X좌표 기준 정렬
+ * Sort by X coordinate
  */
 function sortByX(positions: Position[]): Position[] {
   return [...positions].sort((a, b) => a.x - b.x);
 }
 
 /**
- * 대형에 spread 적용
+ * Apply spread to formation
  */
 export function applySpread(positions: Position[], spread: number, stageWidth: number = DEFAULT_STAGE_WIDTH, stageHeight: number = DEFAULT_STAGE_HEIGHT): Position[] {
   const centerX = positions.reduce((sum, p) => sum + p.x, 0) / positions.length;
@@ -496,7 +496,7 @@ export function applySpread(positions: Position[], spread: number, stageWidth: n
 }
 
 /**
- * 대형 이동 (translate)
+ * Translate formation
  */
 export function translateFormation(positions: Position[], dx: number, dy: number, stageWidth: number = DEFAULT_STAGE_WIDTH, stageHeight: number = DEFAULT_STAGE_HEIGHT): Position[] {
   return positions.map(p => ({
@@ -506,7 +506,7 @@ export function translateFormation(positions: Position[], dx: number, dy: number
 }
 
 /**
- * 대형 회전 (rotate around center)
+ * Rotate formation around center
  */
 export function rotateFormation(positions: Position[], angleDegrees: number, stageWidth: number = DEFAULT_STAGE_WIDTH, stageHeight: number = DEFAULT_STAGE_HEIGHT): Position[] {
   const centerX = positions.reduce((sum, p) => sum + p.x, 0) / positions.length;

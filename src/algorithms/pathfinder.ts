@@ -1,12 +1,12 @@
 /**
- * 간단한 경로 생성기 (Simple Pathfinder)
+ * Simple Pathfinder
  *
- * 전략:
- * 1. 기본적으로 직선 경로 사용 (가장 효율적)
- * 2. 충돌 감지 시 타이밍 조정 (startTime)
- * 3. 여전히 충돌 시 약간의 곡선 추가
+ * Strategy:
+ * 1. Use linear paths by default (most efficient)
+ * 2. Adjust timing when collision detected (startTime)
+ * 3. Add slight curves if still colliding
  *
- * A*보다 단순하지만 안무에 더 적합한 자연스러운 경로 생성
+ * Simpler than A* but generates more natural paths for choreography
  */
 
 import type { Position, Assignment } from './hungarian';
@@ -26,20 +26,30 @@ export interface DancerPath {
 }
 
 /**
- * 정렬 전략 (경로 처리 순서 결정)
+ * Sort strategy (determines path processing order)
  */
 export type SortStrategy =
-  | 'distance_longest_first'   // 긴 거리 우선 (기본)
-  | 'distance_shortest_first'  // 짧은 거리 우선
-  | 'none';                    // 정렬 없음 (입력 순서 유지)
+  | 'distance_longest_first'   // Longest distance first (default)
+  | 'distance_shortest_first'  // Shortest distance first
+  | 'none';                    // No sorting (maintain input order)
+
+/**
+ * Timing mode for path generation
+ */
+export type TimingMode =
+  | 'proportional'      // Arrival time proportional to distance (default)
+  | 'synchronized'      // All dancers arrive at exactly totalCounts
+  | 'staggered';        // Sequential start times (wave effect)
 
 export interface PathfinderConfig {
   totalCounts: number;
   collisionRadius: number;
-  numPoints: number;  // 경로당 포인트 수
-  sortStrategy?: SortStrategy;  // 정렬 전략 (기본: distance_longest_first)
-  maxCurveOffset?: number;      // 곡선 최대 offset (기본: 0.5)
-  preferTiming?: boolean;       // 타이밍 조정 우선 (기본: true)
+  numPoints: number;  // Points per path
+  sortStrategy?: SortStrategy;  // Sort strategy (default: distance_longest_first)
+  maxCurveOffset?: number;      // Max curve offset (default: 0.5)
+  preferTiming?: boolean;       // Prefer timing adjustment (default: true)
+  timingMode?: TimingMode;      // Timing mode (default: proportional)
+  staggerDelay?: number;        // Delay between dancers for staggered mode (default: 0.5)
 }
 
 const DEFAULT_CONFIG: PathfinderConfig = {
@@ -49,14 +59,14 @@ const DEFAULT_CONFIG: PathfinderConfig = {
 };
 
 /**
- * 두 점 사이의 거리
+ * Distance between two points
  */
 function distance(a: Position, b: Position): number {
   return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 }
 
 /**
- * 직선 경로 생성
+ * Generate linear path
  */
 function generateLinearPath(
   start: Position,
@@ -82,7 +92,7 @@ function generateLinearPath(
 }
 
 /**
- * 경로의 특정 시간에서의 위치 보간
+ * Interpolate position at specific time in path
  */
 function getPositionAtTime(path: PathPoint[], time: number): Position | null {
   if (path.length === 0) return null;
@@ -105,7 +115,7 @@ function getPositionAtTime(path: PathPoint[], time: number): Position | null {
 }
 
 /**
- * 두 경로가 특정 시간에 충돌하는지 검사
+ * Check if two paths collide at specific time
  */
 function checkCollisionAtTime(
   path1: PathPoint[],
@@ -122,7 +132,7 @@ function checkCollisionAtTime(
 }
 
 /**
- * 두 경로 간 충돌 검사 (전체 시간)
+ * Check collision between two paths (full time range)
  */
 function hasCollision(
   path1: PathPoint[],
@@ -130,7 +140,7 @@ function hasCollision(
   collisionRadius: number,
   totalCounts: number
 ): boolean {
-  // 0.25 count 간격으로 검사
+  // Check at 0.25 count intervals
   for (let t = 0; t <= totalCounts; t += 0.25) {
     if (checkCollisionAtTime(path1, path2, t, collisionRadius)) {
       return true;
@@ -140,8 +150,8 @@ function hasCollision(
 }
 
 /**
- * 약간의 곡선을 추가한 경로 생성
- * offset: 중간점이 직선에서 벗어나는 정도
+ * Generate curved path with slight offset
+ * offset: deviation of midpoint from straight line
  */
 function generateCurvedPath(
   start: Position,
@@ -149,24 +159,24 @@ function generateCurvedPath(
   startTime: number,
   endTime: number,
   numPoints: number,
-  curveOffset: number,  // 양수: 오른쪽으로 휨, 음수: 왼쪽으로 휨
+  curveOffset: number,  // Positive: curve right, Negative: curve left
 ): PathPoint[] {
   const path: PathPoint[] = [];
 
-  // 중간점 계산 (직선에서 수직 방향으로 offset)
+  // Calculate midpoint (offset perpendicular to line)
   const midX = (start.x + end.x) / 2;
   const midY = (start.y + end.y) / 2;
 
-  // 직선의 수직 방향
+  // Perpendicular direction to line
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const len = Math.sqrt(dx * dx + dy * dy);
 
-  // 수직 벡터 (정규화)
+  // Perpendicular vector (normalized)
   const perpX = -dy / len;
   const perpY = dx / len;
 
-  // offset이 적용된 중간점
+  // Midpoint with offset applied
   const ctrlX = midX + perpX * curveOffset;
   const ctrlY = midY + perpY * curveOffset;
 
@@ -174,7 +184,7 @@ function generateCurvedPath(
     const t = i / numPoints;
     const time = startTime + (endTime - startTime) * t;
 
-    // 2차 베지어 곡선: (1-t)²P0 + 2(1-t)tP1 + t²P2
+    // Quadratic Bezier curve: (1-t)²P0 + 2(1-t)tP1 + t²P2
     const oneMinusT = 1 - t;
     const x = oneMinusT * oneMinusT * start.x + 2 * oneMinusT * t * ctrlX + t * t * end.x;
     const y = oneMinusT * oneMinusT * start.y + 2 * oneMinusT * t * ctrlY + t * t * end.y;
@@ -186,12 +196,12 @@ function generateCurvedPath(
 }
 
 /**
- * 모든 dancer의 경로 계산
+ * Calculate paths for all dancers
  *
- * 전략:
- * 1. 모든 dancer는 0에서 출발, 거리에 비례한 시간에 도착 (빨리 도착해도 OK)
- * 2. 충돌 시에만 타이밍 조정
- * 3. 여전히 충돌하면 최소한의 곡선 추가
+ * Strategy:
+ * 1. All dancers start at 0, arrive at distance-proportional time (early arrival OK)
+ * 2. Only adjust timing when collision occurs
+ * 3. Add minimal curves if still colliding
  */
 export function computeAllPathsSimple(
   assignments: Assignment[],
@@ -200,7 +210,7 @@ export function computeAllPathsSimple(
   const cfg = { ...DEFAULT_CONFIG, ...config };
   const results: DancerPath[] = [];
 
-  // 정렬 전략에 따라 처리 순서 결정
+  // Determine processing order based on sort strategy
   let sorted: Assignment[];
   const sortStrategy = cfg.sortStrategy || 'distance_longest_first';
 
@@ -209,7 +219,7 @@ export function computeAllPathsSimple(
       sorted = [...assignments].sort((a, b) => a.distance - b.distance);
       break;
     case 'none':
-      sorted = [...assignments];  // 입력 순서 유지
+      sorted = [...assignments];  // Maintain input order
       break;
     case 'distance_longest_first':
     default:
@@ -217,32 +227,59 @@ export function computeAllPathsSimple(
       break;
   }
 
-  // 이미 계산된 경로들
+  // Already computed paths
   const computedPaths: { dancerId: number; path: PathPoint[] }[] = [];
 
-  // 최대 거리 계산 (속도 기준)
+  // Calculate max distance (speed reference)
   const maxDist = Math.max(...assignments.map(a => a.distance));
+
+  // Track dancer index for staggered mode
+  let dancerIndex = 0;
 
   for (const assignment of sorted) {
     const { dancerId, startPosition, endPosition, distance: dist } = assignment;
 
-    // 모든 dancer는 0에서 시작
+    // Determine start and end time based on timing mode
     let startTime = 0;
+    let endTime = cfg.totalCounts;
+    const timingMode = cfg.timingMode || 'proportional';
+    const staggerDelay = cfg.staggerDelay || 0.5;
 
-    // 도착 시간: 거리에 비례 (짧은 거리 = 빨리 도착)
-    // 최소 endTime은 2 (너무 빨리 끝나지 않도록)
-    const baseSpeed = maxDist / cfg.totalCounts;  // 최대거리 dancer의 속도
-    let endTime = baseSpeed > 0 ? Math.max(2, dist / baseSpeed) : cfg.totalCounts;
+    switch (timingMode) {
+      case 'synchronized':
+        // All dancers arrive at exactly totalCounts
+        startTime = 0;
+        endTime = cfg.totalCounts;
+        break;
 
-    // endTime이 totalCounts보다 크면 조정
-    if (endTime > cfg.totalCounts) {
-      endTime = cfg.totalCounts;
+      case 'staggered':
+        // Sequential start times (wave effect)
+        startTime = dancerIndex * staggerDelay;
+        endTime = Math.min(startTime + cfg.totalCounts * 0.7, cfg.totalCounts);
+        // Ensure minimum travel time
+        if (endTime - startTime < 2) {
+          endTime = Math.min(startTime + 2, cfg.totalCounts);
+        }
+        break;
+
+      case 'proportional':
+      default:
+        // Arrival time proportional to distance
+        startTime = 0;
+        const baseSpeed = maxDist / cfg.totalCounts;
+        endTime = baseSpeed > 0 ? Math.max(2, dist / baseSpeed) : cfg.totalCounts;
+        if (endTime > cfg.totalCounts) {
+          endTime = cfg.totalCounts;
+        }
+        break;
     }
 
-    // 기본 직선 경로 생성
+    dancerIndex++;
+
+    // Generate default linear path
     let path = generateLinearPath(startPosition, endPosition, startTime, endTime, cfg.numPoints);
 
-    // 기존 경로들과 충돌 검사
+    // Check collision with existing paths
     let hasConflict = false;
 
     for (const computed of computedPaths) {
@@ -252,11 +289,11 @@ export function computeAllPathsSimple(
       }
     }
 
-    // 충돌이 있으면 해결 시도 (곡선 최소화 - 타이밍으로 최대한 해결)
+    // Try to resolve collision (minimize curves - resolve with timing first)
     if (hasConflict) {
       const originalEndTime = endTime;
 
-      // 방법 1: 빨리 지나가기 (endTime 줄이기)
+      // Method 1: Pass quickly (reduce endTime)
       for (const factor of [0.6, 0.5, 0.4, 0.3]) {
         const newEndTime = Math.max(1, originalEndTime * factor);
         path = generateLinearPath(startPosition, endPosition, 0, newEndTime, cfg.numPoints);
@@ -276,10 +313,10 @@ export function computeAllPathsSimple(
         }
       }
 
-      // 방법 2: 늦게 출발하기 (다양한 delay)
+      // Method 2: Start late (various delays)
       if (hasConflict) {
         for (let delay = 0.5; delay <= 4 && hasConflict; delay += 0.5) {
-          // 늦게 출발 + 같은 속도
+          // Late start + same speed
           const newStartTime = delay;
           const duration = originalEndTime;
           const newEndTime = Math.min(newStartTime + duration, cfg.totalCounts);
@@ -300,7 +337,7 @@ export function computeAllPathsSimple(
         }
       }
 
-      // 방법 3: 늦게 출발 + 빨리 이동 조합
+      // Method 3: Late start + fast movement combination
       if (hasConflict) {
         for (const delay of [1, 2, 3]) {
           for (const speedFactor of [0.5, 0.4, 0.3]) {
@@ -326,7 +363,7 @@ export function computeAllPathsSimple(
         }
       }
 
-      // 방법 4: 마지막 수단 - 최소한의 곡선 (maxCurveOffset으로 제한)
+      // Method 4: Last resort - minimal curve (limited by maxCurveOffset)
       if (hasConflict) {
         const maxOffset = cfg.maxCurveOffset ?? 0.5;
         const curveOffsets = [0.2, -0.2, 0.35, -0.35, 0.5, -0.5].filter(o => Math.abs(o) <= maxOffset);
@@ -346,7 +383,7 @@ export function computeAllPathsSimple(
       }
     }
 
-    // 속도 계산
+    // Calculate speed
     const pathDistance = calculatePathDistance(path);
     const duration = endTime - startTime;
     const speed = duration > 0 ? pathDistance / duration / (maxDist / cfg.totalCounts || 1) : 1;
@@ -362,12 +399,12 @@ export function computeAllPathsSimple(
     });
   }
 
-  // dancerId 순으로 정렬
+  // Sort by dancerId
   return results.sort((a, b) => a.dancerId - b.dancerId);
 }
 
 /**
- * 경로 거리 계산
+ * Calculate path distance
  */
 function calculatePathDistance(path: PathPoint[]): number {
   let dist = 0;
@@ -378,7 +415,7 @@ function calculatePathDistance(path: PathPoint[]): number {
 }
 
 /**
- * 경로 검증
+ * Validate paths
  */
 export function validatePathsSimple(
   paths: DancerPath[],
@@ -396,7 +433,7 @@ export function validatePathsSimple(
             dancer2: paths[j].dancerId,
             time: t,
           });
-          break;  // 같은 쌍에서 하나만 기록
+          break;  // Record only one per pair
         }
       }
     }

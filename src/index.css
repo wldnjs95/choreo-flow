@@ -1000,7 +1000,7 @@ body {
   font-weight: 600;
 }
 
-/* Spread Control (대형 크기 조절) */
+/* Spread Control (formation size adjustment) */
 .spread-control {
   display: flex;
   align-items: center;
@@ -1064,7 +1064,7 @@ body {
   margin-left: 8px;
 }
 
-/* Position Control (위치 이동) */
+/* Position Control (position movement) */
 .position-control {
   display: flex;
   align-items: center;
@@ -1673,7 +1673,7 @@ body {
   margin-bottom: 12px;
 }
 
-/* Candidate Panel 강조 */
+/* Candidate Panel emphasis */
 .candidate-panel {
   background: rgba(30, 30, 50, 0.95);
   border: 2px solid rgba(78, 205, 196, 0.3);

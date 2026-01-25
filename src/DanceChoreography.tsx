@@ -17,13 +17,13 @@ import { isApiKeyConfigured, type AestheticScore, type RankingResult, type Gemin
 // Visualization constants
 const DEFAULT_STAGE_WIDTH = 15;  // Large: 49ft ≈ 15m
 const DEFAULT_STAGE_HEIGHT = 12; // Large: 39ft ≈ 12m
-const BASE_SCALE = 50; // 기본 스케일 (스테이지 크기에 따라 조정)
+const BASE_SCALE = 50; // Base scale (adjusts based on stage size)
 const PADDING = 40;
-const BASE_DANCER_RADIUS = 0.4; // 미터 단위 dancer 반지름 (실제 사람 어깨 폭 기준)
+const BASE_DANCER_RADIUS = 0.4; // Dancer radius in meters (based on human shoulder width)
 const GRID_COLOR = '#2a2a3e';
 const BACKGROUND_COLOR = '#1a1a2e';
 
-// 스테이지 프리셋
+// Stage presets
 const STAGE_PRESETS = {
   'small': { width: 8, height: 6, label: 'Small (26×20ft)' },
   'medium': { width: 10, height: 8, label: 'Medium (33×26ft)' },
@@ -55,16 +55,16 @@ interface DancerData {
   distance: number;
 }
 
-// Get dancer position at specific count (시간 기반 보간)
+// Get dancer position at specific count (time-based interpolation)
 function getDancerPositionAtCount(dancer: DancerData, count: number, _totalCounts: number): PathPoint {
   const path = dancer.path;
 
-  // 경로가 없거나 비어있으면 시작 위치 반환
+  // Return start position if path is empty or missing
   if (!path || path.length === 0) {
     return dancer.startPosition;
   }
 
-  // 시작 시간 이전이면 시작 위치
+  // Return start position if before start time
   const pathStartTime = path[0].t;
   const pathEndTime = path[path.length - 1].t;
 
@@ -72,12 +72,12 @@ function getDancerPositionAtCount(dancer: DancerData, count: number, _totalCount
     return { x: path[0].x, y: path[0].y };
   }
 
-  // 끝 시간 이후면 끝 위치
+  // Return end position if after end time
   if (count >= pathEndTime) {
     return { x: path[path.length - 1].x, y: path[path.length - 1].y };
   }
 
-  // 시간 기반으로 경로 상 위치 찾기
+  // Find position on path based on time
   for (let i = 0; i < path.length - 1; i++) {
     if (count >= path[i].t && count <= path[i + 1].t) {
       const t1 = path[i].t;
@@ -91,7 +91,7 @@ function getDancerPositionAtCount(dancer: DancerData, count: number, _totalCount
     }
   }
 
-  // fallback: 마지막 위치
+  // Fallback: last position
   return { x: path[path.length - 1].x, y: path[path.length - 1].y };
 }
 
@@ -240,7 +240,7 @@ function Stage({ children, stageWidth, stageHeight, scale }: StageProps) {
 
   const labels = useMemo(() => {
     const result = [];
-    // X축 라벨 (2m 간격)
+    // X-axis labels (2m intervals)
     for (let x = 0; x <= stageWidth; x += 2) {
       result.push(
         <text key={`lx-${x}`} x={PADDING + x * scale} y={height - 10} textAnchor="middle" fill="#666" fontSize="11">
@@ -248,7 +248,7 @@ function Stage({ children, stageWidth, stageHeight, scale }: StageProps) {
         </text>
       );
     }
-    // Y축 라벨 (2m 간격)
+    // Y-axis labels (2m intervals)
     for (let y = 0; y <= stageHeight; y += 2) {
       result.push(
         <text key={`ly-${y}`} x={10} y={PADDING + (stageHeight - y) * scale + 4} textAnchor="start" fill="#666" fontSize="11">
@@ -284,10 +284,10 @@ function NaturalLanguageInput({ onGenerate, isLoading }: NaturalLanguageInputPro
   }, []);
 
   const examples = [
-    '8명이 일렬에서 V자로 이동, 와이드하게',
-    '원형에서 하트 모양으로, dancer 4 강조',
-    '대각선에서 원형으로, 대칭 유지',
-    '두 줄에서 다이아몬드로, 부드럽게',
+    '8 dancers line to V-shape, wide spread',
+    'Circle to heart shape, emphasize dancer 4',
+    'Diagonal to circle, maintain symmetry',
+    'Two lines to diamond, smooth movement',
   ];
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -299,28 +299,28 @@ function NaturalLanguageInput({ onGenerate, isLoading }: NaturalLanguageInputPro
 
   return (
     <div className="nlp-input-section">
-      <h3>자연어로 안무 생성</h3>
+      <h3>Generate Choreography with Natural Language</h3>
       {!apiConfigured && (
         <div className="api-warning">
-          Gemini API 키가 설정되지 않았습니다. 기본 파서를 사용합니다.
+          Gemini API key not configured. Using default parser.
           <br />
-          <code>.env</code> 파일에 <code>VITE_GEMINI_API_KEY</code>를 설정하세요.
+          Set <code>VITE_GEMINI_API_KEY</code> in <code>.env</code> file.
         </div>
       )}
       <form onSubmit={handleSubmit}>
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="예: 8명이 일렬에서 V자로 이동, 센터 dancer 강조, 와이드하게"
+          placeholder="e.g., 8 dancers move from line to V-shape, emphasize center dancer, wide spread"
           rows={3}
           disabled={isLoading}
         />
         <button type="submit" disabled={isLoading || !input.trim()} className="generate-btn">
-          {isLoading ? '생성 중...' : '안무 생성'}
+          {isLoading ? 'Generating...' : 'Generate'}
         </button>
       </form>
       <div className="examples">
-        <span>예시:</span>
+        <span>Examples:</span>
         {examples.map((ex, i) => (
           <button key={i} onClick={() => setInput(ex)} className="example-btn" disabled={isLoading}>
             {ex}
@@ -358,51 +358,51 @@ function FormationSelector({
 }: FormationSelectorProps) {
   const formations: FormationType[] = ['line', 'circle', 'v_shape', 'diagonal', 'diamond', 'triangle', 'two_lines', 'scatter'];
   
-  // 입력 중간 상태를 보존하기 위한 로컬 state
+  // Local state to preserve intermediate input
   const [inputValue, setInputValue] = useState<string>(dancerCount.toString());
   
-  // dancerCount가 외부에서 변경되면 inputValue도 업데이트
+  // Update inputValue when dancerCount changes externally
   useEffect(() => {
     setInputValue(dancerCount.toString());
   }, [dancerCount]);
 
   const formatName = (f: FormationType) => {
     const names: Record<FormationType, string> = {
-      line: '일렬',
-      circle: '원형',
-      v_shape: 'V자',
-      diagonal: '대각선',
-      scatter: '흩어짐',
-      heart: '하트',
-      diamond: '다이아몬드',
-      triangle: '삼각형',
-      two_lines: '두 줄',
-      custom: '커스텀',
+      line: 'Line',
+      circle: 'Circle',
+      v_shape: 'V-Shape',
+      diagonal: 'Diagonal',
+      scatter: 'Scatter',
+      heart: 'Heart',
+      diamond: 'Diamond',
+      triangle: 'Triangle',
+      two_lines: 'Two Lines',
+      custom: 'Custom',
     };
     return names[f] || f;
   };
 
   return (
     <div className="formation-selector">
-      <h3>대형 설정</h3>
+      <h3>Formation Settings</h3>
 
       <div className="dancer-count-row">
-        <label>인원 수:</label>
+        <label>Dancer Count:</label>
         <input
           type="text"
           inputMode="numeric"
           pattern="[0-9]*"
           value={inputValue}
           onChange={(e) => {
-            // 숫자만 허용하고 입력값을 그대로 보존
+            // Allow only numbers and preserve input value
             const val = e.target.value.replace(/[^0-9]/g, '');
             setInputValue(val);
           }}
           onBlur={(e) => {
-            // 포커스를 잃을 때만 검증 및 적용
+            // Validate and apply only when focus is lost
             const val = e.target.value.trim();
             if (val === '') {
-              // 빈 값이면 기본값으로 복원
+              // Restore default value if empty
               setInputValue(dancerCount.toString());
               return;
             }
@@ -415,54 +415,54 @@ function FormationSelector({
               setInputValue('24');
               onDancerCountChange(24);
             } else {
-              // 유효한 값이면 적용
+              // Apply if valid
               setInputValue(num.toString());
               onDancerCountChange(num);
             }
           }}
           onKeyDown={(e) => {
-            // Enter 키를 누르면 blur와 동일하게 처리
+            // Handle Enter key same as blur
             if (e.key === 'Enter') {
               e.currentTarget.blur();
             }
           }}
           className="dancer-count-input"
         />
-        <span className="dancer-count-label">명</span>
+        <span className="dancer-count-label">dancers</span>
       </div>
 
       <div className="formation-row">
         <div className="formation-select">
-          <label>시작 대형:</label>
+          <label>Start Formation:</label>
           <div className="formation-select-row">
             <select value={startFormation} onChange={(e) => onStartChange(e.target.value as FormationType)}>
               {formations.map((f) => (
                 <option key={f} value={f}>{formatName(f)}</option>
               ))}
-              <option value="custom">커스텀</option>
+              <option value="custom">Custom</option>
             </select>
-            <button onClick={onEditStart} className="edit-btn" title="커스텀 편집">
+            <button onClick={onEditStart} className="edit-btn" title="Edit custom">
               ✏️
             </button>
           </div>
         </div>
         <span className="arrow">→</span>
         <div className="formation-select">
-          <label>끝 대형:</label>
+          <label>End Formation:</label>
           <div className="formation-select-row">
             <select value={endFormation} onChange={(e) => onEndChange(e.target.value as FormationType)}>
               {formations.map((f) => (
                 <option key={f} value={f}>{formatName(f)}</option>
               ))}
-              <option value="custom">커스텀</option>
+              <option value="custom">Custom</option>
             </select>
-            <button onClick={onEditEnd} className="edit-btn" title="커스텀 편집">
+            <button onClick={onEditEnd} className="edit-btn" title="Edit custom">
               ✏️
             </button>
           </div>
         </div>
         <button onClick={onGenerate} disabled={isLoading} className="generate-btn small">
-          {isLoading ? '...' : '생성'}
+          {isLoading ? '...' : 'Generate'}
         </button>
       </div>
     </div>
@@ -482,7 +482,7 @@ interface StageSizeSelectorProps {
 function StageSizeSelector({ preset, width, height, onPresetChange, onWidthChange, onHeightChange }: StageSizeSelectorProps) {
   return (
     <div className="stage-size-selector">
-      <h4>스테이지 크기</h4>
+      <h4>Stage Size</h4>
       <div className="stage-preset-row">
         <select
           value={preset}
@@ -496,7 +496,7 @@ function StageSizeSelector({ preset, width, height, onPresetChange, onWidthChang
       {preset === 'custom' && (
         <div className="stage-custom-inputs">
           <label>
-            가로:
+            Width:
             <input
               type="number"
               min={4}
@@ -508,7 +508,7 @@ function StageSizeSelector({ preset, width, height, onPresetChange, onWidthChang
             m
           </label>
           <label>
-            세로:
+            Height:
             <input
               type="number"
               min={4}
@@ -522,7 +522,7 @@ function StageSizeSelector({ preset, width, height, onPresetChange, onWidthChang
         </div>
       )}
       <div className="stage-info">
-        현재: {width}m × {height}m ({(width * 3.28).toFixed(0)}×{(height * 3.28).toFixed(0)} ft)
+        Current: {width}m × {height}m ({(width * 3.28).toFixed(0)}×{(height * 3.28).toFixed(0)} ft)
       </div>
     </div>
   );
@@ -537,7 +537,7 @@ interface FormationEditorProps {
   stageHeight: number;
   scale: number;
   dancerRadius: number;
-  initialFormation: FormationType; // 초기 대형 타입
+  initialFormation: FormationType; // Initial formation type
   onPositionsChange: (positions: Position[]) => void;
   onClose: () => void;
   onApplyPreset: (formation: FormationType, spread: number) => void;
@@ -549,15 +549,15 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
   const [localPositions, setLocalPositions] = useState<Position[]>(positions);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [snapSize, setSnapSize] = useState(0.5); // 0.5m grid snap
-  const [spread, setSpread] = useState(1.0); // 대형 크기 (0.5 ~ 1.5)
-  // 초기 대형 타입으로 currentPreset 설정 (custom이 아닌 경우)
+  const [spread, setSpread] = useState(1.0); // Formation size (0.5 ~ 1.5)
+  // Set currentPreset from initial formation type (unless custom)
   const [currentPreset, setCurrentPreset] = useState<FormationType | null>(
     initialFormation !== 'custom' ? initialFormation : null
   );
 
-  // 다중 선택 상태
+  // Multi-selection state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  // 선택 박스 드래그 상태
+  // Selection box drag state
   const [selectionBox, setSelectionBox] = useState<{
     startX: number;
     startY: number;
@@ -565,30 +565,30 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     endY: number;
   } | null>(null);
   const [isDraggingSelection, setIsDraggingSelection] = useState(false);
-  // 드래그 시작 위치 (오프셋 계산용)
+  // Drag start position (for offset calculation)
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const initialPositionsRef = useRef<Position[]>([]);
 
-  // Undo/Redo 히스토리
+  // Undo/Redo history
   const [history, setHistory] = useState<Position[][]>([]);
   const [future, setFuture] = useState<Position[][]>([]);
-  const maxHistory = 50; // 최대 히스토리 개수
-  const isInternalChange = useRef(false); // 내부 변경인지 추적
+  const maxHistory = 50; // Maximum history count
+  const isInternalChange = useRef(false); // Track internal changes
 
-  // positions prop이 변경될 때 (에디터 열림 / 외부 변경)
+  // When positions prop changes (editor opens / external change)
   useEffect(() => {
-    // 내부 변경(드래그, undo 등)에 의한 prop 변경이면 history 유지
+    // Keep history if prop change is from internal change (drag, undo, etc.)
     if (isInternalChange.current) {
       isInternalChange.current = false;
       return;
     }
-    // 외부에서 positions가 변경된 경우 (에디터 처음 열림 등)
+    // External positions change (editor first opens, etc.)
     setLocalPositions(positions);
     setHistory([]);
     setFuture([]);
   }, [positions]);
 
-  // 히스토리에 현재 상태 저장
+  // Save current state to history
   const saveToHistory = useCallback((currentPos: Position[]) => {
     setHistory(prev => {
       const newHistory = [...prev, currentPos];
@@ -597,7 +597,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
       }
       return newHistory;
     });
-    setFuture([]); // 새 변경 시 redo 히스토리 초기화
+    setFuture([]); // Reset redo history on new change
   }, []);
 
   // Undo
@@ -628,7 +628,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     onPositionsChange(nextState);
   }, [future, localPositions, onPositionsChange]);
 
-  // 키보드 단축키 (Ctrl+Z, Ctrl+Shift+Z)
+  // Keyboard shortcuts (Ctrl+Z, Ctrl+Shift+Z)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
@@ -650,7 +650,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo]);
 
-  // spread 변경 시 현재 프리셋으로 실시간 업데이트
+  // Update current preset in real-time when spread changes
   const handleSpreadChange = useCallback((newSpread: number) => {
     setSpread(newSpread);
     if (currentPreset) {
@@ -666,14 +666,14 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     }
   }, [currentPreset, dancerCount, stageWidth, stageHeight, onPositionsChange, localPositions, saveToHistory]);
 
-  // 프리셋 적용
+  // Apply preset
   const handlePresetClick = useCallback((preset: FormationType) => {
     setCurrentPreset(preset);
-    setSelectedIds(new Set()); // 선택 초기화
+    setSelectedIds(new Set()); // Clear selection
     onApplyPreset(preset, spread);
   }, [spread, onApplyPreset]);
 
-  // 전체 선택
+  // Select all
   const selectAll = useCallback(() => {
     const allIds = new Set<number>();
     for (let i = 0; i < dancerCount; i++) {
@@ -682,37 +682,37 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     setSelectedIds(allIds);
   }, [dancerCount]);
 
-  // 선택 해제
+  // Clear selection
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set());
   }, []);
 
-  // 전체 대형 이동
+  // Move all formation
   const moveAll = useCallback((dx: number, dy: number) => {
     saveToHistory(localPositions);
     const newPositions = localPositions.slice(0, dancerCount).map(pos => ({
       x: Math.max(0.5, Math.min(stageWidth - 0.5, pos.x + dx)),
       y: Math.max(0.5, Math.min(stageHeight - 0.5, pos.y + dy)),
     }));
-    // 나머지 포지션도 유지
+    // Keep remaining positions
     const fullPositions = [...newPositions, ...localPositions.slice(dancerCount)];
     setLocalPositions(fullPositions);
     isInternalChange.current = true;
     onPositionsChange(fullPositions);
   }, [localPositions, dancerCount, stageWidth, stageHeight, onPositionsChange, saveToHistory]);
 
-  // 중앙 정렬
+  // Center alignment
   const centerAll = useCallback(() => {
     const activePositions = localPositions.slice(0, dancerCount);
     if (activePositions.length === 0) return;
 
     saveToHistory(localPositions);
 
-    // 현재 대형의 중심 계산
+    // Calculate current formation center
     const centerX = activePositions.reduce((sum, p) => sum + p.x, 0) / activePositions.length;
     const centerY = activePositions.reduce((sum, p) => sum + p.y, 0) / activePositions.length;
 
-    // 무대 중앙으로 이동
+    // Move to stage center
     const targetCenterX = stageWidth / 2;
     const targetCenterY = stageHeight / 2;
     const dx = targetCenterX - centerX;
@@ -735,7 +735,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     return Math.round(value / gridSize) * gridSize;
   };
 
-  // Dancer 클릭 핸들러
+  // Dancer click handler
   const handleDancerMouseDown = (id: number) => (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -748,7 +748,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     const mouseY = stageHeight - ((e.clientY - rect.top - PADDING) / scale);
 
     if (e.shiftKey) {
-      // Shift+클릭: 선택에 추가/제거
+      // Shift+click: Add/remove from selection
       setSelectedIds(prev => {
         const newSet = new Set(prev);
         if (newSet.has(id)) {
@@ -759,23 +759,23 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
         return newSet;
       });
     } else {
-      // 일반 클릭: 단일 선택 또는 선택된 그룹 드래그
+      // Normal click: Single selection or drag selected group
       if (!selectedIds.has(id)) {
-        // 선택되지 않은 dancer 클릭 → 해당 dancer만 선택
+        // Click unselected dancer → Select only that dancer
         setSelectedIds(new Set([id]));
       }
-      // 이미 선택된 dancer를 클릭하면 그룹 드래그 시작
+      // Clicking already selected dancer starts group drag
     }
 
-    saveToHistory(localPositions); // 드래그 시작 전 히스토리 저장
+    saveToHistory(localPositions); // Save to history before drag starts
     setDraggingId(id);
     dragStartRef.current = { x: mouseX, y: mouseY };
     initialPositionsRef.current = [...localPositions];
   };
 
-  // 빈 공간 클릭 핸들러 (선택 박스 시작)
+  // Empty space click handler (start selection box)
   const handleSvgMouseDown = (e: React.MouseEvent) => {
-    // dancer를 클릭한 경우가 아닌 경우에만
+    // Only when not clicking a dancer
     if ((e.target as HTMLElement).tagName !== 'svg' &&
         !(e.target as HTMLElement).classList.contains('stage-background')) {
       return;
@@ -788,7 +788,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    // 빈 공간 클릭 → 선택 해제 및 선택 박스 시작
+    // Empty space click → Clear selection and start selection box
     if (!e.shiftKey) {
       setSelectedIds(new Set());
     }
@@ -803,7 +803,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
 
     const rect = svg.getBoundingClientRect();
 
-    // 선택 박스 드래그 중
+    // Selection box dragging
     if (isDraggingSelection && selectionBox) {
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
@@ -811,22 +811,22 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
       return;
     }
 
-    // Dancer 드래그 중
+    // Dancer dragging
     if (draggingId === null || !dragStartRef.current) return;
 
     const mouseX = (e.clientX - rect.left - PADDING) / scale;
     const mouseY = stageHeight - ((e.clientY - rect.top - PADDING) / scale);
 
-    // 이동량 계산
+    // Calculate movement delta
     let deltaX = mouseX - dragStartRef.current.x;
     let deltaY = mouseY - dragStartRef.current.y;
 
-    // 선택된 dancer들 함께 이동
+    // Move selected dancers together
     const idsToMove = selectedIds.has(draggingId) ? selectedIds : new Set([draggingId]);
     const isGroupMove = idsToMove.size > 1;
 
-    // 그룹 이동 시: delta 자체를 snap (대형 유지)
-    // 단일 이동 시: 개별 위치를 snap
+    // Group move: snap the delta itself (maintain formation)
+    // Single move: snap individual position
     if (snapEnabled && isGroupMove) {
       deltaX = snapToGrid(deltaX, snapSize);
       deltaY = snapToGrid(deltaY, snapSize);
@@ -839,7 +839,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
       let newX = initialPos.x + deltaX;
       let newY = initialPos.y + deltaY;
 
-      // 단일 dancer 이동 시에만 개별 위치 snap
+      // Only snap individual position for single dancer move
       if (snapEnabled && !isGroupMove) {
         newX = snapToGrid(newX, snapSize);
         newY = snapToGrid(newY, snapSize);
@@ -854,17 +854,17 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
   }, [draggingId, isDraggingSelection, selectionBox, selectedIds, snapEnabled, snapSize, scale, stageWidth, stageHeight]);
 
   const handleMouseUp = useCallback(() => {
-    // 선택 박스 완료
+    // Selection box complete
     if (isDraggingSelection && selectionBox) {
       const svg = svgRef.current;
       if (svg) {
-        // 선택 박스 영역 계산 (픽셀 → 월드 좌표)
+        // Calculate selection box area (pixels → world coordinates)
         const minX = Math.min(selectionBox.startX, selectionBox.endX);
         const maxX = Math.max(selectionBox.startX, selectionBox.endX);
         const minY = Math.min(selectionBox.startY, selectionBox.endY);
         const maxY = Math.max(selectionBox.startY, selectionBox.endY);
 
-        // 선택 박스 안에 있는 dancer들 찾기
+        // Find dancers inside selection box
         const newSelected = new Set<number>();
         localPositions.slice(0, dancerCount).forEach((pos, i) => {
           const px = PADDING + pos.x * scale;
@@ -882,7 +882,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
       return;
     }
 
-    // Dancer 드래그 완료
+    // Dancer drag complete
     if (draggingId !== null) {
       isInternalChange.current = true;
       onPositionsChange(localPositions);
@@ -904,7 +904,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
                 onClick={undo}
                 disabled={history.length === 0}
                 className="undo-btn"
-                title="실행 취소 (Ctrl+Z)"
+                title="Undo (Ctrl+Z)"
               >
                 ↶
               </button>
@@ -912,7 +912,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
                 onClick={redo}
                 disabled={future.length === 0}
                 className="redo-btn"
-                title="다시 실행 (Ctrl+Shift+Z)"
+                title="Redo (Ctrl+Shift+Z)"
               >
                 ↷
               </button>
@@ -929,14 +929,14 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
                 onClick={() => handlePresetClick(p)}
                 className={`preset-btn ${currentPreset === p ? 'active' : ''}`}
               >
-                {p === 'line' ? '일렬' : p === 'circle' ? '원형' : p === 'v_shape' ? 'V자' :
-                 p === 'diagonal' ? '대각선' : p === 'diamond' ? '다이아' : p === 'triangle' ? '삼각' :
-                 p === 'two_lines' ? '두줄' : '흩어짐'}
+                {p === 'line' ? 'Line' : p === 'circle' ? 'Circle' : p === 'v_shape' ? 'V' :
+                 p === 'diagonal' ? 'Diag' : p === 'diamond' ? 'Dia' : p === 'triangle' ? 'Tri' :
+                 p === 'two_lines' ? '2Line' : 'Scatter'}
               </button>
             ))}
           </div>
           <div className="spread-control">
-            <label>대형 크기:</label>
+            <label>Formation Size:</label>
             <input
               type="range"
               min={0.5}
@@ -946,10 +946,10 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
               onChange={(e) => handleSpreadChange(parseFloat(e.target.value))}
             />
             <span className="spread-value">{Math.round(Math.min(spread * 60, 100))}%</span>
-            {!currentPreset && <span className="spread-hint">(프리셋 선택 후 조절)</span>}
+            {!currentPreset && <span className="spread-hint">(Select preset first)</span>}
           </div>
           <div className="position-control">
-            <label>위치 이동:</label>
+            <label>Move Position:</label>
             <div className="position-pad">
               <button className="pos-btn" onClick={() => moveAll(-0.5, 0.5)}>↖</button>
               <button className="pos-btn" onClick={() => moveAll(0, 0.5)}>↑</button>
@@ -969,7 +969,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
                 checked={snapEnabled}
                 onChange={(e) => setSnapEnabled(e.target.checked)}
               />
-              <span>그리드 스냅</span>
+              <span>Grid Snap</span>
             </label>
             {snapEnabled && (
               <div className="snap-size-buttons">
@@ -987,10 +987,10 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
           </div>
           <div className="selection-controls">
             <span className="selection-info">
-              {selectedIds.size > 0 ? `${selectedIds.size}명 선택됨` : '드래그로 선택'}
+              {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Drag to select'}
             </span>
-            <button onClick={selectAll} className="selection-btn">전체 선택</button>
-            <button onClick={clearSelection} className="selection-btn" disabled={selectedIds.size === 0}>선택 해제</button>
+            <button onClick={selectAll} className="selection-btn">Select All</button>
+            <button onClick={clearSelection} className="selection-btn" disabled={selectedIds.size === 0}>Clear</button>
           </div>
         </div>
 
@@ -1064,7 +1064,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
 
             return (
               <g key={i} onMouseDown={handleDancerMouseDown(i)} style={{ cursor: 'grab' }}>
-                {/* 선택된 dancer 배경 하이라이트 */}
+                {/* Selected dancer background highlight */}
                 {isSelected && (
                   <circle
                     cx={cx}
@@ -1109,7 +1109,7 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
             );
           })}
 
-          {/* 선택 박스 */}
+          {/* Selection box */}
           {selectionBox && (
             <rect
               x={Math.min(selectionBox.startX, selectionBox.endX)}
@@ -1164,14 +1164,14 @@ function FormationEditor({ positions, dancerCount, title, stageWidth, stageHeigh
         </div>
 
         <div className="editor-footer">
-          <button onClick={onClose} className="done-btn">완료</button>
+          <button onClick={onClose} className="done-btn">Done</button>
         </div>
       </div>
     </div>
   );
 }
 
-// 접을 수 있는 패널
+// Collapsible panel
 interface CollapsiblePanelProps {
   title: string;
   defaultOpen?: boolean;
@@ -1207,15 +1207,15 @@ function AestheticScorePanel({ score }: AestheticScorePanelProps) {
     <div className="aesthetic-panel compact">
       <div className="overall-score" style={{ borderColor: getScoreColor(score.overall) }}>
         <span className="score-value">{score.overall}</span>
-        <span className="score-label">종합 점수</span>
+        <span className="score-label">Overall Score</span>
       </div>
       <div className="score-details">
         {[
-          { label: '대칭성', value: score.symmetry },
-          { label: '중심 집중', value: score.centerFocus },
-          { label: '교차 복잡도', value: score.crossingPenalty },
-          { label: '흐름 부드러움', value: score.flowSmoothness },
-          { label: '메인 강조', value: score.mainDancerEmphasis },
+          { label: 'Symmetry', value: score.symmetry },
+          { label: 'Center Focus', value: score.centerFocus },
+          { label: 'Crossing', value: score.crossingPenalty },
+          { label: 'Flow', value: score.flowSmoothness },
+          { label: 'Main Emphasis', value: score.mainDancerEmphasis },
         ].map(({ label, value }) => (
           <div key={label} className="score-row">
             <span className="score-label">{label}</span>
@@ -1228,7 +1228,7 @@ function AestheticScorePanel({ score }: AestheticScorePanelProps) {
       </div>
       {score.feedback.length > 0 && (
         <div className="feedback-section">
-          <h4>피드백</h4>
+          <h4>Feedback</h4>
           <ul>
             {score.feedback.map((f, i) => (
               <li key={i}>{f}</li>
@@ -1240,7 +1240,7 @@ function AestheticScorePanel({ score }: AestheticScorePanelProps) {
   );
 }
 
-// 후보 비교 패널
+// Candidate comparison panel
 interface CandidateComparisonPanelProps {
   candidates: CandidateResult[];
   ranking: RankingResult | null;
@@ -1264,17 +1264,17 @@ function CandidateComparisonPanel({
 }: CandidateComparisonPanelProps) {
   const getStrategyLabel = (strategy: string) => {
     const labels: Record<string, string> = {
-      'distance_longest_first': '긴 거리 우선',
-      'distance_shortest_first': '짧은 거리 우선',
-      'timing_priority': '타이밍 우선',
-      'curve_allowed': '곡선 허용',
-      'center_priority': '센터 우선',
-      'candidate_gemini_constrained': 'Gemini 제약',
-      'candidate_constrained_curve_0.2': '제약 + 곡선 0.2',
-      'candidate_constrained_curve_0.5': '제약 + 곡선 0.5',
-      'candidate_constrained_curve_0.8': '제약 + 곡선 0.8',
-      'candidate_baseline_distance_longest_first': '기준: 긴 거리',
-      'candidate_baseline_timing_priority': '기준: 타이밍',
+      'distance_longest_first': 'Longest First',
+      'distance_shortest_first': 'Shortest First',
+      'timing_priority': 'Timing Priority',
+      'curve_allowed': 'Curve Allowed',
+      'center_priority': 'Center Priority',
+      'candidate_gemini_constrained': 'Gemini Constrained',
+      'candidate_constrained_curve_0.2': 'Constrained + Curve 0.2',
+      'candidate_constrained_curve_0.5': 'Constrained + Curve 0.5',
+      'candidate_constrained_curve_0.8': 'Constrained + Curve 0.8',
+      'candidate_baseline_distance_longest_first': 'Baseline: Longest',
+      'candidate_baseline_timing_priority': 'Baseline: Timing',
     };
     return labels[strategy] || strategy;
   };
@@ -1294,13 +1294,13 @@ function CandidateComparisonPanel({
   return (
     <div className="candidate-panel">
       <div className="candidate-panel-header">
-        <h3>후보 비교</h3>
+        <h3>Candidate Comparison</h3>
         <div className="header-badges">
           <span className={`pipeline-badge ${pipelineMode}`}>
-            {pipelineMode === 'pre_and_ranking' ? '🧠 Pre+Ranking' : '📊 Ranking Only'}
+            {pipelineMode === 'without_gemini' ? '⚡ Algorithm Only' : pipelineMode === 'pre_and_ranking' ? '🧠 Pre+Ranking' : '📊 Ranking Only'}
           </span>
           <span className={`ranking-badge ${usedGeminiRanking ? 'gemini' : 'local'}`}>
-            {usedGeminiRanking ? '🤖 Gemini' : '📊 로컬'}
+            {usedGeminiRanking ? '🤖 Gemini' : '📊 Local'}
           </span>
         </div>
       </div>
@@ -1308,14 +1308,14 @@ function CandidateComparisonPanel({
       {pipelineMode === 'pre_and_ranking' && preConstraint && (
         <div className="pre-constraint-info">
           <div className="constraint-header">
-            <span className="constraint-label">Gemini 사전 제약</span>
+            <span className="constraint-label">Gemini Pre-Constraint</span>
             {usedGeminiPreConstraint && <span className="gemini-badge">✓ Gemini</span>}
           </div>
           <p className="constraint-strategy">{preConstraint.overallStrategy}</p>
           <div className="constraint-details">
-            <span>이동순서: {preConstraint.movementOrder}</span>
-            <span>곡선량: {(preConstraint.suggestedCurveAmount * 100).toFixed(0)}%</span>
-            <span>신뢰도: {(preConstraint.confidence * 100).toFixed(0)}%</span>
+            <span>Order: {preConstraint.movementOrder}</span>
+            <span>Curve: {(preConstraint.suggestedCurveAmount * 100).toFixed(0)}%</span>
+            <span>Confidence: {(preConstraint.confidence * 100).toFixed(0)}%</span>
           </div>
         </div>
       )}
@@ -1345,21 +1345,21 @@ function CandidateComparisonPanel({
                     #{rankInfo.rank}
                   </span>
                 )}
-                {isSelected && <span className="selected-badge">✓ 선택됨</span>}
+                {isSelected && <span className="selected-badge">✓ Selected</span>}
               </div>
 
               <div className="candidate-metrics">
                 <div className="metric-row">
-                  <span className="metric-label">충돌</span>
+                  <span className="metric-label">Collision</span>
                   <span
                     className="metric-value"
                     style={{ color: metrics.collisionCount === 0 ? '#4ECDC4' : '#FF6B6B' }}
                   >
-                    {metrics.collisionCount === 0 ? '없음 ✓' : `${metrics.collisionCount}건`}
+                    {metrics.collisionCount === 0 ? 'None ✓' : `${metrics.collisionCount}`}
                   </span>
                 </div>
                 <div className="metric-row">
-                  <span className="metric-label">대칭성</span>
+                  <span className="metric-label">Symmetry</span>
                   <div className="metric-bar">
                     <div
                       className="metric-fill"
@@ -1372,7 +1372,7 @@ function CandidateComparisonPanel({
                   <span className="metric-num">{metrics.symmetryScore}</span>
                 </div>
                 <div className="metric-row">
-                  <span className="metric-label">부드러움</span>
+                  <span className="metric-label">Smoothness</span>
                   <div className="metric-bar">
                     <div
                       className="metric-fill"
@@ -1385,16 +1385,16 @@ function CandidateComparisonPanel({
                   <span className="metric-num">{metrics.pathSmoothness}</span>
                 </div>
                 <div className="metric-row">
-                  <span className="metric-label">교차</span>
+                  <span className="metric-label">Crossing</span>
                   <span
                     className="metric-value"
                     style={{ color: metrics.crossingCount <= 2 ? '#4ECDC4' : '#FFD93D' }}
                   >
-                    {metrics.crossingCount}회
+                    {metrics.crossingCount}
                   </span>
                 </div>
                 <div className="metric-row">
-                  <span className="metric-label">동시도착</span>
+                  <span className="metric-label">Sync Arrival</span>
                   <div className="metric-bar">
                     <div
                       className="metric-fill"
@@ -1588,7 +1588,7 @@ export default function DanceChoreography() {
   const [ranking, setRanking] = useState<RankingResult | null>(null);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>('');
   const [usedGeminiRanking, setUsedGeminiRanking] = useState(false);
-  const [useMultiCandidate, setUseMultiCandidate] = useState(true); // 다중 후보 모드 토글
+  const [useMultiCandidate, setUseMultiCandidate] = useState(true); // Multi-candidate mode toggle
   const [apiConfigured, setApiConfigured] = useState(false);
   const [pipelineMode, setPipelineMode] = useState<GeminiPipelineMode>('ranking_only');
   const [preConstraint, setPreConstraint] = useState<GeminiPreConstraint | null>(null);
@@ -1607,7 +1607,7 @@ export default function DanceChoreography() {
     setCustomEndPositions(endPos);
   }, [dancerCount, stageWidth, stageHeight]);
 
-  // 초기에는 대형을 생성하지 않음 (사용자가 직접 생성 버튼 클릭)
+  // Do not generate formation initially (user clicks generate button)
 
   // Animation loop
   useEffect(() => {
@@ -1655,7 +1655,7 @@ export default function DanceChoreography() {
       setCurrentCount(0);
       setIsPlaying(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '안무 생성 실패');
+      setError(err instanceof Error ? err.message : 'Failed to generate choreography');
     } finally {
       setIsLoading(false);
     }
@@ -1667,7 +1667,7 @@ export default function DanceChoreography() {
 
     try {
       if (useMultiCandidate) {
-        // 다중 후보 모드
+        // Multi-candidate mode
         const isConfigured = await isApiKeyConfigured();
         const multiResult = await generateChoreographyWithCandidates(
           startFormation,
@@ -1695,7 +1695,7 @@ export default function DanceChoreography() {
         setDancers(resultToDancerData(multiResult.selectedResult));
         setTotalCounts(multiResult.selectedResult.request.totalCounts);
       } else {
-        // 기존 단일 결과 모드
+        // Single result mode (legacy)
         const choreographyResult = generateChoreographyDirect(
           startFormation,
           endFormation,
@@ -1720,20 +1720,20 @@ export default function DanceChoreography() {
       setCurrentCount(0);
       setIsPlaying(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '안무 생성 실패');
+      setError(err instanceof Error ? err.message : 'Failed to generate choreography');
     } finally {
       setIsLoading(false);
     }
   }, [startFormation, endFormation, dancerCount, customStartPositions, customEndPositions, stageWidth, stageHeight, useMultiCandidate, pipelineMode]);
 
-  // 후보 선택 핸들러
+  // Candidate selection handler
   const handleSelectCandidate = useCallback((candidateId: string) => {
     const candidate = candidates.find(c => c.id === candidateId);
     if (!candidate) return;
 
     setSelectedCandidateId(candidateId);
 
-    // 선택된 후보로 결과 업데이트
+    // Update result with selected candidate
     const smoothPaths = candidate.paths.map(p => ({
       dancerId: p.dancerId,
       color: ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFD93D', '#6C5CE7', '#A8E6CF', '#FF8C42'][(p.dancerId - 1) % 8],
@@ -1827,7 +1827,7 @@ export default function DanceChoreography() {
 
       <div className="input-section">
         <NaturalLanguageInput onGenerate={handleNLPGenerate} isLoading={isLoading} />
-        <div className="divider">또는</div>
+        <div className="divider">or</div>
         <StageSizeSelector
           preset={stagePreset}
           width={stageWidth}
@@ -1866,10 +1866,21 @@ export default function DanceChoreography() {
               checked={useMultiCandidate}
               onChange={(e) => setUseMultiCandidate(e.target.checked)}
             />
-            <span>🤖 다중 후보 모드</span>
+            <span>🤖 Multi-Candidate Mode</span>
           </label>
           {useMultiCandidate && (
             <div className="pipeline-mode-selector">
+              <label className={`mode-option ${pipelineMode === 'without_gemini' ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="pipelineMode"
+                  value="without_gemini"
+                  checked={pipelineMode === 'without_gemini'}
+                  onChange={() => setPipelineMode('without_gemini')}
+                />
+                <span className="mode-label">Without Gemini</span>
+                <span className="mode-desc">Algorithm only, local ranking</span>
+              </label>
               <label className={`mode-option ${pipelineMode === 'ranking_only' ? 'active' : ''}`}>
                 <input
                   type="radio"
@@ -1879,7 +1890,7 @@ export default function DanceChoreography() {
                   onChange={() => setPipelineMode('ranking_only')}
                 />
                 <span className="mode-label">Ranking Only</span>
-                <span className="mode-desc">알고리즘 → Gemini 랭킹</span>
+                <span className="mode-desc">Algorithm → Gemini ranking</span>
               </label>
               <label className={`mode-option ${pipelineMode === 'pre_and_ranking' ? 'active' : ''}`}>
                 <input
@@ -1890,13 +1901,17 @@ export default function DanceChoreography() {
                   onChange={() => setPipelineMode('pre_and_ranking')}
                 />
                 <span className="mode-label">Pre + Ranking</span>
-                <span className="mode-desc">Gemini 사전제약 → 알고리즘 → Gemini 랭킹</span>
+                <span className="mode-desc">Gemini constraints → Algorithm → Gemini ranking</span>
               </label>
             </div>
           )}
           {useMultiCandidate && (
             <span className="toggle-hint">
-              {pipelineMode === 'ranking_only' ? '5개 전략' : 'Gemini 제약 기반'}으로 후보 생성 → {apiConfigured ? 'Gemini' : '로컬'} 랭킹
+              {pipelineMode === 'without_gemini'
+                ? '5 strategies → Local ranking (no Gemini)'
+                : pipelineMode === 'ranking_only'
+                  ? `5 strategies → ${apiConfigured ? 'Gemini' : 'Local'} ranking`
+                  : `Gemini constraints → ${apiConfigured ? 'Gemini' : 'Local'} ranking`}
             </span>
           )}
         </div>
@@ -1907,7 +1922,7 @@ export default function DanceChoreography() {
         <FormationEditor
           positions={editingFormation === 'start' ? customStartPositions : customEndPositions}
           dancerCount={dancerCount}
-          title={editingFormation === 'start' ? '시작 대형 편집' : '끝 대형 편집'}
+          title={editingFormation === 'start' ? 'Edit Start Formation' : 'Edit End Formation'}
           stageWidth={stageWidth}
           stageHeight={stageHeight}
           scale={scale}
@@ -1963,7 +1978,7 @@ export default function DanceChoreography() {
         </div>
 
         <div className="side-panels">
-          {/* 후보 비교 패널 - 가장 중요한 위치 */}
+          {/* Candidate comparison panel - most important position */}
           {useMultiCandidate && candidates.length > 0 && (
             <CandidateComparisonPanel
               candidates={candidates}
@@ -1977,15 +1992,15 @@ export default function DanceChoreography() {
             />
           )}
 
-          {/* 미적 평가 - 접을 수 있음 */}
+          {/* Aesthetic evaluation - collapsible */}
           {result?.aestheticScore && (
-            <CollapsiblePanel title="미적 평가" defaultOpen={false}>
+            <CollapsiblePanel title="Aesthetic Score" defaultOpen={false}>
               <AestheticScorePanel score={result.aestheticScore} />
             </CollapsiblePanel>
           )}
 
-          {/* Dancer 정보 - 접을 수 있음 */}
-          <CollapsiblePanel title="Dancers 실시간 정보" defaultOpen={false}>
+          {/* Dancer info - collapsible */}
+          <CollapsiblePanel title="Dancers Live Info" defaultOpen={false}>
             <DancerInfoPanel
               dancers={dancers}
               currentCount={currentCount}
@@ -2002,21 +2017,21 @@ export default function DanceChoreography() {
       {result && (
         <div className="metadata-section">
           <div className="metadata-item">
-            <span>총 이동 거리:</span>
+            <span>Total Distance:</span>
             <strong>{result.metadata.totalDistance.toFixed(2)}m</strong>
           </div>
           <div className="metadata-item">
-            <span>평균 거리:</span>
+            <span>Avg Distance:</span>
             <strong>{result.metadata.averageDistance.toFixed(2)}m</strong>
           </div>
           <div className="metadata-item">
-            <span>계산 시간:</span>
+            <span>Compute Time:</span>
             <strong>{result.metadata.computeTimeMs.toFixed(0)}ms</strong>
           </div>
           <div className="metadata-item">
-            <span>충돌:</span>
+            <span>Collision:</span>
             <strong style={{ color: result.validation.valid ? '#4ECDC4' : '#FF6B6B' }}>
-              {result.validation.valid ? '없음' : `${result.validation.collisions.length}건`}
+              {result.validation.valid ? 'None' : `${result.validation.collisions.length}`}
             </strong>
           </div>
         </div>

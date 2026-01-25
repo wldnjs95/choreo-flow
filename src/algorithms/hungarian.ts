@@ -1,9 +1,9 @@
 /**
  * Hungarian Algorithm (Kuhn-Munkres Algorithm)
- * 최적 할당 문제 해결 - 총 이동 거리 최소화
+ * Solve optimal assignment problem - minimize total movement distance
  *
- * Input: N개의 시작 위치, N개의 끝 위치
- * Output: 각 dancer가 어떤 끝 위치로 갈지 최적 매칭
+ * Input: N start positions, N end positions
+ * Output: Optimal matching of which dancer goes to which end position
  */
 
 export interface Position {
@@ -19,7 +19,7 @@ export interface Assignment {
 }
 
 /**
- * 두 점 사이의 유클리드 거리 계산
+ * Calculate Euclidean distance between two points
  */
 function euclideanDistance(a: Position, b: Position): number {
   const dx = a.x - b.x;
@@ -28,7 +28,7 @@ function euclideanDistance(a: Position, b: Position): number {
 }
 
 /**
- * 비용 행렬 생성 (시작 위치 → 끝 위치 거리)
+ * Create cost matrix (distance from start position to end position)
  */
 function createCostMatrix(starts: Position[], ends: Position[]): number[][] {
   const n = starts.length;
@@ -45,16 +45,16 @@ function createCostMatrix(starts: Position[], ends: Position[]): number[][] {
 }
 
 /**
- * Hungarian Algorithm 구현
- * O(n³) 시간 복잡도
+ * Hungarian Algorithm implementation
+ * O(n³) time complexity
  */
 export function hungarianAlgorithm(costMatrix: number[][]): number[] {
   const n = costMatrix.length;
 
-  // 복사본 생성 (원본 수정 방지)
+  // Create copy (prevent modifying original)
   const cost: number[][] = costMatrix.map(row => [...row]);
 
-  // Step 1: 각 행에서 최소값 빼기
+  // Step 1: Subtract minimum value from each row
   for (let i = 0; i < n; i++) {
     const minVal = Math.min(...cost[i]);
     for (let j = 0; j < n; j++) {
@@ -62,7 +62,7 @@ export function hungarianAlgorithm(costMatrix: number[][]): number[] {
     }
   }
 
-  // Step 2: 각 열에서 최소값 빼기
+  // Step 2: Subtract minimum value from each column
   for (let j = 0; j < n; j++) {
     let minVal = Infinity;
     for (let i = 0; i < n; i++) {
@@ -73,11 +73,11 @@ export function hungarianAlgorithm(costMatrix: number[][]): number[] {
     }
   }
 
-  // 할당 배열 초기화
+  // Initialize assignment arrays
   const rowAssign: number[] = new Array(n).fill(-1);
   const colAssign: number[] = new Array(n).fill(-1);
 
-  // Step 3: 0을 이용한 초기 할당
+  // Step 3: Initial assignment using zeros
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) {
       if (cost[i][j] === 0 && rowAssign[i] === -1 && colAssign[j] === -1) {
@@ -87,7 +87,7 @@ export function hungarianAlgorithm(costMatrix: number[][]): number[] {
     }
   }
 
-  // Step 4: 증가 경로를 찾아 할당 개선
+  // Step 4: Find augmenting paths to improve assignment
   const u: number[] = new Array(n).fill(0);
   const v: number[] = new Array(n).fill(0);
 
@@ -135,7 +135,7 @@ export function hungarianAlgorithm(costMatrix: number[][]): number[] {
       markedI = colAssign[j0];
     }
 
-    // 증가 경로 따라가며 할당 갱신
+    // Update assignment along augmenting path
     while (markedJ !== -1 && links[markedJ] !== -1) {
       const prevJ = links[markedJ];
       colAssign[markedJ] = colAssign[prevJ];
@@ -151,30 +151,30 @@ export function hungarianAlgorithm(costMatrix: number[][]): number[] {
 }
 
 /**
- * 더 간단한 Hungarian Algorithm 구현 (Brute force + optimization)
- * N <= 20까지는 DP로 정확한 해 보장
+ * Simpler Hungarian Algorithm implementation (Brute force + optimization)
+ * Guarantees exact solution with DP for N <= 20
  */
 export function hungarianSimple(costMatrix: number[][]): number[] {
   const n = costMatrix.length;
 
   if (n <= 20) {
-    // N <= 20: 비트마스킹 DP로 정확한 해 (2^20 = 약 100만, 충분히 빠름)
+    // N <= 20: Exact solution using bitmask DP (2^20 = ~1M, fast enough)
     return findOptimalAssignmentDP(costMatrix);
   }
 
-  // N > 20: 근사 알고리즘 (greedy)
+  // N > 20: Approximate algorithm (greedy)
   return greedyAssignment(costMatrix);
 }
 
 /**
- * Greedy 할당 (큰 N에서 근사해)
+ * Greedy assignment (approximate solution for large N)
  */
 function greedyAssignment(costMatrix: number[][]): number[] {
   const n = costMatrix.length;
   const assignment: number[] = new Array(n).fill(-1);
   const usedCols: Set<number> = new Set();
 
-  // 각 행에서 가장 가까운 미사용 열 선택
+  // Select nearest unused column for each row
   for (let i = 0; i < n; i++) {
     let minCost = Infinity;
     let minCol = -1;
@@ -196,14 +196,14 @@ function greedyAssignment(costMatrix: number[][]): number[] {
 }
 
 /**
- * DP를 이용한 최적 할당 (비트마스킹)
- * 작은 N에서 정확한 해를 보장
+ * Optimal assignment using DP (bitmask)
+ * Guarantees exact solution for small N
  */
 function findOptimalAssignmentDP(costMatrix: number[][]): number[] {
   const n = costMatrix.length;
   const INF = 1e9;
 
-  // dp[mask] = 최소 비용 (mask는 사용된 열들의 비트마스크)
+  // dp[mask] = minimum cost (mask is bitmask of used columns)
   const dp: number[] = new Array(1 << n).fill(INF);
   const parent: number[] = new Array(1 << n).fill(-1);
 
@@ -226,7 +226,7 @@ function findOptimalAssignmentDP(costMatrix: number[][]): number[] {
     }
   }
 
-  // 역추적하여 할당 복원
+  // Backtrack to restore assignment
   const assignment: number[] = new Array(n).fill(-1);
   let mask = (1 << n) - 1;
 
@@ -250,14 +250,14 @@ function countBits(n: number): number {
 }
 
 /**
- * 메인 함수: 최적 할당 계산
+ * Main function: Compute optimal assignment
  */
 export function computeOptimalAssignment(
   startPositions: Position[],
   endPositions: Position[]
 ): Assignment[] {
   if (startPositions.length !== endPositions.length) {
-    throw new Error('시작 위치와 끝 위치의 개수가 같아야 합니다.');
+    throw new Error('Number of start and end positions must be equal.');
   }
 
   const n = startPositions.length;
@@ -280,14 +280,14 @@ export function computeOptimalAssignment(
 }
 
 /**
- * 총 이동 거리 계산
+ * Calculate total movement distance
  */
 export function calculateTotalDistance(assignments: Assignment[]): number {
   return assignments.reduce((sum, a) => sum + a.distance, 0);
 }
 
 /**
- * 할당 결과 요약 출력
+ * Output assignment result summary
  */
 export function summarizeAssignment(assignments: Assignment[]): string {
   const lines = assignments.map(a =>

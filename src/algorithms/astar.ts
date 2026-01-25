@@ -1,11 +1,11 @@
 /**
- * A* 시공간 경로 탐색 (Spatiotemporal A*)
+ * Spatiotemporal A* Path Finding
  *
- * 3D 공간에서 탐색: (x, y, t)
- * - x, y: 무대 위치
- * - t: 시간 (count)
+ * Search in 3D space: (x, y, t)
+ * - x, y: stage position
+ * - t: time (count)
  *
- * 다른 dancer들의 경로를 장애물로 취급하여 충돌 회피
+ * Treat other dancers' paths as obstacles to avoid collision
  */
 
 import type { Position } from './hungarian';
@@ -13,7 +13,7 @@ import type { Position } from './hungarian';
 export interface PathPoint {
   x: number;
   y: number;
-  t: number;  // 시간 (count)
+  t: number;  // time (count)
 }
 
 export interface PathResult {
@@ -27,10 +27,10 @@ export interface AStarConfig {
   stageWidth: number;
   stageHeight: number;
   totalCounts: number;
-  gridResolution: number;     // 그리드 해상도 (기본 0.5m)
-  timeResolution: number;     // 시간 해상도 (기본 0.5 count)
-  collisionRadius: number;    // 충돌 반경 (기본 0.5m)
-  diagonalCost: number;       // 대각선 이동 비용 배율
+  gridResolution: number;     // Grid resolution (default 0.5m)
+  timeResolution: number;     // Time resolution (default 0.5 count)
+  collisionRadius: number;    // Collision radius (default 0.5m)
+  diagonalCost: number;       // Diagonal movement cost multiplier
 }
 
 const DEFAULT_CONFIG: AStarConfig = {
@@ -47,14 +47,14 @@ interface Node {
   x: number;
   y: number;
   t: number;
-  g: number;  // 시작부터 현재까지 비용
-  h: number;  // 휴리스틱 (현재부터 목표까지 추정)
+  g: number;  // Cost from start to current
+  h: number;  // Heuristic (estimate from current to goal)
   f: number;  // g + h
   parent: Node | null;
 }
 
 /**
- * 우선순위 큐 (Min Heap)
+ * Priority Queue (Min Heap)
  */
 class PriorityQueue<T> {
   private heap: T[] = [];
@@ -114,7 +114,7 @@ class PriorityQueue<T> {
 }
 
 /**
- * 휴리스틱 함수: 유클리드 거리
+ * Heuristic function: Euclidean distance
  */
 function heuristic(current: PathPoint, goal: Position): number {
   const dx = current.x - goal.x;
@@ -123,7 +123,7 @@ function heuristic(current: PathPoint, goal: Position): number {
 }
 
 /**
- * 노드 키 생성 (중복 체크용)
+ * Generate node key (for duplicate checking)
  */
 function nodeKey(x: number, y: number, t: number, resolution: number): string {
   const gx = Math.round(x / resolution);
@@ -133,7 +133,7 @@ function nodeKey(x: number, y: number, t: number, resolution: number): string {
 }
 
 /**
- * 충돌 검사: 특정 시점에 특정 위치가 다른 dancer와 충돌하는지
+ * Collision check: whether a specific position at a specific time collides with other dancers
  */
 function checkCollision(
   x: number,
@@ -143,7 +143,7 @@ function checkCollision(
   collisionRadius: number
 ): boolean {
   for (const path of otherPaths) {
-    // 해당 시간의 다른 dancer 위치 보간
+    // Interpolate other dancer position at this time
     const otherPos = interpolatePosition(path, t);
     if (otherPos) {
       const dx = x - otherPos.x;
@@ -158,7 +158,7 @@ function checkCollision(
 }
 
 /**
- * 경로에서 특정 시간의 위치 보간
+ * Interpolate position at specific time in path
  */
 function interpolatePosition(path: PathPoint[], t: number): Position | null {
   if (path.length === 0) return null;
@@ -178,7 +178,7 @@ function interpolatePosition(path: PathPoint[], t: number): Position | null {
 }
 
 /**
- * 이웃 노드 생성 (8방향 이동 + 대기)
+ * Generate neighbor nodes (8-directional movement + wait)
  */
 function getNeighbors(
   node: Node,
@@ -189,9 +189,9 @@ function getNeighbors(
   const neighbors: Node[] = [];
   const { gridResolution, timeResolution, stageWidth, stageHeight, collisionRadius, diagonalCost } = config;
 
-  // 8방향 이동 + 제자리 대기
+  // 8-directional movement + stay in place
   const directions = [
-    { dx: 0, dy: 0, cost: 0.1 },           // 대기 (약간의 비용)
+    { dx: 0, dy: 0, cost: 0.1 },           // Wait (small cost)
     { dx: gridResolution, dy: 0, cost: 1 },
     { dx: -gridResolution, dy: 0, cost: 1 },
     { dx: 0, dy: gridResolution, cost: 1 },
@@ -208,17 +208,17 @@ function getNeighbors(
     const newX = node.x + dir.dx;
     const newY = node.y + dir.dy;
 
-    // 무대 경계 체크
+    // Stage boundary check
     if (newX < 0 || newX > stageWidth || newY < 0 || newY > stageHeight) {
       continue;
     }
 
-    // 시간 경계 체크
+    // Time boundary check
     if (newT > config.totalCounts) {
       continue;
     }
 
-    // 충돌 검사
+    // Collision check
     if (checkCollision(newX, newY, newT, otherPaths, collisionRadius)) {
       continue;
     }
@@ -241,7 +241,7 @@ function getNeighbors(
 }
 
 /**
- * A* 경로 탐색
+ * A* path finding
  */
 export function findPath(
   start: Position,
@@ -277,10 +277,10 @@ export function findPath(
     const current = openSet.pop()!;
     const currentKey = nodeKey(current.x, current.y, current.t, cfg.gridResolution);
 
-    // 목표 도달 체크 (위치가 충분히 가깝고 시간이 끝에 도달)
+    // Goal check (position close enough and time reached end)
     const distToGoal = Math.sqrt((current.x - end.x) ** 2 + (current.y - end.y) ** 2);
     if (distToGoal < cfg.gridResolution && current.t >= cfg.totalCounts - cfg.timeResolution) {
-      // 경로 복원
+      // Reconstruct path
       const path: PathPoint[] = [];
       let node: Node | null = current;
 
@@ -289,7 +289,7 @@ export function findPath(
         node = node.parent;
       }
 
-      // 마지막 점이 정확히 끝 위치가 되도록 조정
+      // Adjust last point to exact end position
       if (path.length > 0) {
         path[path.length - 1] = { x: end.x, y: end.y, t: cfg.totalCounts };
       }
@@ -313,13 +313,13 @@ export function findPath(
     }
   }
 
-  // 경로를 찾지 못한 경우: 직선 경로 반환 (fallback)
+  // If path not found: return direct path (fallback)
   console.warn('A* failed to find path, using direct path');
   return generateDirectPath(start, end, startTime, cfg.totalCounts, cfg.timeResolution);
 }
 
 /**
- * 직선 경로 생성 (fallback)
+ * Generate direct path (fallback)
  */
 function generateDirectPath(
   start: Position,
@@ -345,8 +345,8 @@ function generateDirectPath(
 }
 
 /**
- * 모든 dancer의 경로를 순차적으로 계산
- * 먼저 계산된 dancer의 경로를 장애물로 취급
+ * Compute paths for all dancers sequentially
+ * Treat previously computed dancer paths as obstacles
  */
 export function computeAllPaths(
   assignments: { dancerId: number; startPosition: Position; endPosition: Position }[],
@@ -356,7 +356,7 @@ export function computeAllPaths(
   const results: PathResult[] = [];
   const computedPaths: PathPoint[][] = [];
 
-  // 거리가 긴 dancer부터 먼저 계산 (우선권 부여)
+  // Compute longest distance dancers first (give priority)
   const sortedAssignments = [...assignments].sort((a, b) => {
     const distA = Math.sqrt(
       (a.endPosition.x - a.startPosition.x) ** 2 +
@@ -366,14 +366,14 @@ export function computeAllPaths(
       (b.endPosition.x - b.startPosition.x) ** 2 +
       (b.endPosition.y - b.startPosition.y) ** 2
     );
-    return distB - distA;  // 내림차순 (긴 거리 먼저)
+    return distB - distA;  // Descending (longest first)
   });
 
   for (const assignment of sortedAssignments) {
     const path = findPath(
       assignment.startPosition,
       assignment.endPosition,
-      0,  // 시작 시간
+      0,  // Start time
       computedPaths,
       cfg
     );
@@ -390,12 +390,12 @@ export function computeAllPaths(
     computedPaths.push(path);
   }
 
-  // dancerId 순으로 정렬하여 반환
+  // Sort by dancerId and return
   return results.sort((a, b) => a.dancerId - b.dancerId);
 }
 
 /**
- * 경로 총 거리 계산
+ * Calculate total path distance
  */
 function calculatePathDistance(path: PathPoint[]): number {
   let distance = 0;
@@ -408,7 +408,7 @@ function calculatePathDistance(path: PathPoint[]): number {
 }
 
 /**
- * 경로 충돌 검사 (사후 검증)
+ * Path collision validation (post-verification)
  */
 export function validatePaths(
   paths: PathResult[],
@@ -421,7 +421,7 @@ export function validatePaths(
       const path1 = paths[i].path;
       const path2 = paths[j].path;
 
-      // 시간별로 검사
+      // Check by time
       for (let t = 0; t <= 8; t += 0.25) {
         const pos1 = interpolatePosition(path1, t);
         const pos2 = interpolatePosition(path2, t);

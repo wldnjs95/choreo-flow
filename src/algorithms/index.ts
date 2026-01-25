@@ -1,5 +1,5 @@
 /**
- * 알고리즘 모듈 통합 내보내기
+ * Algorithm module exports
  */
 
 // Hungarian Algorithm
@@ -11,7 +11,7 @@ export {
   type Assignment,
 } from './hungarian';
 
-// Simple Pathfinder (직선 경로 + 충돌 회피)
+// Simple Pathfinder (linear path + collision avoidance)
 export {
   computeAllPathsSimple,
   validatePathsSimple,
@@ -19,6 +19,7 @@ export {
   type DancerPath,
   type PathfinderConfig,
   type SortStrategy,
+  type TimingMode,
 } from './pathfinder';
 
 // Formation Generator
@@ -31,7 +32,7 @@ export {
   type FormationParams,
 } from './formations';
 
-// Candidate Generator (다중 후보 생성)
+// Candidate Generator (multi-candidate generation)
 export {
   generateCandidate,
   generateAllCandidates,

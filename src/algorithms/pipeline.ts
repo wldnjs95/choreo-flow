@@ -1,12 +1,12 @@
 /**
- * 안무 생성 파이프라인 (Choreography Pipeline)
+ * Choreography Pipeline
  *
- * 전체 흐름:
- * 1. Gemini: 자연어 → 파라미터 파싱
- * 2. Formation Generator: 대형 좌표 생성
- * 3. Hungarian Algorithm: 최적 할당
- * 4. Simple Pathfinder: 직선 경로 + 충돌 회피
- * 5. Gemini: 미적 평가 및 피드백
+ * Overall flow:
+ * 1. Gemini: Natural language → Parameter parsing
+ * 2. Formation Generator: Generate formation coordinates
+ * 3. Hungarian Algorithm: Optimal assignment
+ * 4. Simple Pathfinder: Linear path + collision avoidance
+ * 5. Gemini: Aesthetic evaluation and feedback
  */
 
 import { computeOptimalAssignment } from './hungarian';
@@ -43,42 +43,43 @@ import type { GeminiPreConstraint } from '../gemini/preConstraint';
 import { isApiKeyConfigured } from '../gemini/config';
 
 /**
- * Gemini 파이프라인 모드
+ * Pipeline mode for Gemini integration
  */
 export type GeminiPipelineMode =
-  | 'ranking_only'      // Gemini Ranking Only: 알고리즘 → Gemini 랭킹만
-  | 'pre_and_ranking';  // Gemini Pre + Ranking: Gemini 사전제약 → 알고리즘 → Gemini 랭킹
+  | 'without_gemini'    // Without Gemini: Algorithm only, local ranking
+  | 'ranking_only'      // Gemini Ranking Only: Algorithm → Gemini ranking
+  | 'pre_and_ranking';  // Gemini Pre + Ranking: Gemini constraints → Algorithm → Gemini ranking
 
 /**
- * 파이프라인 결과
+ * Pipeline result
  */
 export interface ChoreographyResult {
-  // 입력 정보
+  // Input information
   request: ChoreographyRequest;
 
-  // 대형 좌표
+  // Formation coordinates
   startPositions: Position[];
   endPositions: Position[];
 
-  // 할당 결과
+  // Assignment result
   assignments: Assignment[];
 
-  // 경로 결과
+  // Path result
   paths: DancerPath[];
 
-  // 부드러운 경로 (시각화용)
+  // Smooth paths (for visualization)
   smoothPaths: SmoothPath[];
 
-  // 충돌 검증
+  // Collision validation
   validation: {
     valid: boolean;
     collisions: { dancer1: number; dancer2: number; time: number }[];
   };
 
-  // 미적 평가 (선택)
+  // Aesthetic evaluation (optional)
   aestheticScore?: AestheticScore;
 
-  // 메타데이터
+  // Metadata
   metadata: {
     totalDistance: number;
     averageDistance: number;
@@ -97,7 +98,7 @@ export interface SmoothPath {
   distance: number;
 }
 
-// Dancer 색상
+// Dancer colors
 const DANCER_COLORS = [
   '#FF6B6B',  // Coral Red
   '#4ECDC4',  // Teal
@@ -110,7 +111,7 @@ const DANCER_COLORS = [
 ];
 
 /**
- * 자연어 입력으로 안무 생성
+ * Generate choreography from natural language input
  */
 export async function generateChoreographyFromText(
   userInput: string,
@@ -133,7 +134,7 @@ export async function generateChoreographyFromText(
 
   const startTime = performance.now();
 
-  // 1. 자연어 파싱
+  // 1. Natural language parsing
   let request: ChoreographyRequest;
   if (useGeminiParser) {
     request = await parseChoreographyRequest(userInput);
@@ -141,7 +142,7 @@ export async function generateChoreographyFromText(
     request = parseChoreographyRequestMock(userInput);
   }
 
-  // 2. 대형 좌표 생성
+  // 2. Generate formation coordinates
   const startPositions = generateFormation(
     request.startFormation.type as FormationType,
     dancerCount,
@@ -154,28 +155,28 @@ export async function generateChoreographyFromText(
     { ...request.endFormation.params, spread: request.style.spread, stageWidth, stageHeight }
   );
 
-  // spread 적용
+  // Apply spread
   if (request.style.spread !== 1.0) {
     endPositions = applySpread(endPositions, request.style.spread, stageWidth, stageHeight);
   }
 
-  // 3. 최적 할당 (Hungarian Algorithm)
+  // 3. Optimal assignment (Hungarian Algorithm)
   const assignments = computeOptimalAssignment(startPositions, endPositions);
 
-  // 4. 경로 계산 (Simple Pathfinder - 직선 + 충돌 회피)
+  // 4. Path calculation (Simple Pathfinder - linear + collision avoidance)
   const paths = computeAllPathsSimple(assignments, {
     totalCounts: request.totalCounts,
     collisionRadius: 0.5,
     numPoints: 20,
   });
 
-  // 5. 시각화용 경로 변환
+  // 5. Convert paths for visualization
   const smoothPaths = pathsToSmoothPaths(paths);
 
-  // 6. 충돌 검증
+  // 6. Collision validation
   const validation = validatePathsSimple(paths, 0.5, request.totalCounts);
 
-  // 7. 메타데이터 계산
+  // 7. Calculate metadata
   const distances = paths.map(p => p.totalDistance);
   const metadata = {
     totalDistance: distances.reduce((sum, d) => sum + d, 0),
@@ -185,7 +186,7 @@ export async function generateChoreographyFromText(
     computeTimeMs: performance.now() - startTime,
   };
 
-  // 8. 로컬 미적 평가
+  // 8. Local aesthetic evaluation
   const pathResults = paths.map(p => ({
     dancerId: p.dancerId,
     path: p.path,
@@ -208,7 +209,7 @@ export async function generateChoreographyFromText(
 }
 
 /**
- * 직접 파라미터로 안무 생성
+ * Generate choreography with direct parameters
  */
 export function generateChoreographyDirect(
   startFormation: FormationType,
@@ -237,24 +238,24 @@ export function generateChoreographyDirect(
 
   const startTime = performance.now();
 
-  // 대형 생성 (커스텀 포지션이 있으면 사용)
+  // Generate formation (use custom positions if available)
   const startPositions = customStartPositions || generateFormation(startFormation, dancerCount, { spread, stageWidth, stageHeight });
   const endPositions = customEndPositions || generateFormation(endFormation, dancerCount, { spread, stageWidth, stageHeight });
 
-  // 최적 할당
+  // Optimal assignment
   const assignments = computeOptimalAssignment(startPositions, endPositions);
 
-  // 경로 계산 (Simple Pathfinder)
+  // Path calculation (Simple Pathfinder)
   const paths = computeAllPathsSimple(assignments, {
     totalCounts,
     collisionRadius: 0.5,
     numPoints: 20,
   });
 
-  // 시각화용 경로 변환
+  // Convert paths for visualization
   const smoothPaths = pathsToSmoothPaths(paths);
 
-  // Request 객체 생성
+  // Create Request object
   const request: ChoreographyRequest = {
     startFormation: { type: startFormation },
     endFormation: { type: endFormation },
@@ -266,10 +267,10 @@ export function generateChoreographyDirect(
     originalInput: '',
   };
 
-  // 검증
+  // Validation
   const validation = validatePathsSimple(paths, 0.5, totalCounts);
 
-  // 메타데이터
+  // Metadata
   const distances = paths.map(p => p.totalDistance);
   const metadata = {
     totalDistance: distances.reduce((sum, d) => sum + d, 0),
@@ -279,7 +280,7 @@ export function generateChoreographyDirect(
     computeTimeMs: performance.now() - startTime,
   };
 
-  // 로컬 평가
+  // Local evaluation
   const pathResults = paths.map(p => ({
     dancerId: p.dancerId,
     path: p.path,
@@ -302,7 +303,7 @@ export function generateChoreographyDirect(
 }
 
 /**
- * DancerPath를 SmoothPath로 변환
+ * Convert DancerPath to SmoothPath
  */
 function pathsToSmoothPaths(paths: DancerPath[]): SmoothPath[] {
   return paths.map(p => ({
@@ -316,7 +317,7 @@ function pathsToSmoothPaths(paths: DancerPath[]): SmoothPath[] {
 }
 
 /**
- * 결과를 시각화용 데이터로 변환
+ * Convert result to visualization data
  */
 export function toVisualizationData(result: ChoreographyResult) {
   return {
@@ -339,32 +340,32 @@ export function toVisualizationData(result: ChoreographyResult) {
 }
 
 /**
- * 결과를 JSON으로 내보내기
+ * Export result to JSON
  */
 export function exportToJSON(result: ChoreographyResult): string {
   return JSON.stringify(toVisualizationData(result), null, 2);
 }
 
 /**
- * 다중 후보 파이프라인 결과
+ * Multi-candidate pipeline result
  */
 export interface MultiCandidateResult {
-  // 선택된 최종 결과
+  // Selected final result
   selectedResult: ChoreographyResult;
 
-  // 모든 후보들
+  // All candidates
   candidates: CandidateResult[];
 
-  // 랭킹 결과
+  // Ranking result
   ranking: RankingResult;
 
-  // 후보 요약 (Gemini용)
+  // Candidates summary (for Gemini)
   candidatesSummary: object;
 
-  // Gemini 사전 제약 (pre_and_ranking 모드에서만)
+  // Gemini pre-constraint (only in pre_and_ranking mode)
   preConstraint?: GeminiPreConstraint;
 
-  // 메타데이터
+  // Metadata
   metadata: {
     totalCandidates: number;
     selectedStrategy: string;
@@ -376,11 +377,11 @@ export interface MultiCandidateResult {
 }
 
 /**
- * 다중 후보 생성 + Gemini 랭킹 파이프라인
+ * Multi-candidate generation + Gemini ranking pipeline
  *
- * 모드:
- * - ranking_only: 알고리즘 → Gemini 랭킹만
- * - pre_and_ranking: Gemini 사전제약 → 알고리즘 → Gemini 랭킹
+ * Modes:
+ * - ranking_only: Algorithm → Gemini ranking only
+ * - pre_and_ranking: Gemini pre-constraint → Algorithm → Gemini ranking
  */
 export async function generateChoreographyWithCandidates(
   startFormation: FormationType,
@@ -415,23 +416,23 @@ export async function generateChoreographyWithCandidates(
 
   const startTime = performance.now();
 
-  // 1. 대형 생성
+  // 1. Generate formation
   const startPositions = customStartPositions || generateFormation(startFormation, dancerCount, { spread, stageWidth, stageHeight });
   const endPositions = customEndPositions || generateFormation(endFormation, dancerCount, { spread, stageWidth, stageHeight });
 
-  // 2. 후보 생성 (모드에 따라 다름)
+  // 2. Generate candidates (depends on mode)
   let candidates: CandidateResult[];
   let preConstraint: GeminiPreConstraint | undefined;
   let usedGeminiPreConstraint = false;
 
   if (pipelineMode === 'pre_and_ranking') {
-    // Pre + Ranking 모드: Gemini 사전 제약 생성 → 제약 기반 후보 생성
+    // Pre + Ranking mode: Gemini pre-constraint → constraint-based generation
     try {
       preConstraint = await generatePreConstraint(startPositions, endPositions, stageWidth, stageHeight);
       usedGeminiPreConstraint = true;
-      console.log('Gemini Pre-constraint 생성 완료:', preConstraint.overallStrategy);
+      console.log('Gemini Pre-constraint generated:', preConstraint.overallStrategy);
     } catch (error) {
-      console.warn('Gemini Pre-constraint 실패, 기본 제약 사용:', error);
+      console.warn('Gemini Pre-constraint failed, using default:', error);
       preConstraint = generateDefaultConstraint(startPositions, endPositions, stageWidth, stageHeight);
     }
 
@@ -442,7 +443,7 @@ export async function generateChoreographyWithCandidates(
       stageHeight,
     });
   } else {
-    // Ranking Only 모드: 기존 방식 (5가지 전략)
+    // Without Gemini or Ranking Only mode: standard 5 strategies
     candidates = generateAllCandidates(startPositions, endPositions, {
       totalCounts,
       collisionRadius: 0.5,
@@ -451,26 +452,49 @@ export async function generateChoreographyWithCandidates(
     });
   }
 
-  // 3. Gemini 또는 로컬 랭킹
+  // 3. Ranking (Gemini or Local)
   let ranking: RankingResult;
   let usedGeminiRanking = false;
 
-  if (useGeminiRanking) {
+  // Without Gemini mode: always use local ranking
+  const shouldUseGeminiRanking = pipelineMode !== 'without_gemini' && useGeminiRanking;
+
+  // Debug logging
+  console.log('=== Pipeline Debug ===');
+  console.log('Pipeline Mode:', pipelineMode);
+  console.log('useGeminiRanking param:', useGeminiRanking);
+  console.log('shouldUseGeminiRanking:', shouldUseGeminiRanking);
+  console.log('Candidates count:', candidates.length);
+  console.log('Candidate IDs:', candidates.map(c => c.id));
+  console.log('Candidate metrics:', candidates.map(c => ({
+    id: c.id,
+    collisions: c.metrics.collisionCount,
+    crossings: c.metrics.crossingCount,
+    smoothness: c.metrics.pathSmoothness,
+  })));
+
+  if (shouldUseGeminiRanking) {
     try {
+      console.log('Calling Gemini ranking...');
       ranking = await rankCandidatesWithGemini(candidates, userPreference);
       usedGeminiRanking = true;
+      console.log('Gemini ranking success, selected:', ranking.selectedId);
     } catch (error) {
-      console.warn('Gemini 랭킹 실패, 로컬 랭킹 사용:', error);
+      console.warn('Gemini ranking failed, using local:', error);
       ranking = rankCandidatesLocal(candidates, userPreference);
+      console.log('Local ranking fallback, selected:', ranking.selectedId);
     }
   } else {
+    console.log('Using local ranking...');
     ranking = rankCandidatesLocal(candidates, userPreference);
+    console.log('Local ranking selected:', ranking.selectedId);
   }
+  console.log('=== End Pipeline Debug ===')
 
-  // 4. 선택된 후보 찾기
+  // 4. Find selected candidate
   const selectedCandidate = candidates.find(c => c.id === ranking.selectedId) || candidates[0];
 
-  // 5. ChoreographyResult 형태로 변환
+  // 5. Convert to ChoreographyResult format
   const smoothPaths = pathsToSmoothPaths(selectedCandidate.paths);
   const validation = validatePathsSimple(selectedCandidate.paths, 0.5, totalCounts);
 
@@ -532,7 +556,7 @@ export async function generateChoreographyWithCandidates(
 }
 
 /**
- * 자연어 입력 + 다중 후보 파이프라인
+ * Natural language input + Multi-candidate pipeline
  */
 export async function generateChoreographyFromTextWithCandidates(
   userInput: string,
@@ -554,7 +578,7 @@ export async function generateChoreographyFromTextWithCandidates(
     useGeminiRanking = apiConfigured,
   } = options;
 
-  // 1. 자연어 파싱
+  // 1. Natural language parsing
   let request: ChoreographyRequest;
   if (useGeminiParser) {
     request = await parseChoreographyRequest(userInput);
@@ -562,7 +586,7 @@ export async function generateChoreographyFromTextWithCandidates(
     request = parseChoreographyRequestMock(userInput);
   }
 
-  // 2. 사용자 선호도 추출
+  // 2. Extract user preference
   const userPreference: UserPreference = {
     description: userInput,
   };
@@ -577,7 +601,7 @@ export async function generateChoreographyFromTextWithCandidates(
     userPreference.style = 'dynamic';
   }
 
-  // 3. 다중 후보 파이프라인 실행
+  // 3. Run multi-candidate pipeline
   return generateChoreographyWithCandidates(
     request.startFormation.type as FormationType,
     request.endFormation.type as FormationType,
