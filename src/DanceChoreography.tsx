@@ -177,14 +177,32 @@ function Dancer({ dancer, position, showPath, isSelected, onSelect, scale, stage
         }}
       />
 
+      {/* Dancer number with shadow for visibility */}
+      <motion.text
+        x={x}
+        y={y}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fill="#000"
+        fontSize={Math.max(12, dancerRadius * 0.9)}
+        fontWeight="bold"
+        style={{ pointerEvents: 'none', userSelect: 'none' }}
+        initial={false}
+        animate={{ x, y }}
+        transition={{ type: 'tween', duration: 0.05 }}
+      >
+        {dancer.id}
+      </motion.text>
       <motion.text
         x={x}
         y={y}
         textAnchor="middle"
         dominantBaseline="central"
         fill="#fff"
-        fontSize={Math.max(10, dancerRadius * 0.8)}
+        fontSize={Math.max(12, dancerRadius * 0.9)}
         fontWeight="bold"
+        stroke="#000"
+        strokeWidth={0.5}
         style={{ pointerEvents: 'none', userSelect: 'none' }}
         initial={false}
         animate={{ x, y }}
