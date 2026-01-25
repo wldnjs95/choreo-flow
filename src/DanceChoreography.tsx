@@ -11,6 +11,7 @@ import {
   type Position,
   type CandidateResult,
   type GeminiPipelineMode,
+  type AssignmentMode,
 } from './algorithms';
 import { isApiKeyConfigured, type AestheticScore, type RankingResult, type GeminiPreConstraint } from './gemini';
 
@@ -1609,6 +1610,7 @@ export default function DanceChoreography() {
   const [useMultiCandidate, setUseMultiCandidate] = useState(true); // Multi-candidate mode toggle
   const [apiConfigured, setApiConfigured] = useState(false);
   const [pipelineMode, setPipelineMode] = useState<GeminiPipelineMode>('ranking_only');
+  const [assignmentMode, setAssignmentMode] = useState<AssignmentMode>('fixed');
   const [preConstraint, setPreConstraint] = useState<GeminiPreConstraint | null>(null);
   const [usedGeminiPreConstraint, setUsedGeminiPreConstraint] = useState(false);
 
@@ -1700,6 +1702,7 @@ export default function DanceChoreography() {
             stageHeight: stageHeight,
             useGeminiRanking: isConfigured,
             pipelineMode: pipelineMode,
+            assignmentMode: assignmentMode,
           }
         );
 
@@ -1925,9 +1928,36 @@ export default function DanceChoreography() {
             </div>
           )}
           {useMultiCandidate && (
+            <div className="assignment-mode-selector">
+              <span className="mode-section-label">Assignment:</span>
+              <label className={`mode-option small ${assignmentMode === 'fixed' ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="assignmentMode"
+                  value="fixed"
+                  checked={assignmentMode === 'fixed'}
+                  onChange={() => setAssignmentMode('fixed')}
+                />
+                <span className="mode-label">Fixed</span>
+              </label>
+              <label className={`mode-option small ${assignmentMode === 'optimal' ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="assignmentMode"
+                  value="optimal"
+                  checked={assignmentMode === 'optimal'}
+                  onChange={() => setAssignmentMode('optimal')}
+                />
+                <span className="mode-label">Auto</span>
+              </label>
+            </div>
+          )}
+          {useMultiCandidate && (
             <span className="toggle-hint">
+              {assignmentMode === 'fixed' ? 'Dancer i → Position i' : 'Hungarian algorithm optimizes assignment'}
+              {' | '}
               {pipelineMode === 'without_gemini'
-                ? '5 strategies → Local ranking (no Gemini)'
+                ? '5 strategies → Local ranking'
                 : pipelineMode === 'ranking_only'
                   ? `5 strategies → ${apiConfigured ? 'Gemini' : 'Local'} ranking`
                   : `Gemini constraints → ${apiConfigured ? 'Gemini' : 'Local'} ranking`}

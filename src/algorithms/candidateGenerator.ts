@@ -7,8 +7,8 @@
  * 3. Gemini selects optimal candidate based on metrics
  */
 
-import { computeOptimalAssignment } from './hungarian';
-import type { Position, Assignment } from './hungarian';
+import { computeAssignment } from './hungarian';
+import type { Position, Assignment, AssignmentMode } from './hungarian';
 import { computeAllPathsSimple, validatePathsSimple } from './pathfinder';
 import type { DancerPath, PathPoint, SortStrategy, TimingMode } from './pathfinder';
 
@@ -56,6 +56,7 @@ export interface CandidateGeneratorConfig {
   collisionRadius: number;
   stageWidth: number;
   stageHeight: number;
+  assignmentMode: AssignmentMode;  // 'fixed' (default) or 'optimal'
 }
 
 const DEFAULT_STRATEGIES: CandidateStrategy[] = [
@@ -398,10 +399,12 @@ export function generateCandidate(
     collisionRadius: number;
     stageWidth: number;
     stageHeight: number;
+    assignmentMode?: AssignmentMode;
   }
 ): CandidateResult {
-  // 1. Optimal assignment (Hungarian)
-  const assignments = computeOptimalAssignment(startPositions, endPositions);
+  // 1. Assignment (fixed by default, optimal for large groups)
+  const assignmentMode = config.assignmentMode || 'fixed';
+  const assignments = computeAssignment(startPositions, endPositions, assignmentMode);
 
   // 2. Sort assignment only for center_priority strategy, others handled by pathfinder
   const processedAssignments = strategy === 'center_priority'
@@ -443,6 +446,7 @@ export function generateAllCandidates(
     collisionRadius: config.collisionRadius || 0.5,
     stageWidth: config.stageWidth || 12,
     stageHeight: config.stageHeight || 10,
+    assignmentMode: config.assignmentMode || 'fixed',  // Default: fixed assignment
   };
 
   const allCandidates: CandidateResult[] = [];
@@ -453,6 +457,7 @@ export function generateAllCandidates(
       collisionRadius: fullConfig.collisionRadius,
       stageWidth: fullConfig.stageWidth,
       stageHeight: fullConfig.stageHeight,
+      assignmentMode: fullConfig.assignmentMode,
     });
     allCandidates.push(candidate);
   }
@@ -587,10 +592,12 @@ export function generateCandidateWithConstraint(
     collisionRadius: number;
     stageWidth: number;
     stageHeight: number;
+    assignmentMode?: AssignmentMode;
   }
 ): CandidateResult {
-  // 1. Optimal assignment (Hungarian)
-  const assignments = computeOptimalAssignment(startPositions, endPositions);
+  // 1. Assignment (fixed by default)
+  const assignmentMode = config.assignmentMode || 'fixed';
+  const assignments = computeAssignment(startPositions, endPositions, assignmentMode);
 
   // 2. Sort assignments by constraint
   const sortedAssignments = sortAssignmentsByConstraint(assignments, constraint);
@@ -644,6 +651,7 @@ export function generateCandidatesWithConstraint(
     collisionRadius: config.collisionRadius || 0.5,
     stageWidth: config.stageWidth || 12,
     stageHeight: config.stageHeight || 10,
+    assignmentMode: config.assignmentMode || 'fixed',
   };
 
   const candidates: CandidateResult[] = [];
@@ -658,6 +666,7 @@ export function generateCandidatesWithConstraint(
       collisionRadius: fullConfig.collisionRadius,
       stageWidth: fullConfig.stageWidth,
       stageHeight: fullConfig.stageHeight,
+      assignmentMode: fullConfig.assignmentMode,
     }
   );
   mainCandidate.id = 'candidate_gemini_constrained';
@@ -682,6 +691,7 @@ export function generateCandidatesWithConstraint(
         collisionRadius: fullConfig.collisionRadius,
         stageWidth: fullConfig.stageWidth,
         stageHeight: fullConfig.stageHeight,
+        assignmentMode: fullConfig.assignmentMode,
       }
     );
     variant.id = `candidate_constrained_curve_${curveAmount}`;
@@ -696,6 +706,7 @@ export function generateCandidatesWithConstraint(
       collisionRadius: fullConfig.collisionRadius,
       stageWidth: fullConfig.stageWidth,
       stageHeight: fullConfig.stageHeight,
+      assignmentMode: fullConfig.assignmentMode,
     });
     candidate.id = `candidate_baseline_${strategy}`;
     candidates.push(candidate);

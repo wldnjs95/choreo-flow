@@ -250,7 +250,40 @@ function countBits(n: number): number {
 }
 
 /**
- * Main function: Compute optimal assignment
+ * Assignment mode
+ */
+export type AssignmentMode = 'fixed' | 'optimal';
+
+/**
+ * Fixed assignment: Dancer i → End position i (direct 1:1 mapping)
+ * No optimization, preserves user-defined order
+ */
+export function computeFixedAssignment(
+  startPositions: Position[],
+  endPositions: Position[]
+): Assignment[] {
+  if (startPositions.length !== endPositions.length) {
+    throw new Error('Number of start and end positions must be equal.');
+  }
+
+  const n = startPositions.length;
+  const result: Assignment[] = [];
+
+  for (let i = 0; i < n; i++) {
+    result.push({
+      dancerId: i + 1,
+      startPosition: startPositions[i],
+      endPosition: endPositions[i],  // Direct mapping: i → i
+      distance: euclideanDistance(startPositions[i], endPositions[i]),
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Optimal assignment using Hungarian algorithm
+ * Minimizes total movement distance
  */
 export function computeOptimalAssignment(
   startPositions: Position[],
@@ -277,6 +310,20 @@ export function computeOptimalAssignment(
   }
 
   return result;
+}
+
+/**
+ * Compute assignment based on mode
+ */
+export function computeAssignment(
+  startPositions: Position[],
+  endPositions: Position[],
+  mode: AssignmentMode = 'fixed'
+): Assignment[] {
+  if (mode === 'optimal') {
+    return computeOptimalAssignment(startPositions, endPositions);
+  }
+  return computeFixedAssignment(startPositions, endPositions);
 }
 
 /**

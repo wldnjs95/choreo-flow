@@ -9,8 +9,8 @@
  * 5. Gemini: Aesthetic evaluation and feedback
  */
 
-import { computeOptimalAssignment } from './hungarian';
-import type { Position, Assignment } from './hungarian';
+import { computeAssignment } from './hungarian';
+import type { Position, Assignment, AssignmentMode } from './hungarian';
 import { computeAllPathsSimple, validatePathsSimple } from './pathfinder';
 import type { DancerPath } from './pathfinder';
 import { generateFormation, applySpread } from './formations';
@@ -160,8 +160,8 @@ export async function generateChoreographyFromText(
     endPositions = applySpread(endPositions, request.style.spread, stageWidth, stageHeight);
   }
 
-  // 3. Optimal assignment (Hungarian Algorithm)
-  const assignments = computeOptimalAssignment(startPositions, endPositions);
+  // 3. Assignment (fixed by default)
+  const assignments = computeAssignment(startPositions, endPositions, 'fixed');
 
   // 4. Path calculation (Simple Pathfinder - linear + collision avoidance)
   const paths = computeAllPathsSimple(assignments, {
@@ -242,8 +242,8 @@ export function generateChoreographyDirect(
   const startPositions = customStartPositions || generateFormation(startFormation, dancerCount, { spread, stageWidth, stageHeight });
   const endPositions = customEndPositions || generateFormation(endFormation, dancerCount, { spread, stageWidth, stageHeight });
 
-  // Optimal assignment
-  const assignments = computeOptimalAssignment(startPositions, endPositions);
+  // Assignment (fixed by default)
+  const assignments = computeAssignment(startPositions, endPositions, 'fixed');
 
   // Path calculation (Simple Pathfinder)
   const paths = computeAllPathsSimple(assignments, {
@@ -398,6 +398,7 @@ export async function generateChoreographyWithCandidates(
     userPreference?: UserPreference;
     useGeminiRanking?: boolean;
     pipelineMode?: GeminiPipelineMode;
+    assignmentMode?: AssignmentMode;
   } = {}
 ): Promise<MultiCandidateResult> {
   const {
@@ -412,6 +413,7 @@ export async function generateChoreographyWithCandidates(
     userPreference = {},
     useGeminiRanking = false,
     pipelineMode = 'ranking_only',
+    assignmentMode = 'fixed',
   } = options;
 
   const startTime = performance.now();
@@ -441,6 +443,7 @@ export async function generateChoreographyWithCandidates(
       collisionRadius: 0.5,
       stageWidth,
       stageHeight,
+      assignmentMode,
     });
   } else {
     // Without Gemini or Ranking Only mode: standard 5 strategies
@@ -449,6 +452,7 @@ export async function generateChoreographyWithCandidates(
       collisionRadius: 0.5,
       stageWidth,
       stageHeight,
+      assignmentMode,
     });
   }
 

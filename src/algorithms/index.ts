@@ -4,11 +4,14 @@
 
 // Hungarian Algorithm
 export {
+  computeAssignment,
+  computeFixedAssignment,
   computeOptimalAssignment,
   calculateTotalDistance,
   summarizeAssignment,
   type Position,
   type Assignment,
+  type AssignmentMode,
 } from './hungarian';
 
 // Simple Pathfinder (linear path + collision avoidance)
