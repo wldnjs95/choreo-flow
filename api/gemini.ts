@@ -8,7 +8,7 @@ export const config = {
   runtime: 'edge',
 };
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent';
 
 export default async function handler(request: Request) {
   // CORS 헤더
