@@ -1078,7 +1078,7 @@ function FormationEditor({
             </div>
             {assignmentMode === 'partial' && (
               <div className="partial-assignment-hint">
-                <span>🔒 Click dancers to lock/unlock their end positions</span>
+                <span>🔒 <strong>Ctrl + Click</strong> on dancers to lock/unlock their end positions</span>
                 <span className="locked-count">Locked: {localLockedDancers.size} / {dancerCount}</span>
               </div>
             )}
