@@ -374,6 +374,13 @@ export interface MultiCandidateResult {
     pipelineMode: GeminiPipelineMode;
     usedGeminiPreConstraint: boolean;
   };
+
+  // Gemini enhancement status (for progressive UX)
+  geminiEnhancement?: {
+    status: 'pending' | 'success' | 'failed' | 'timeout';
+    enhancedRanking?: RankingResult;
+    enhancedResult?: ChoreographyResult;
+  };
 }
 
 /**
@@ -558,6 +565,214 @@ export async function generateChoreographyWithCandidates(
       usedGeminiPreConstraint,
     },
   };
+}
+
+/**
+ * Progressive Enhancement: Run Gemini ranking in background
+ * Returns immediately with local result, calls onGeminiResult when Gemini responds
+ */
+export async function generateWithProgressiveEnhancement(
+  startFormation: FormationType,
+  endFormation: FormationType,
+  options: {
+    dancerCount?: number;
+    spread?: number;
+    totalCounts?: number;
+    mainDancer?: number;
+    customStartPositions?: Position[];
+    customEndPositions?: Position[];
+    stageWidth?: number;
+    stageHeight?: number;
+    userPreference?: UserPreference;
+    pipelineMode?: GeminiPipelineMode;
+    assignmentMode?: AssignmentMode;
+    lockedDancers?: Set<number>;
+    onGeminiResult?: (result: MultiCandidateResult) => void;
+  } = {}
+): Promise<MultiCandidateResult> {
+  const {
+    dancerCount = 8,
+    spread = 1.0,
+    totalCounts = 8,
+    mainDancer = null,
+    customStartPositions,
+    customEndPositions,
+    stageWidth = 12,
+    stageHeight = 10,
+    userPreference = {},
+    pipelineMode = 'ranking_only',
+    assignmentMode = 'fixed',
+    lockedDancers,
+    onGeminiResult,
+  } = options;
+
+  const startTime = performance.now();
+
+  // 1. Generate formation
+  const startPositions = customStartPositions || generateFormation(startFormation, dancerCount, { spread, stageWidth, stageHeight });
+  const endPositions = customEndPositions || generateFormation(endFormation, dancerCount, { spread, stageWidth, stageHeight });
+
+  // 2. Generate candidates (local, fast)
+  const candidates = generateAllCandidates(startPositions, endPositions, {
+    totalCounts,
+    collisionRadius: 0.5,
+    stageWidth,
+    stageHeight,
+    assignmentMode,
+    lockedDancers,
+  });
+
+  // 3. Local ranking (instant)
+  const localRanking = rankCandidatesLocal(candidates, userPreference);
+  const localCandidate = candidates.find(c => c.id === localRanking.selectedId) || candidates[0];
+
+  // 4. Build initial result with local ranking
+  const smoothPaths = pathsToSmoothPaths(localCandidate.paths);
+  const validation = validatePathsSimple(localCandidate.paths, 0.5, totalCounts);
+
+  const request: ChoreographyRequest = {
+    startFormation: { type: startFormation },
+    endFormation: { type: endFormation },
+    constraints: [],
+    style: { spread, symmetry: false, smoothness: 0.7, speed: 'normal', dramatic: false },
+    mainDancer,
+    keyframes: [],
+    totalCounts,
+    originalInput: '',
+  };
+
+  const distances = localCandidate.paths.map(p => p.totalDistance);
+  const resultMetadata = {
+    totalDistance: distances.reduce((sum, d) => sum + d, 0),
+    averageDistance: distances.reduce((sum, d) => sum + d, 0) / distances.length,
+    maxDistance: Math.max(...distances),
+    minDistance: Math.min(...distances),
+    computeTimeMs: performance.now() - startTime,
+  };
+
+  const pathResults = localCandidate.paths.map(p => ({
+    dancerId: p.dancerId,
+    path: p.path,
+    totalDistance: p.totalDistance,
+    collisionFree: true,
+  }));
+  const aestheticScore = evaluateChoreographyLocal(pathResults, mainDancer);
+
+  const localResult: ChoreographyResult = {
+    request,
+    startPositions,
+    endPositions,
+    assignments: localCandidate.assignments,
+    paths: localCandidate.paths,
+    smoothPaths,
+    validation,
+    aestheticScore,
+    metadata: resultMetadata,
+  };
+
+  const initialResult: MultiCandidateResult = {
+    selectedResult: localResult,
+    candidates,
+    ranking: localRanking,
+    candidatesSummary: summarizeCandidatesForGemini(candidates),
+    metadata: {
+      totalCandidates: candidates.length,
+      selectedStrategy: localCandidate.strategy,
+      computeTimeMs: performance.now() - startTime,
+      usedGeminiRanking: false,
+      pipelineMode,
+      usedGeminiPreConstraint: false,
+    },
+    geminiEnhancement: pipelineMode !== 'without_gemini' ? { status: 'pending' } : undefined,
+  };
+
+  // 5. If not using Gemini, return immediately
+  if (pipelineMode === 'without_gemini' || !onGeminiResult) {
+    return initialResult;
+  }
+
+  // 6. Fire Gemini ranking in background (non-blocking)
+  (async () => {
+    try {
+      console.log('[Progressive] Starting Gemini ranking in background...');
+      const geminiRanking = await rankCandidatesWithGemini(candidates, userPreference);
+
+      // Check if Gemini selected a different candidate
+      const geminiCandidate = candidates.find(c => c.id === geminiRanking.selectedId) || candidates[0];
+
+      if (geminiCandidate.id !== localCandidate.id) {
+        console.log(`[Progressive] Gemini selected different: ${geminiCandidate.id} (was: ${localCandidate.id})`);
+
+        // Build enhanced result
+        const enhancedSmoothPaths = pathsToSmoothPaths(geminiCandidate.paths);
+        const enhancedValidation = validatePathsSimple(geminiCandidate.paths, 0.5, totalCounts);
+
+        const enhancedResult: ChoreographyResult = {
+          request,
+          startPositions,
+          endPositions,
+          assignments: geminiCandidate.assignments,
+          paths: geminiCandidate.paths,
+          smoothPaths: enhancedSmoothPaths,
+          validation: enhancedValidation,
+          aestheticScore: evaluateChoreographyLocal(
+            geminiCandidate.paths.map(p => ({ dancerId: p.dancerId, path: p.path, totalDistance: p.totalDistance, collisionFree: true })),
+            mainDancer
+          ),
+          metadata: {
+            ...resultMetadata,
+            computeTimeMs: performance.now() - startTime,
+          },
+        };
+
+        onGeminiResult({
+          ...initialResult,
+          selectedResult: enhancedResult,
+          ranking: geminiRanking,
+          metadata: {
+            ...initialResult.metadata,
+            selectedStrategy: geminiCandidate.strategy,
+            usedGeminiRanking: true,
+            computeTimeMs: performance.now() - startTime,
+          },
+          geminiEnhancement: {
+            status: 'success',
+            enhancedRanking: geminiRanking,
+            enhancedResult,
+          },
+        });
+      } else {
+        console.log('[Progressive] Gemini agreed with local ranking');
+        onGeminiResult({
+          ...initialResult,
+          ranking: geminiRanking,
+          metadata: {
+            ...initialResult.metadata,
+            usedGeminiRanking: true,
+            computeTimeMs: performance.now() - startTime,
+          },
+          geminiEnhancement: {
+            status: 'success',
+            enhancedRanking: geminiRanking,
+          },
+        });
+      }
+    } catch (error) {
+      console.warn('[Progressive] Gemini ranking failed:', error);
+      const isTimeout = error instanceof Error &&
+        (error.message.includes('timeout') || error.message.includes('504'));
+
+      onGeminiResult({
+        ...initialResult,
+        geminiEnhancement: {
+          status: isTimeout ? 'timeout' : 'failed',
+        },
+      });
+    }
+  })();
+
+  // Return local result immediately
+  return initialResult;
 }
 
 /**

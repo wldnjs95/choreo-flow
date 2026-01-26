@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   generateChoreographyFromText,
   generateChoreographyDirect,
-  generateChoreographyWithCandidates,
+  generateWithProgressiveEnhancement,
   generateFormation,
   type ChoreographyResult,
   type SmoothPath,
@@ -12,6 +12,7 @@ import {
   type CandidateResult,
   type GeminiPipelineMode,
   type AssignmentMode,
+  type MultiCandidateResult,
 } from './algorithms';
 import { isApiKeyConfigured, type AestheticScore, type RankingResult, type GeminiPreConstraint } from './gemini';
 
@@ -1388,6 +1389,9 @@ interface CandidateComparisonPanelProps {
   preConstraint: GeminiPreConstraint | null;
   usedGeminiPreConstraint: boolean;
   pipelineMode: GeminiPipelineMode;
+  geminiStatus: 'idle' | 'pending' | 'success' | 'failed' | 'timeout';
+  pendingGeminiResult: MultiCandidateResult | null;
+  onApplyGeminiResult: () => void;
 }
 
 function CandidateComparisonPanel({
@@ -1399,6 +1403,9 @@ function CandidateComparisonPanel({
   preConstraint,
   usedGeminiPreConstraint,
   pipelineMode,
+  geminiStatus,
+  pendingGeminiResult,
+  onApplyGeminiResult,
 }: CandidateComparisonPanelProps) {
   const getStrategyLabel = (strategy: string) => {
     const labels: Record<string, string> = {
@@ -1440,8 +1447,40 @@ function CandidateComparisonPanel({
           <span className={`ranking-badge ${usedGeminiRanking ? 'gemini' : 'local'}`}>
             {usedGeminiRanking ? '🤖 Gemini' : '📊 Local'}
           </span>
+          {geminiStatus === 'pending' && (
+            <span className="gemini-status pending">
+              <span className="spinner"></span> AI 분석중...
+            </span>
+          )}
         </div>
       </div>
+
+      {/* Gemini Enhancement Banner */}
+      {pendingGeminiResult && geminiStatus === 'success' && (
+        <div className="gemini-enhancement-banner">
+          <div className="banner-content">
+            <span className="banner-icon">✨</span>
+            <span className="banner-text">
+              AI가 더 나은 후보를 찾았습니다: <strong>{pendingGeminiResult.metadata.selectedStrategy}</strong>
+            </span>
+          </div>
+          <button className="apply-gemini-btn" onClick={onApplyGeminiResult}>
+            AI 결과 적용
+          </button>
+        </div>
+      )}
+
+      {geminiStatus === 'timeout' && (
+        <div className="gemini-status-banner timeout">
+          <span>⏱️ AI 응답 시간 초과 - 로컬 결과 사용중</span>
+        </div>
+      )}
+
+      {geminiStatus === 'failed' && (
+        <div className="gemini-status-banner failed">
+          <span>⚠️ AI 연결 실패 - 로컬 결과 사용중</span>
+        </div>
+      )}
 
       {pipelineMode === 'pre_and_ranking' && preConstraint && (
         <div className="pre-constraint-info">
@@ -1733,6 +1772,8 @@ export default function DanceChoreography() {
   const [lockedDancers, setLockedDancers] = useState<Set<number>>(new Set());
   const [preConstraint, setPreConstraint] = useState<GeminiPreConstraint | null>(null);
   const [usedGeminiPreConstraint, setUsedGeminiPreConstraint] = useState(false);
+  const [geminiStatus, setGeminiStatus] = useState<'idle' | 'pending' | 'success' | 'failed' | 'timeout'>('idle');
+  const [pendingGeminiResult, setPendingGeminiResult] = useState<MultiCandidateResult | null>(null);
 
   // Check API configuration on mount
   useEffect(() => {
@@ -1804,12 +1845,15 @@ export default function DanceChoreography() {
   const handleDirectGenerate = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    setGeminiStatus('idle');
+    setPendingGeminiResult(null);
 
     try {
       if (useMultiCandidate) {
-        // Multi-candidate mode
-        const isConfigured = await isApiKeyConfigured();
-        const multiResult = await generateChoreographyWithCandidates(
+        // Progressive Enhancement: Local result first, Gemini in background
+        const shouldUseGemini = pipelineMode !== 'without_gemini';
+
+        const multiResult = await generateWithProgressiveEnhancement(
           startFormation,
           endFormation,
           {
@@ -1820,16 +1864,30 @@ export default function DanceChoreography() {
             customEndPositions: endFormation === 'custom' ? customEndPositions.slice(0, dancerCount) : undefined,
             stageWidth: stageWidth,
             stageHeight: stageHeight,
-            useGeminiRanking: isConfigured,
             pipelineMode: pipelineMode,
             assignmentMode: assignmentMode,
             lockedDancers: assignmentMode === 'partial' ? lockedDancers : undefined,
+            // Callback when Gemini result arrives
+            onGeminiResult: shouldUseGemini ? (geminiResult) => {
+              console.log('[UI] Gemini result received:', geminiResult.geminiEnhancement?.status);
+              const status = geminiResult.geminiEnhancement?.status || 'failed';
+              setGeminiStatus(status);
+
+              if (status === 'success' && geminiResult.geminiEnhancement?.enhancedResult) {
+                // Gemini selected different candidate - offer to user
+                setPendingGeminiResult(geminiResult);
+              } else if (status === 'success') {
+                // Gemini agreed with local - just update ranking info
+                setRanking(geminiResult.ranking);
+                setUsedGeminiRanking(true);
+              }
+            } : undefined,
           }
         );
 
+        // Immediately show local result
         setCandidates(multiResult.candidates);
         setRanking(multiResult.ranking);
-        // Without ranking, use first candidate (best metrics)
         setSelectedCandidateId(multiResult.ranking?.selectedId || multiResult.candidates[0]?.id);
         setUsedGeminiRanking(multiResult.metadata.usedGeminiRanking);
         setPreConstraint(multiResult.preConstraint || null);
@@ -1837,6 +1895,11 @@ export default function DanceChoreography() {
         setResult(multiResult.selectedResult);
         setDancers(resultToDancerData(multiResult.selectedResult));
         setTotalCounts(multiResult.selectedResult.request.totalCounts);
+
+        // Set pending status if Gemini is being called
+        if (shouldUseGemini) {
+          setGeminiStatus('pending');
+        }
       } else {
         // Single result mode (legacy)
         const choreographyResult = generateChoreographyDirect(
@@ -1897,6 +1960,21 @@ export default function DanceChoreography() {
       setDancers(resultToDancerData(newResult));
     }
   }, [candidates, result]);
+
+  // Apply Gemini enhanced result
+  const handleApplyGeminiResult = useCallback(() => {
+    if (!pendingGeminiResult) return;
+
+    const geminiResult = pendingGeminiResult;
+    setCandidates(geminiResult.candidates);
+    setRanking(geminiResult.ranking);
+    setSelectedCandidateId(geminiResult.ranking?.selectedId || geminiResult.candidates[0]?.id);
+    setUsedGeminiRanking(true);
+    setResult(geminiResult.selectedResult);
+    setDancers(resultToDancerData(geminiResult.selectedResult));
+    setPendingGeminiResult(null);
+    setGeminiStatus('success');
+  }, [pendingGeminiResult]);
 
   // Handle formation preset in editor
   const handleApplyPreset = useCallback((formation: FormationType, target: 'start' | 'end', spread: number = 1.0) => {
@@ -2138,6 +2216,9 @@ export default function DanceChoreography() {
               preConstraint={preConstraint}
               usedGeminiPreConstraint={usedGeminiPreConstraint}
               pipelineMode={pipelineMode}
+              geminiStatus={geminiStatus}
+              pendingGeminiResult={pendingGeminiResult}
+              onApplyGeminiResult={handleApplyGeminiResult}
             />
           )}
 

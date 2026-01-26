@@ -56,6 +56,7 @@ export {
   generateChoreographyDirect,
   generateChoreographyWithCandidates,
   generateChoreographyFromTextWithCandidates,
+  generateWithProgressiveEnhancement,
   toVisualizationData,
   exportToJSON,
   type ChoreographyResult,
