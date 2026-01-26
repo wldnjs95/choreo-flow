@@ -18,7 +18,8 @@ const app = new Hono();
 // CORS 설정
 app.use('/*', cors());
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent';
+const FETCH_TIMEOUT = 55000; // 55초 (로컬은 제한 없음, 여유있게)
 
 // Health check
 app.get('/api/health', (c) => {
@@ -42,21 +43,37 @@ app.post('/api/gemini', async (c) => {
 
     const body = await c.req.json();
 
-    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
+    // AbortController로 타임아웃 처리
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
-    const data = await response.json();
+    try {
+      const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      return c.json({ error: data.error?.message || 'Gemini API error' }, response.status);
+      clearTimeout(timeoutId);
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return c.json({ error: data.error?.message || 'Gemini API error' }, response.status);
+      }
+
+      return c.json(data);
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        return c.json({ error: 'Gemini API timeout', timeout: true }, 504);
+      }
+      throw fetchError;
     }
-
-    return c.json(data);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
   }

@@ -104,12 +104,13 @@ Return JSON only. Output JSON without explanation.`;
 }
 
 /**
- * Rank candidates using Gemini
+ * Rank candidates using Gemini (with retry on timeout)
  */
 export async function rankCandidatesWithGemini(
   candidates: CandidateResult[],
-  userPreference: UserPreference = {}
-): Promise<RankingResult> {
+  userPreference: UserPreference = {},
+  maxRetries: number = 1
+): Promise<RankingResult & { usedFallback?: boolean }> {
   const candidatesSummary = candidates.map(c => ({
     id: c.id,
     strategy: c.strategy,
@@ -118,30 +119,54 @@ export async function rankCandidatesWithGemini(
 
   const prompt = createRankingPrompt(candidatesSummary, userPreference);
 
-  try {
-    // Use low temperature for consistency in ranking
-    const responseText = await callGeminiAPI(prompt, { temperature: 0.3 });
-    const jsonStr = extractJSON(responseText);
-    const result = JSON.parse(jsonStr) as RankingResult;
+  let lastError: Error | null = null;
 
-    // Validation
-    if (!result.selectedId || !result.rankings || !Array.isArray(result.rankings)) {
-      throw new Error('Invalid ranking response format');
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      if (attempt > 0) {
+        console.log(`Gemini API retry attempt ${attempt}/${maxRetries}...`);
+      }
+
+      // Use low temperature for consistency in ranking
+      const responseText = await callGeminiAPI(prompt, { temperature: 0.3 });
+      const jsonStr = extractJSON(responseText);
+      const result = JSON.parse(jsonStr) as RankingResult;
+
+      // Validation
+      if (!result.selectedId || !result.rankings || !Array.isArray(result.rankings)) {
+        throw new Error('Invalid ranking response format');
+      }
+
+      // Verify selected ID exists in actual candidates
+      const validIds = candidates.map(c => c.id);
+      if (!validIds.includes(result.selectedId)) {
+        // Fallback to candidate with best metrics
+        result.selectedId = candidates[0].id;
+      }
+
+      return result;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error(`Gemini ranking error (attempt ${attempt + 1}):`, error);
+
+      // Check if it's a timeout error - retry
+      const isTimeout = lastError.message.includes('timeout') ||
+                        lastError.message.includes('504') ||
+                        lastError.message.includes('Timeout');
+
+      if (!isTimeout || attempt >= maxRetries) {
+        break;
+      }
+
+      // Wait before retry (exponential backoff)
+      await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
     }
-
-    // Verify selected ID exists in actual candidates
-    const validIds = candidates.map(c => c.id);
-    if (!validIds.includes(result.selectedId)) {
-      // Fallback to candidate with best metrics
-      result.selectedId = candidates[0].id;
-    }
-
-    return result;
-  } catch (error) {
-    console.error('Gemini ranking error:', error);
-    // Fallback: use local ranking
-    return rankCandidatesLocal(candidates, userPreference);
   }
+
+  // Fallback: use local ranking
+  console.log('Using local ranking fallback...');
+  const localResult = rankCandidatesLocal(candidates, userPreference);
+  return { ...localResult, usedFallback: true };
 }
 
 /**
