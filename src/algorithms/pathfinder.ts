@@ -50,6 +50,8 @@ export interface PathfinderConfig {
   preferTiming?: boolean;       // Prefer timing adjustment (default: true)
   timingMode?: TimingMode;      // Timing mode (default: proportional)
   staggerDelay?: number;        // Delay between dancers for staggered mode (default: 0.5)
+  forceCurve?: boolean;         // Force curved paths even without collision
+  speedMultiplier?: number;     // Speed multiplier (1.0 = normal, >1 = faster, <1 = slower)
 }
 
 const DEFAULT_CONFIG: PathfinderConfig = {
@@ -274,10 +276,36 @@ export function computeAllPathsSimple(
         break;
     }
 
+    // Apply speed multiplier if specified
+    const speedMultiplier = cfg.speedMultiplier ?? 1.0;
+    if (speedMultiplier !== 1.0) {
+      const duration = endTime - startTime;
+      const adjustedDuration = duration / speedMultiplier;  // Faster = shorter duration
+      endTime = Math.min(startTime + adjustedDuration, cfg.totalCounts);
+      // Ensure minimum travel time
+      if (endTime - startTime < 1) {
+        endTime = Math.min(startTime + 1, cfg.totalCounts);
+      }
+    }
+
     dancerIndex++;
 
-    // Generate default linear path
-    let path = generateLinearPath(startPosition, endPosition, startTime, endTime, cfg.numPoints);
+    // Generate default path (curved if forceCurve is enabled)
+    let path: PathPoint[];
+    const forceCurve = cfg.forceCurve ?? false;
+
+    if (forceCurve) {
+      // Generate curved path with varying offset based on dancer index
+      // Alternate between positive and negative curves for visual variety
+      const curveDirection = dancerIndex % 2 === 0 ? 1 : -1;
+      const maxOffset = cfg.maxCurveOffset ?? 0.5;
+      // Use deterministic offset based on dancer position for consistency
+      const offsetFactor = 0.6 + (dancerIndex % 5) * 0.1;  // Range: 0.6 ~ 1.0
+      const curveOffset = curveDirection * maxOffset * offsetFactor;
+      path = generateCurvedPath(startPosition, endPosition, startTime, endTime, cfg.numPoints, curveOffset);
+    } else {
+      path = generateLinearPath(startPosition, endPosition, startTime, endTime, cfg.numPoints);
+    }
 
     // Check collision with existing paths
     let hasConflict = false;

@@ -20,7 +20,10 @@ export type CandidateStrategy =
   | 'distance_shortest_first'  // Short distance first
   | 'synchronized_arrival'     // All dancers arrive at same time
   | 'staggered_wave'           // Sequential start with wave effect
-  | 'center_priority';         // Center dancer first
+  | 'center_priority'          // Center dancer first
+  | 'curved_smooth'            // Force curved paths for aesthetic
+  | 'quick_burst'              // Fast movement, all start together
+  | 'slow_dramatic';           // Slow dramatic entrance with delays
 
 /**
  * Candidate metrics
@@ -62,10 +65,11 @@ export interface CandidateGeneratorConfig {
 
 const DEFAULT_STRATEGIES: CandidateStrategy[] = [
   'distance_longest_first',
-  'distance_shortest_first',
   'synchronized_arrival',
   'staggered_wave',
-  'center_priority',
+  'curved_smooth',
+  'quick_burst',
+  'slow_dramatic',
 ];
 
 /**
@@ -381,6 +385,35 @@ function getPathfinderConfig(strategy: CandidateStrategy, totalCounts: number) {
         sortStrategy: 'distance_longest_first' as SortStrategy,
         timingMode: 'staggered' as TimingMode,
         staggerDelay: 0.5,
+      };
+
+    case 'curved_smooth':
+      // Force curved paths for smooth aesthetic
+      return {
+        ...baseConfig,
+        sortStrategy: 'distance_longest_first' as SortStrategy,
+        timingMode: 'proportional' as TimingMode,
+        maxCurveOffset: 1.5,  // Force curves
+        forceCurve: true,
+      };
+
+    case 'quick_burst':
+      // Fast movement, everyone arrives quickly
+      return {
+        ...baseConfig,
+        sortStrategy: 'distance_longest_first' as SortStrategy,
+        timingMode: 'synchronized' as TimingMode,
+        speedMultiplier: 1.5,  // Faster
+      };
+
+    case 'slow_dramatic':
+      // Slow dramatic entrance with staggered delays
+      return {
+        ...baseConfig,
+        sortStrategy: 'distance_longest_first' as SortStrategy,
+        timingMode: 'staggered' as TimingMode,
+        staggerDelay: 1.0,  // Longer delay between dancers
+        speedMultiplier: 0.7,  // Slower
       };
 
     default:
