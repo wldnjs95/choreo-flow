@@ -1,98 +1,62 @@
 /**
  * Vercel Serverless Function - Gemini API Proxy
  *
- * 프론트엔드에서 API 키 노출 없이 Gemini API 호출
+ * Node.js 런타임 사용 (타임아웃 없이 Pro 모델 사용)
+ * Pro 플랜: 최대 60초, Enterprise: 최대 300초
  */
 
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+
 export const config = {
-  runtime: 'edge',
-  // Edge 런타임은 최대 30초 (Pro 플랜에서도)
-  // 더 긴 타임아웃이 필요하면 runtime: 'nodejs' + maxDuration 사용
+  maxDuration: 60,  // Pro 플랜 최대값 (초)
 };
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent';
-const FETCH_TIMEOUT = 25000; // 25초 (Vercel Edge 30초 제한보다 여유있게)
 
-export default async function handler(request: Request) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS 헤더
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  };
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   // Preflight 요청 처리
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers: corsHeaders });
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
 
-  if (request.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'API key not configured' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      return res.status(500).json({ error: 'API key not configured' });
+    }
+
+    const body = req.body;
+
+    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: data.error?.message || 'Gemini API error'
       });
     }
 
-    const body = await request.json();
-
-    // AbortController로 타임아웃 처리
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-
-    try {
-      const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        return new Response(JSON.stringify({ error: data.error?.message || 'Gemini API error' }), {
-          status: response.status,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      return new Response(JSON.stringify(data), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-
-      // 타임아웃 에러 처리
-      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-        return new Response(JSON.stringify({
-          error: 'Gemini API timeout - try again or use simpler input',
-          timeout: true
-        }), {
-          status: 504,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      throw fetchError;
-    }
+    return res.status(200).json(data);
   } catch (error) {
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 }
