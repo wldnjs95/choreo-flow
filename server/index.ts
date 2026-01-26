@@ -18,7 +18,7 @@ const app = new Hono();
 // CORS 설정
 app.use('/*', cors());
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
 
 // Health check
 app.get('/api/health', (c) => {
