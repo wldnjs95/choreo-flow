@@ -4,6 +4,7 @@ import {
   generateChoreographyFromText,
   generateChoreographyDirect,
   generateWithProgressiveEnhancement,
+  generateChoreographyWithCandidates,
   generateFormation,
   type ChoreographyResult,
   type SmoothPath,
@@ -1850,55 +1851,94 @@ export default function DanceChoreography() {
 
     try {
       if (useMultiCandidate) {
-        // Progressive Enhancement: Local result first, Gemini in background
-        const shouldUseGemini = pipelineMode !== 'without_gemini';
-
-        const multiResult = await generateWithProgressiveEnhancement(
-          startFormation,
-          endFormation,
-          {
-            dancerCount: dancerCount,
-            spread: 1.0,
-            totalCounts: 8,
-            customStartPositions: customStartPositions.slice(0, dancerCount),
-            customEndPositions: customEndPositions.slice(0, dancerCount),
-            stageWidth: stageWidth,
-            stageHeight: stageHeight,
-            pipelineMode: pipelineMode,
-            assignmentMode: assignmentMode,
-            lockedDancers: assignmentMode === 'partial' ? lockedDancers : undefined,
-            // Callback when Gemini result arrives
-            onGeminiResult: shouldUseGemini ? (geminiResult) => {
-              console.log('[UI] Gemini result received:', geminiResult.geminiEnhancement?.status);
-              const status = geminiResult.geminiEnhancement?.status || 'failed';
-              setGeminiStatus(status);
-
-              if (status === 'success' && geminiResult.geminiEnhancement?.enhancedResult) {
-                // Gemini selected different candidate - offer to user
-                setPendingGeminiResult(geminiResult);
-              } else if (status === 'success') {
-                // Gemini agreed with local - just update ranking info
-                setRanking(geminiResult.ranking);
-                setUsedGeminiRanking(true);
-              }
-            } : undefined,
-          }
-        );
-
-        // Immediately show local result
-        setCandidates(multiResult.candidates);
-        setRanking(multiResult.ranking);
-        setSelectedCandidateId(multiResult.ranking?.selectedId || multiResult.candidates[0]?.id);
-        setUsedGeminiRanking(multiResult.metadata.usedGeminiRanking);
-        setPreConstraint(multiResult.preConstraint || null);
-        setUsedGeminiPreConstraint(multiResult.metadata.usedGeminiPreConstraint);
-        setResult(multiResult.selectedResult);
-        setDancers(resultToDancerData(multiResult.selectedResult));
-        setTotalCounts(multiResult.selectedResult.request.totalCounts);
-
-        // Set pending status if Gemini is being called
-        if (shouldUseGemini) {
+        // Special case: Gemini Only mode - no progressive enhancement needed
+        if (pipelineMode === 'gemini_only') {
           setGeminiStatus('pending');
+
+          const multiResult = await generateChoreographyWithCandidates(
+            startFormation,
+            endFormation,
+            {
+              dancerCount: dancerCount,
+              spread: 1.0,
+              totalCounts: 8,
+              customStartPositions: customStartPositions.slice(0, dancerCount),
+              customEndPositions: customEndPositions.slice(0, dancerCount),
+              stageWidth: stageWidth,
+              stageHeight: stageHeight,
+              pipelineMode: 'gemini_only',
+              useGeminiRanking: false, // No ranking in gemini_only mode
+            }
+          );
+
+          setCandidates([]); // No candidates in gemini_only mode
+          setRanking(null);
+          setSelectedCandidateId('');
+          setUsedGeminiRanking(false);
+          setPreConstraint(null);
+          setUsedGeminiPreConstraint(false);
+          setResult(multiResult.selectedResult);
+          setDancers(resultToDancerData(multiResult.selectedResult));
+          setTotalCounts(multiResult.selectedResult.request.totalCounts);
+          setGeminiStatus('success');
+
+          // Log Gemini choreography info
+          if (multiResult.geminiChoreography) {
+            console.log('[Gemini Only] Strategy:', multiResult.geminiChoreography.strategy);
+            console.log('[Gemini Only] Reasoning:', multiResult.geminiChoreography.reasoning);
+            console.log('[Gemini Only] Confidence:', multiResult.geminiChoreography.confidence);
+          }
+        } else {
+          // Progressive Enhancement: Local result first, Gemini in background
+          const shouldUseGemini = pipelineMode !== 'without_gemini';
+
+          const multiResult = await generateWithProgressiveEnhancement(
+            startFormation,
+            endFormation,
+            {
+              dancerCount: dancerCount,
+              spread: 1.0,
+              totalCounts: 8,
+              customStartPositions: customStartPositions.slice(0, dancerCount),
+              customEndPositions: customEndPositions.slice(0, dancerCount),
+              stageWidth: stageWidth,
+              stageHeight: stageHeight,
+              pipelineMode: pipelineMode,
+              assignmentMode: assignmentMode,
+              lockedDancers: assignmentMode === 'partial' ? lockedDancers : undefined,
+              // Callback when Gemini result arrives
+              onGeminiResult: shouldUseGemini ? (geminiResult) => {
+                console.log('[UI] Gemini result received:', geminiResult.geminiEnhancement?.status);
+                const status = geminiResult.geminiEnhancement?.status || 'failed';
+                setGeminiStatus(status);
+
+                if (status === 'success' && geminiResult.geminiEnhancement?.enhancedResult) {
+                  // Gemini selected different candidate - offer to user
+                  setPendingGeminiResult(geminiResult);
+                } else if (status === 'success') {
+                  // Gemini agreed with local - just update ranking info
+                  setRanking(geminiResult.ranking);
+                  setUsedGeminiRanking(true);
+                }
+              } : undefined,
+            }
+          );
+
+          // Immediately show local result
+          setCandidates(multiResult.candidates);
+          setRanking(multiResult.ranking);
+          setSelectedCandidateId(multiResult.ranking?.selectedId || multiResult.candidates[0]?.id);
+          setUsedGeminiRanking(multiResult.metadata.usedGeminiRanking);
+          setPreConstraint(multiResult.preConstraint || null);
+          setUsedGeminiPreConstraint(multiResult.metadata.usedGeminiPreConstraint);
+          setResult(multiResult.selectedResult);
+          setDancers(resultToDancerData(multiResult.selectedResult));
+          setTotalCounts(multiResult.selectedResult.request.totalCounts);
+
+          // Set pending status if Gemini is being called
+          if (shouldUseGemini) {
+            setGeminiStatus('pending');
+          }
         }
       } else {
         // Single result mode (legacy)
@@ -2124,6 +2164,17 @@ export default function DanceChoreography() {
                 <span className="mode-label">Pre + Ranking</span>
                 <span className="mode-desc">Gemini constraints → Algorithm → Gemini ranking</span>
               </label>
+              <label className={`mode-option gemini-only ${pipelineMode === 'gemini_only' ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="pipelineMode"
+                  value="gemini_only"
+                  checked={pipelineMode === 'gemini_only'}
+                  onChange={() => setPipelineMode('gemini_only')}
+                />
+                <span className="mode-label">🧪 Gemini Only</span>
+                <span className="mode-desc">Gemini computes all paths directly (experimental)</span>
+              </label>
             </div>
           )}
           {useMultiCandidate && (
@@ -2132,7 +2183,9 @@ export default function DanceChoreography() {
                 ? '5 strategies → Local ranking'
                 : pipelineMode === 'ranking_only'
                   ? `5 strategies → ${apiConfigured ? 'Gemini' : 'Local'} ranking`
-                  : `Gemini constraints → ${apiConfigured ? 'Gemini' : 'Local'} ranking`}
+                  : pipelineMode === 'gemini_only'
+                    ? '🧪 Gemini computes all paths directly (no algorithm)'
+                    : `Gemini constraints → ${apiConfigured ? 'Gemini' : 'Local'} ranking`}
             </span>
           )}
         </div>

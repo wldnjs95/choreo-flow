@@ -1352,6 +1352,26 @@ body {
   color: #4ECDC4;
 }
 
+/* Gemini Only mode special styling */
+.pipeline-mode-selector .mode-option.gemini-only {
+  border-color: rgba(224, 86, 253, 0.3);
+  background: rgba(224, 86, 253, 0.05);
+}
+
+.pipeline-mode-selector .mode-option.gemini-only:hover {
+  background: rgba(224, 86, 253, 0.15);
+  border-color: rgba(224, 86, 253, 0.5);
+}
+
+.pipeline-mode-selector .mode-option.gemini-only.active {
+  background: rgba(224, 86, 253, 0.2);
+  border-color: #E056FD;
+}
+
+.pipeline-mode-selector .mode-option.gemini-only.active .mode-label {
+  color: #E056FD;
+}
+
 /* Assignment Mode Selector */
 .assignment-mode-selector {
   display: flex;

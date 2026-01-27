@@ -40,6 +40,10 @@ import {
 } from '../gemini/preConstraint';
 import type { GeminiPreConstraint } from '../gemini/preConstraint';
 import { isApiKeyConfigured } from '../gemini/config';
+import {
+  generateChoreographyWithGemini,
+} from '../gemini/choreographer';
+import type { GeminiChoreographyResponse } from '../gemini/choreographer';
 
 /**
  * Pipeline mode for Gemini integration
@@ -47,7 +51,8 @@ import { isApiKeyConfigured } from '../gemini/config';
 export type GeminiPipelineMode =
   | 'without_gemini'    // Without Gemini: Algorithm only, local ranking
   | 'ranking_only'      // Gemini Ranking Only: Algorithm → Gemini ranking
-  | 'pre_and_ranking';  // Gemini Pre + Ranking: Gemini constraints → Algorithm → Gemini ranking
+  | 'pre_and_ranking'   // Gemini Pre + Ranking: Gemini constraints → Algorithm → Gemini ranking
+  | 'gemini_only';      // Gemini Only: Gemini computes all paths directly (experimental)
 
 /**
  * Pipeline result
@@ -364,6 +369,9 @@ export interface MultiCandidateResult {
   // Gemini pre-constraint (only in pre_and_ranking mode)
   preConstraint?: GeminiPreConstraint;
 
+  // Gemini choreography response (only in gemini_only mode)
+  geminiChoreography?: GeminiChoreographyResponse;
+
   // Metadata
   metadata: {
     totalCandidates: number;
@@ -372,6 +380,7 @@ export interface MultiCandidateResult {
     usedGeminiRanking: boolean;
     pipelineMode: GeminiPipelineMode;
     usedGeminiPreConstraint: boolean;
+    usedGeminiChoreography?: boolean;
   };
 
   // Gemini enhancement status (for progressive UX)
@@ -430,6 +439,107 @@ export async function generateChoreographyWithCandidates(
   const startPositions = customStartPositions || generateFormation(startFormation, dancerCount, { spread, stageWidth, stageHeight });
   const endPositions = customEndPositions || generateFormation(endFormation, dancerCount, { spread, stageWidth, stageHeight });
 
+  // Debug logging
+  console.log('=== Pipeline Debug ===');
+  console.log('Pipeline Mode:', pipelineMode);
+
+  // Special case: Gemini Only mode - Gemini computes everything
+  if (pipelineMode === 'gemini_only') {
+    console.log('Gemini Only mode: Gemini will compute all paths directly');
+
+    const geminiResponse = await generateChoreographyWithGemini({
+      startPositions,
+      endPositions,
+      stageWidth,
+      stageHeight,
+      totalCounts,
+      collisionRadius: 0.5,
+      userPreference: userPreference.description,
+    });
+
+    console.log('Gemini choreography strategy:', geminiResponse.strategy);
+    console.log('Gemini confidence:', geminiResponse.confidence);
+
+    // Convert Gemini paths to our format
+    const paths: DancerPath[] = geminiResponse.paths.map(p => ({
+      dancerId: p.dancerId,
+      path: p.path,
+      totalDistance: p.totalDistance,
+      startTime: p.startTime,
+      speed: p.speed,
+    }));
+
+    const smoothPaths = pathsToSmoothPaths(paths);
+    const validation = validatePathsSimple(paths, 0.5, totalCounts);
+
+    const request: ChoreographyRequest = {
+      startFormation: { type: startFormation },
+      endFormation: { type: endFormation },
+      constraints: [],
+      style: { spread, symmetry: false, smoothness: 0.7, speed: 'normal', dramatic: false },
+      mainDancer,
+      keyframes: [],
+      totalCounts,
+      originalInput: '',
+    };
+
+    const distances = paths.map(p => p.totalDistance);
+    const resultMetadata = {
+      totalDistance: distances.reduce((sum, d) => sum + d, 0),
+      averageDistance: distances.reduce((sum, d) => sum + d, 0) / distances.length,
+      maxDistance: Math.max(...distances),
+      minDistance: Math.min(...distances),
+      computeTimeMs: performance.now() - startTime,
+    };
+
+    const pathResults = paths.map(p => ({
+      dancerId: p.dancerId,
+      path: p.path,
+      totalDistance: p.totalDistance,
+      collisionFree: true,
+    }));
+    const aestheticScore = evaluateChoreographyLocal(pathResults, mainDancer);
+
+    // Build assignments from Gemini paths (identity mapping since Gemini decides)
+    const assignments: Assignment[] = paths.map((p) => ({
+      dancerId: p.dancerId,
+      startPosition: startPositions[p.dancerId - 1],
+      endPosition: endPositions[p.dancerId - 1],
+      distance: p.totalDistance,
+    }));
+
+    const selectedResult: ChoreographyResult = {
+      request,
+      startPositions,
+      endPositions,
+      assignments,
+      paths,
+      smoothPaths,
+      validation,
+      aestheticScore,
+      metadata: resultMetadata,
+    };
+
+    console.log('=== End Pipeline Debug ===');
+
+    return {
+      selectedResult,
+      candidates: [],  // No candidates in gemini_only mode
+      ranking: null,
+      candidatesSummary: {},
+      geminiChoreography: geminiResponse,
+      metadata: {
+        totalCandidates: 0,
+        selectedStrategy: `Gemini: ${geminiResponse.strategy}`,
+        computeTimeMs: performance.now() - startTime,
+        usedGeminiRanking: false,
+        pipelineMode,
+        usedGeminiPreConstraint: false,
+        usedGeminiChoreography: true,
+      },
+    };
+  }
+
   // 2. Generate candidates (depends on mode)
   let candidates: CandidateResult[];
   let preConstraint: GeminiPreConstraint | undefined;
@@ -465,9 +575,6 @@ export async function generateChoreographyWithCandidates(
   let ranking: RankingResult | null = null;
   let usedGeminiRanking = false;
 
-  // Debug logging
-  console.log('=== Pipeline Debug ===');
-  console.log('Pipeline Mode:', pipelineMode);
   console.log('Candidates count:', candidates.length);
   console.log('Candidate IDs:', candidates.map(c => c.id));
 
