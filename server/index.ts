@@ -20,7 +20,6 @@ const app = new Hono();
 app.use('/*', cors());
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent';
-const FETCH_TIMEOUT = 55000; // 55초 (로컬은 제한 없음, 여유있게)
 
 // Health check
 app.get('/api/health', (c) => {
@@ -33,7 +32,7 @@ app.get('/api/health', (c) => {
   });
 });
 
-// Gemini API 프록시
+// Gemini API 프록시 (타임아웃 없음 - Gemini Pro는 느림)
 app.post('/api/gemini', async (c) => {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -44,37 +43,21 @@ app.post('/api/gemini', async (c) => {
 
     const body = await c.req.json();
 
-    // AbortController로 타임아웃 처리
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
 
-    try {
-      const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
+    const data = await response.json();
 
-      clearTimeout(timeoutId);
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        return c.json({ error: data.error?.message || 'Gemini API error' }, response.status);
-      }
-
-      return c.json(data);
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-
-      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-        return c.json({ error: 'Gemini API timeout', timeout: true }, 504);
-      }
-      throw fetchError;
+    if (!response.ok) {
+      return c.json({ error: data.error?.message || 'Gemini API error' }, response.status);
     }
+
+    return c.json(data);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
   }

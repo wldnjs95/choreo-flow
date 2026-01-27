@@ -37,7 +37,6 @@ import {
 import type { UserPreference, RankingResult } from '../gemini/ranker';
 import {
   generatePreConstraint,
-  generateDefaultConstraint,
 } from '../gemini/preConstraint';
 import type { GeminiPreConstraint } from '../gemini/preConstraint';
 import { isApiKeyConfigured } from '../gemini/config';
@@ -437,15 +436,10 @@ export async function generateChoreographyWithCandidates(
   let usedGeminiPreConstraint = false;
 
   if (pipelineMode === 'pre_and_ranking') {
-    // Pre + Ranking mode: Gemini pre-constraint → constraint-based generation
-    try {
-      preConstraint = await generatePreConstraint(startPositions, endPositions, stageWidth, stageHeight);
-      usedGeminiPreConstraint = true;
-      console.log('Gemini Pre-constraint generated:', preConstraint.overallStrategy);
-    } catch (error) {
-      console.warn('Gemini Pre-constraint failed, using default:', error);
-      preConstraint = generateDefaultConstraint(startPositions, endPositions, stageWidth, stageHeight);
-    }
+    // Pre + Ranking mode: Gemini pre-constraint → constraint-based generation (required)
+    preConstraint = await generatePreConstraint(startPositions, endPositions, stageWidth, stageHeight);
+    usedGeminiPreConstraint = true;
+    console.log('Gemini Pre-constraint generated:', preConstraint.overallStrategy);
 
     candidates = generateCandidatesWithConstraint(preConstraint, startPositions, endPositions, {
       totalCounts,
@@ -482,17 +476,11 @@ export async function generateChoreographyWithCandidates(
     console.log('Without Gemini mode: using first candidate (best metrics)');
     console.log('Selected:', candidates[0]?.id);
   } else if (useGeminiRanking) {
-    // Gemini ranking
-    try {
-      console.log('Calling Gemini ranking...');
-      ranking = await rankCandidatesWithGemini(candidates, userPreference);
-      usedGeminiRanking = true;
-      console.log('Gemini ranking success, selected:', ranking.selectedId);
-    } catch (error) {
-      console.warn('Gemini ranking failed, using local:', error);
-      ranking = rankCandidatesLocal(candidates, userPreference);
-      console.log('Local ranking fallback, selected:', ranking.selectedId);
-    }
+    // Gemini ranking (required - no fallback)
+    console.log('Calling Gemini ranking...');
+    ranking = await rankCandidatesWithGemini(candidates, userPreference);
+    usedGeminiRanking = true;
+    console.log('Gemini ranking success, selected:', ranking.selectedId);
   } else {
     // Local ranking (for ranking_only mode without API key)
     console.log('Using local ranking...');
@@ -618,16 +606,11 @@ export async function generateWithProgressiveEnhancement(
   let usedGeminiPreConstraint = false;
 
   if (pipelineMode === 'pre_and_ranking') {
-    // Pre + Ranking mode: Get Gemini pre-constraint first
-    try {
-      console.log('[Progressive] Fetching Gemini pre-constraint...');
-      preConstraint = await generatePreConstraint(startPositions, endPositions, stageWidth, stageHeight);
-      usedGeminiPreConstraint = true;
-      console.log('[Progressive] Pre-constraint received:', preConstraint.overallStrategy);
-    } catch (error) {
-      console.warn('[Progressive] Pre-constraint failed, using default:', error);
-      preConstraint = generateDefaultConstraint(startPositions, endPositions, stageWidth, stageHeight);
-    }
+    // Pre + Ranking mode: Get Gemini pre-constraint first (required, no fallback)
+    console.log('[Progressive] Fetching Gemini pre-constraint...');
+    preConstraint = await generatePreConstraint(startPositions, endPositions, stageWidth, stageHeight);
+    usedGeminiPreConstraint = true;
+    console.log('[Progressive] Pre-constraint received:', preConstraint.overallStrategy);
 
     candidates = generateCandidatesWithConstraint(preConstraint, startPositions, endPositions, {
       totalCounts,

@@ -109,8 +109,8 @@ Return JSON only. Output JSON without explanation.`;
 export async function rankCandidatesWithGemini(
   candidates: CandidateResult[],
   userPreference: UserPreference = {},
-  maxRetries: number = 1
-): Promise<RankingResult & { usedFallback?: boolean }> {
+  maxRetries: number = 3  // More retries for reliability
+): Promise<RankingResult> {
   const candidatesSummary = candidates.map(c => ({
     id: c.id,
     strategy: c.strategy,
@@ -140,7 +140,6 @@ export async function rankCandidatesWithGemini(
       // Verify selected ID exists in actual candidates
       const validIds = candidates.map(c => c.id);
       if (!validIds.includes(result.selectedId)) {
-        // Fallback to candidate with best metrics
         result.selectedId = candidates[0].id;
       }
 
@@ -149,24 +148,18 @@ export async function rankCandidatesWithGemini(
       lastError = error instanceof Error ? error : new Error(String(error));
       console.error(`Gemini ranking error (attempt ${attempt + 1}):`, error);
 
-      // Check if it's a timeout error - retry
-      const isTimeout = lastError.message.includes('timeout') ||
-                        lastError.message.includes('504') ||
-                        lastError.message.includes('Timeout');
-
-      if (!isTimeout || attempt >= maxRetries) {
-        break;
+      if (attempt < maxRetries) {
+        // Wait before retry (exponential backoff)
+        const waitTime = Math.min(2000 * Math.pow(2, attempt), 10000);
+        console.log(`Retrying in ${waitTime}ms...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
       }
-
-      // Wait before retry (exponential backoff)
-      await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
     }
   }
 
-  // Fallback: use local ranking
-  console.log('Using local ranking fallback...');
-  const localResult = rankCandidatesLocal(candidates, userPreference);
-  return { ...localResult, usedFallback: true };
+  // No fallback - throw error
+  throw lastError || new Error('Gemini ranking failed after all retries');
 }
 
 /**

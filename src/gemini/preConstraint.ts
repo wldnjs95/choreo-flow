@@ -250,29 +250,24 @@ export async function generatePreConstraint(
     stageHeight
   );
 
-  try {
-    const responseText = await callGeminiAPI(prompt, { temperature: 0.3 });
-    const jsonStr = extractJSON(responseText);
-    const result = JSON.parse(jsonStr) as GeminiPreConstraint;
+  // No fallback - Gemini response is required
+  const responseText = await callGeminiAPI(prompt, { temperature: 0.3 });
+  const jsonStr = extractJSON(responseText);
+  const result = JSON.parse(jsonStr) as GeminiPreConstraint;
 
-    // Validation and apply defaults
-    if (!result.dancerHints || result.dancerHints.length !== startPositions.length) {
-      throw new Error('Invalid dancerHints');
-    }
-
-    return {
-      movementOrder: result.movementOrder || 'simultaneous',
-      overallStrategy: result.overallStrategy || '',
-      dancerHints: result.dancerHints,
-      maintainSymmetry: result.maintainSymmetry ?? true,
-      avoidCrossing: result.avoidCrossing ?? true,
-      preferSmoothPaths: result.preferSmoothPaths ?? true,
-      suggestedCurveAmount: result.suggestedCurveAmount ?? 0.3,
-      confidence: result.confidence ?? 0.8,
-    };
-  } catch (error) {
-    console.error('Gemini Pre-constraint generation failed:', error);
-    // Fallback: local constraint
-    return generateDefaultConstraint(startPositions, endPositions, stageWidth, stageHeight);
+  // Validation
+  if (!result.dancerHints || result.dancerHints.length !== startPositions.length) {
+    throw new Error('Invalid dancerHints from Gemini');
   }
+
+  return {
+    movementOrder: result.movementOrder || 'simultaneous',
+    overallStrategy: result.overallStrategy || '',
+    dancerHints: result.dancerHints,
+    maintainSymmetry: result.maintainSymmetry ?? true,
+    avoidCrossing: result.avoidCrossing ?? true,
+    preferSmoothPaths: result.preferSmoothPaths ?? true,
+    suggestedCurveAmount: result.suggestedCurveAmount ?? 0.3,
+    confidence: result.confidence ?? 0.8,
+  };
 }
