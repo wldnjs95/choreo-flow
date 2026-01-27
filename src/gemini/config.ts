@@ -2,10 +2,15 @@
  * Gemini API Configuration
  *
  * API calls through serverless functions (key security)
+ *
+ * Production: Set VITE_API_URL to Railway API URL
+ * Development: Uses localhost:3000
  */
 
-// Server API endpoint (Vercel serverless function)
-const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:3000' : '';
+// Server API endpoint
+// Priority: VITE_API_URL > localhost (dev) > relative path (Vercel)
+const API_BASE_URL = import.meta.env.VITE_API_URL
+  || (import.meta.env.DEV ? 'http://localhost:3000' : '');
 
 export const GEMINI_API_URL = `${API_BASE_URL}/api/gemini`;
 export const HEALTH_API_URL = `${API_BASE_URL}/api/health`;

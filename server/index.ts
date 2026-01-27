@@ -10,8 +10,9 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import * as dotenv from 'dotenv';
 
-// .env.local 파일 로드
+// Load environment variables (local: .env.local, production: system env)
 dotenv.config({ path: '.env.local' });
+dotenv.config(); // Also load from .env if exists
 
 const app = new Hono();
 
@@ -79,10 +80,10 @@ app.post('/api/gemini', async (c) => {
   }
 });
 
-const port = 3000;
-console.log(`🚀 API Server running at http://localhost:${port}`);
-console.log(`   Health: http://localhost:${port}/api/health`);
-console.log(`   Gemini: http://localhost:${port}/api/gemini`);
+const port = parseInt(process.env.PORT || '3000', 10);
+console.log(`🚀 API Server running on port ${port}`);
+console.log(`   Health: /api/health`);
+console.log(`   Gemini: /api/gemini`);
 
 serve({
   fetch: app.fetch,
