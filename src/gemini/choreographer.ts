@@ -36,10 +36,20 @@ export interface GeminiChoreographyResponse {
  * Extract JSON from Gemini response
  */
 function extractJSON(text: string): string {
-  // Try to find JSON in code blocks
+  // Try to find JSON in code blocks with closing ```
   const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (jsonMatch) {
     return jsonMatch[1].trim();
+  }
+
+  // Try to find JSON in code blocks WITHOUT closing ``` (truncated response)
+  const truncatedMatch = text.match(/```(?:json)?\s*([\s\S]*)/);
+  if (truncatedMatch) {
+    const partial = truncatedMatch[1].trim();
+    if (partial.startsWith('{')) {
+      console.warn('[Gemini Only] Response appears truncated (no closing ```), attempting to parse partial JSON');
+      return partial;
+    }
   }
 
   // Try to find raw JSON
@@ -120,7 +130,7 @@ Design the movement path for each dancer from start to end position. You must:
    - path: Array of {x, y, t} points where t is 0.0 to 1.0 (normalized time)
    - startTime: When dancer begins moving (0.0 to 0.5)
    - speed: Movement speed multiplier (0.8 to 1.5)
-   - Include at least 10 path points for smooth visualization
+   - Include 5-8 path points per dancer (balance between smoothness and response size)
 
 ${userPreference ? `## USER PREFERENCE\n${userPreference}\n` : ''}
 ## ALGORITHM HINTS
@@ -301,7 +311,16 @@ export async function generateChoreographyWithGemini(
       console.log(`[Gemini Only] Response preview:\n${preview}`);
 
       const jsonStr = extractJSON(responseText);
-      const result = JSON.parse(jsonStr) as GeminiChoreographyResponse;
+
+      let result: GeminiChoreographyResponse;
+      try {
+        result = JSON.parse(jsonStr) as GeminiChoreographyResponse;
+      } catch (parseError) {
+        // JSON parsing failed - likely truncated response
+        const jsonPreview = jsonStr.length > 200 ? jsonStr.substring(jsonStr.length - 200) : jsonStr;
+        console.error(`[Gemini Only] JSON parse failed. End of JSON:\n...${jsonPreview}`);
+        throw new Error(`JSON parse failed (response likely truncated). Try fewer dancers. Original: ${parseError}`);
+      }
 
       // Validate response
       const validation = validateResponse(result, request);
