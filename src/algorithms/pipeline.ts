@@ -612,15 +612,42 @@ export async function generateWithProgressiveEnhancement(
   const startPositions = customStartPositions || generateFormation(startFormation, dancerCount, { spread, stageWidth, stageHeight });
   const endPositions = customEndPositions || generateFormation(endFormation, dancerCount, { spread, stageWidth, stageHeight });
 
-  // 2. Generate candidates (local, fast)
-  const candidates = generateAllCandidates(startPositions, endPositions, {
-    totalCounts,
-    collisionRadius: 0.5,
-    stageWidth,
-    stageHeight,
-    assignmentMode,
-    lockedDancers,
-  });
+  // 2. Generate candidates (depends on pipeline mode)
+  let candidates: CandidateResult[];
+  let preConstraint: GeminiPreConstraint | undefined;
+  let usedGeminiPreConstraint = false;
+
+  if (pipelineMode === 'pre_and_ranking') {
+    // Pre + Ranking mode: Get Gemini pre-constraint first
+    try {
+      console.log('[Progressive] Fetching Gemini pre-constraint...');
+      preConstraint = await generatePreConstraint(startPositions, endPositions, stageWidth, stageHeight);
+      usedGeminiPreConstraint = true;
+      console.log('[Progressive] Pre-constraint received:', preConstraint.overallStrategy);
+    } catch (error) {
+      console.warn('[Progressive] Pre-constraint failed, using default:', error);
+      preConstraint = generateDefaultConstraint(startPositions, endPositions, stageWidth, stageHeight);
+    }
+
+    candidates = generateCandidatesWithConstraint(preConstraint, startPositions, endPositions, {
+      totalCounts,
+      collisionRadius: 0.5,
+      stageWidth,
+      stageHeight,
+      assignmentMode,
+      lockedDancers,
+    });
+  } else {
+    // Standard candidate generation
+    candidates = generateAllCandidates(startPositions, endPositions, {
+      totalCounts,
+      collisionRadius: 0.5,
+      stageWidth,
+      stageHeight,
+      assignmentMode,
+      lockedDancers,
+    });
+  }
 
   // 3. Local ranking (instant)
   const localRanking = rankCandidatesLocal(candidates, userPreference);
@@ -675,13 +702,14 @@ export async function generateWithProgressiveEnhancement(
     candidates,
     ranking: localRanking,
     candidatesSummary: summarizeCandidatesForGemini(candidates),
+    preConstraint,
     metadata: {
       totalCandidates: candidates.length,
       selectedStrategy: localCandidate.strategy,
       computeTimeMs: performance.now() - startTime,
       usedGeminiRanking: false,
       pipelineMode,
-      usedGeminiPreConstraint: false,
+      usedGeminiPreConstraint,
     },
     geminiEnhancement: pipelineMode !== 'without_gemini' ? { status: 'pending' } : undefined,
   };
