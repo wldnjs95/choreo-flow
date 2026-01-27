@@ -293,6 +293,13 @@ export async function generateChoreographyWithGemini(
       const responseText = await callGeminiAPI(finalPrompt, { temperature: 0.2 });
       const apiEndTime = performance.now();
       console.log(`[Gemini Only] API response received in ${((apiEndTime - apiStartTime) / 1000).toFixed(2)}s`);
+
+      // Log response preview for debugging
+      const preview = responseText.length > 500
+        ? responseText.substring(0, 500) + '...(truncated)'
+        : responseText;
+      console.log(`[Gemini Only] Response preview:\n${preview}`);
+
       const jsonStr = extractJSON(responseText);
       const result = JSON.parse(jsonStr) as GeminiChoreographyResponse;
 
