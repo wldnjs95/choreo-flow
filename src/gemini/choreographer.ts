@@ -269,11 +269,17 @@ export async function generateChoreographyWithGemini(
   const prompt = createChoreographyPrompt(request);
   let lastError: Error | null = null;
   let lastValidationErrors: string[] = [];
+  const totalStartTime = performance.now();
+
+  console.log('[Gemini Only] Starting choreography generation...');
+  console.log(`[Gemini Only] Dancers: ${request.startPositions.length}, Stage: ${request.stageWidth}x${request.stageHeight}m`);
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const attemptStartTime = performance.now();
+
     try {
       if (attempt > 0) {
-        console.log(`Gemini choreography retry ${attempt}/${maxRetries}...`);
+        console.log(`[Gemini Only] Retry ${attempt}/${maxRetries}...`);
       }
 
       // Add previous errors to prompt for self-correction
@@ -282,7 +288,11 @@ export async function generateChoreographyWithGemini(
         finalPrompt += `\n\n## PREVIOUS ATTEMPT ERRORS (FIX THESE):\n${lastValidationErrors.join('\n')}`;
       }
 
+      console.log(`[Gemini Only] Calling Gemini API (attempt ${attempt + 1})...`);
+      const apiStartTime = performance.now();
       const responseText = await callGeminiAPI(finalPrompt, { temperature: 0.2 });
+      const apiEndTime = performance.now();
+      console.log(`[Gemini Only] API response received in ${((apiEndTime - apiStartTime) / 1000).toFixed(2)}s`);
       const jsonStr = extractJSON(responseText);
       const result = JSON.parse(jsonStr) as GeminiChoreographyResponse;
 
@@ -314,18 +324,34 @@ export async function generateChoreographyWithGemini(
         }
       });
 
+      const totalEndTime = performance.now();
+      const totalSeconds = (totalEndTime - totalStartTime) / 1000;
+      const attemptSeconds = (totalEndTime - attemptStartTime) / 1000;
+
+      console.log(`[Gemini Only] ✓ Success!`);
+      console.log(`[Gemini Only] Strategy: ${result.strategy}`);
+      console.log(`[Gemini Only] Confidence: ${(result.confidence * 100).toFixed(0)}%`);
+      console.log(`[Gemini Only] Attempt ${attempt + 1} took ${attemptSeconds.toFixed(2)}s`);
+      console.log(`[Gemini Only] Total time: ${totalSeconds.toFixed(2)}s`);
+
       return result;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      console.error(`Gemini choreography error (attempt ${attempt + 1}):`, error);
+      const attemptEndTime = performance.now();
+      const attemptSeconds = (attemptEndTime - attemptStartTime) / 1000;
+      console.error(`[Gemini Only] ✗ Attempt ${attempt + 1} failed after ${attemptSeconds.toFixed(2)}s:`, error);
 
       if (attempt < maxRetries) {
         const waitTime = Math.min(2000 * Math.pow(2, attempt), 10000);
-        console.log(`Retrying in ${waitTime}ms...`);
+        console.log(`[Gemini Only] Retrying in ${waitTime / 1000}s...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
     }
   }
+
+  const totalEndTime = performance.now();
+  const totalSeconds = (totalEndTime - totalStartTime) / 1000;
+  console.error(`[Gemini Only] ✗ All ${maxRetries + 1} attempts failed. Total time: ${totalSeconds.toFixed(2)}s`);
 
   throw lastError || new Error('Gemini choreography generation failed after all retries');
 }
