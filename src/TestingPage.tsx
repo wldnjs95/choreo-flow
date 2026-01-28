@@ -1,11 +1,17 @@
 import { useState } from 'react';
-import { callGeminiAPI } from './gemini/config';
+import { GEMINI_API_URL, GEMINI_CONFIG } from './gemini/config';
+
+const MODELS = [
+  { id: 'gemini-3-pro-preview', name: 'Gemini 2.5 Pro Preview' },
+  { id: 'gemini-2.5-flash-preview-05-20', name: 'Gemini 2.5 Flash Preview' },
+];
 
 export default function TestingPage() {
   const [prompt, setPrompt] = useState('');
   const [response, setResponse] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
 
   const handleSubmit = async () => {
     if (!prompt.trim()) return;
@@ -15,8 +21,35 @@ export default function TestingPage() {
     setResponse('');
 
     try {
-      const result = await callGeminiAPI(prompt);
-      setResponse(result);
+      const res = await fetch(GEMINI_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: selectedModel,
+          contents: [
+            {
+              parts: [{ text: prompt }],
+            },
+          ],
+          generationConfig: GEMINI_CONFIG,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(`API error: ${res.status} - ${errorData.error || 'Unknown error'}`);
+      }
+
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!text) {
+        throw new Error('Empty response from Gemini');
+      }
+
+      setResponse(text);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error occurred');
     } finally {
@@ -32,12 +65,39 @@ export default function TestingPage() {
       padding: '40px',
       fontFamily: 'system-ui, -apple-system, sans-serif'
     }}>
-      <h1 style={{ marginBottom: '8px' }}>Gemini API Test</h1>
-      <p style={{ color: '#888', marginBottom: '24px' }}>
-        Model: gemini-3-pro-preview
-      </p>
+      <h1 style={{ marginBottom: '24px' }}>Gemini API Test</h1>
 
       <div style={{ marginBottom: '16px' }}>
+        <label style={{ display: 'block', marginBottom: '8px', color: '#888' }}>
+          Model:
+        </label>
+        <select
+          value={selectedModel}
+          onChange={(e) => setSelectedModel(e.target.value)}
+          style={{
+            padding: '10px 16px',
+            fontSize: '14px',
+            backgroundColor: '#16213e',
+            color: '#eee',
+            border: '1px solid #0f3460',
+            borderRadius: '8px',
+            outline: 'none',
+            cursor: 'pointer',
+            minWidth: '280px'
+          }}
+        >
+          {MODELS.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div style={{ marginBottom: '16px' }}>
+        <label style={{ display: 'block', marginBottom: '8px', color: '#888' }}>
+          Prompt:
+        </label>
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}

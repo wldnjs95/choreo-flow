@@ -11,7 +11,9 @@ export const config = {
   maxDuration: 60,  // Pro 플랜 최대값 (초)
 };
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent';
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const DEFAULT_MODEL = 'gemini-3-pro-preview';
+const ALLOWED_MODELS = ['gemini-3-pro-preview', 'gemini-2.5-flash-preview-05-20'];
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS 헤더
@@ -35,9 +37,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: 'API key not configured' });
     }
 
-    const body = req.body;
+    const { model, ...body } = req.body;
+    const selectedModel = ALLOWED_MODELS.includes(model) ? model : DEFAULT_MODEL;
+    const apiUrl = `${GEMINI_API_BASE}/${selectedModel}:generateContent`;
 
-    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+    const response = await fetch(`${apiUrl}?key=${apiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
