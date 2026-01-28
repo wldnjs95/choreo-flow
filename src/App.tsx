@@ -1,7 +1,16 @@
-import DanceChoreography from './DanceChoreography'
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import DanceChoreography from './DanceChoreography';
+import TestingPage from './TestingPage';
 
 function App() {
-  return <DanceChoreography />
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<DanceChoreography />} />
+        <Route path="/testing" element={<TestingPage />} />
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
-export default App
+export default App;
