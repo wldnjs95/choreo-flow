@@ -30,6 +30,8 @@ export interface GeminiChoreographyResponse {
   strategy: string;
   reasoning: string;
   confidence: number;
+  rawResponse?: string;  // Raw response text for debugging
+  rawResponseLength?: number;
 }
 
 /**
@@ -303,12 +305,12 @@ export async function generateChoreographyWithGemini(
       const responseText = await callGeminiAPI(finalPrompt, { temperature: 0.2 });
       const apiEndTime = performance.now();
       console.log(`[Gemini Only] API response received in ${((apiEndTime - apiStartTime) / 1000).toFixed(2)}s`);
+      console.log(`[Gemini Only] Raw response length: ${responseText.length} characters`);
 
-      // Log response preview for debugging
-      const preview = responseText.length > 500
-        ? responseText.substring(0, 500) + '...(truncated)'
-        : responseText;
-      console.log(`[Gemini Only] Response preview:\n${preview}`);
+      // Log full raw response for debugging truncation issues
+      console.log(`[Gemini Only] ========== RAW RESPONSE START ==========`);
+      console.log(responseText);
+      console.log(`[Gemini Only] ========== RAW RESPONSE END (${responseText.length} chars) ==========`);
 
       const jsonStr = extractJSON(responseText);
 
@@ -359,6 +361,10 @@ export async function generateChoreographyWithGemini(
       console.log(`[Gemini Only] Confidence: ${(result.confidence * 100).toFixed(0)}%`);
       console.log(`[Gemini Only] Attempt ${attempt + 1} took ${attemptSeconds.toFixed(2)}s`);
       console.log(`[Gemini Only] Total time: ${totalSeconds.toFixed(2)}s`);
+
+      // Attach raw response for UI display
+      result.rawResponse = responseText;
+      result.rawResponseLength = responseText.length;
 
       return result;
     } catch (error) {

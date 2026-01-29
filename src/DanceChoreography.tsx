@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  generateChoreographyFromText,
+  // generateChoreographyFromText,  // Hidden - NLP input disabled
   generateChoreographyDirect,
   generateWithProgressiveEnhancement,
   generateChoreographyWithCandidates,
@@ -15,7 +15,7 @@ import {
   type AssignmentMode,
   type MultiCandidateResult,
 } from './algorithms';
-import { isApiKeyConfigured, type AestheticScore, type RankingResult, type GeminiPreConstraint } from './gemini';
+import { isApiKeyConfigured, type AestheticScore, type RankingResult, type GeminiPreConstraint, type GeminiChoreographyResponse } from './gemini';
 
 // Visualization constants
 const DEFAULT_STAGE_WIDTH = 15;  // Large: 49ft ≈ 15m
@@ -291,6 +291,7 @@ function Stage({ children, stageWidth, stageHeight, scale }: StageProps) {
   );
 }
 
+/* NaturalLanguageInput - Hidden but code preserved for future use
 interface NaturalLanguageInputProps {
   onGenerate: (input: string) => void;
   isLoading: boolean;
@@ -351,6 +352,7 @@ function NaturalLanguageInput({ onGenerate, isLoading }: NaturalLanguageInputPro
     </div>
   );
 }
+*/
 
 interface FormationSelectorProps {
   startFormation: FormationType;
@@ -1775,6 +1777,7 @@ export default function DanceChoreography() {
   const [usedGeminiPreConstraint, setUsedGeminiPreConstraint] = useState(false);
   const [geminiStatus, setGeminiStatus] = useState<'idle' | 'pending' | 'success' | 'failed' | 'timeout'>('idle');
   const [pendingGeminiResult, setPendingGeminiResult] = useState<MultiCandidateResult | null>(null);
+  const [geminiOnlyResponse, setGeminiOnlyResponse] = useState<GeminiChoreographyResponse | null>(null);
 
   // Check API configuration on mount
   useEffect(() => {
@@ -1817,6 +1820,7 @@ export default function DanceChoreography() {
     return () => cancelAnimationFrame(frameId);
   }, [isPlaying, playbackSpeed, currentCount, totalCounts]);
 
+  /* handleNLPGenerate - Hidden but code preserved for future use
   const handleNLPGenerate = useCallback(async (input: string) => {
     setIsLoading(true);
     setError(null);
@@ -1842,6 +1846,7 @@ export default function DanceChoreography() {
       setIsLoading(false);
     }
   }, [dancerCount, stageWidth, stageHeight]);
+  */
 
   const handleDirectGenerate = useCallback(async () => {
     setIsLoading(true);
@@ -1882,11 +1887,15 @@ export default function DanceChoreography() {
           setTotalCounts(multiResult.selectedResult.request.totalCounts);
           setGeminiStatus('success');
 
-          // Log Gemini choreography info
+          // Store and log Gemini choreography info
           if (multiResult.geminiChoreography) {
+            setGeminiOnlyResponse(multiResult.geminiChoreography);
             console.log('[Gemini Only] Strategy:', multiResult.geminiChoreography.strategy);
             console.log('[Gemini Only] Reasoning:', multiResult.geminiChoreography.reasoning);
             console.log('[Gemini Only] Confidence:', multiResult.geminiChoreography.confidence);
+            console.log('[Gemini Only] Raw response length:', multiResult.geminiChoreography.rawResponseLength);
+          } else {
+            setGeminiOnlyResponse(null);
           }
         } else {
           // Progressive Enhancement: Local result first, Gemini in background
@@ -2087,8 +2096,10 @@ export default function DanceChoreography() {
       </header>
 
       <div className="input-section">
+        {/* NaturalLanguageInput hidden - code preserved for future use
         <NaturalLanguageInput onGenerate={handleNLPGenerate} isLoading={isLoading} />
         <div className="divider">or</div>
+        */}
         <StageSizeSelector
           preset={stagePreset}
           width={stageWidth}
@@ -2317,6 +2328,32 @@ export default function DanceChoreography() {
               {result.validation.valid ? 'None' : `${result.validation.collisions.length}`}
             </strong>
           </div>
+        </div>
+      )}
+
+      {/* Gemini Only Raw Response Display */}
+      {pipelineMode === 'gemini_only' && geminiOnlyResponse && (
+        <div className="gemini-raw-response">
+          <div className="gemini-raw-header">
+            <h3>Gemini Only - Raw Response</h3>
+            <div className="gemini-raw-meta">
+              <span className="meta-badge">Length: {geminiOnlyResponse.rawResponseLength?.toLocaleString() || 'N/A'} chars</span>
+              <span className="meta-badge">Confidence: {((geminiOnlyResponse.confidence || 0) * 100).toFixed(0)}%</span>
+              <span className="meta-badge">Paths: {geminiOnlyResponse.paths?.length || 0}</span>
+            </div>
+          </div>
+          <div className="gemini-raw-info">
+            <div className="info-row">
+              <strong>Strategy:</strong> {geminiOnlyResponse.strategy || 'N/A'}
+            </div>
+            <div className="info-row">
+              <strong>Reasoning:</strong> {geminiOnlyResponse.reasoning || 'N/A'}
+            </div>
+          </div>
+          <details className="gemini-raw-details">
+            <summary>View Raw Response ({geminiOnlyResponse.rawResponseLength?.toLocaleString() || 0} chars)</summary>
+            <pre className="gemini-raw-text">{geminiOnlyResponse.rawResponse || 'No raw response available'}</pre>
+          </details>
         </div>
       )}
 

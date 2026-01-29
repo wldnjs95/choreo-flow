@@ -47,3 +47,10 @@ export {
   type DancerHint,
   type MovementOrder,
 } from './preConstraint';
+
+// Choreographer (Gemini Only mode)
+export {
+  generateChoreographyWithGemini,
+  type GeminiChoreographyRequest,
+  type GeminiChoreographyResponse,
+} from './choreographer';

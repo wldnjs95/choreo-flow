@@ -1972,3 +1972,106 @@ body {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* Gemini Raw Response Section */
+.gemini-raw-response {
+  margin-top: 24px;
+  background: rgba(30, 30, 50, 0.8);
+  border: 1px solid rgba(108, 92, 231, 0.3);
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.gemini-raw-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.gemini-raw-header h3 {
+  font-size: 1.1rem;
+  color: #6C5CE7;
+  margin: 0;
+}
+
+.gemini-raw-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gemini-raw-meta .meta-badge {
+  background: rgba(108, 92, 231, 0.2);
+  color: #a89ef0;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.gemini-raw-info {
+  background: rgba(20, 20, 35, 0.6);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.gemini-raw-info .info-row {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.gemini-raw-info .info-row:last-child {
+  margin-bottom: 0;
+}
+
+.gemini-raw-info .info-row strong {
+  color: #4ECDC4;
+  margin-right: 8px;
+}
+
+.gemini-raw-details {
+  margin-top: 12px;
+}
+
+.gemini-raw-details summary {
+  cursor: pointer;
+  padding: 10px 16px;
+  background: rgba(108, 92, 231, 0.15);
+  border-radius: 8px;
+  color: #a89ef0;
+  font-weight: 500;
+  transition: background 0.2s ease;
+}
+
+.gemini-raw-details summary:hover {
+  background: rgba(108, 92, 231, 0.25);
+}
+
+.gemini-raw-details[open] summary {
+  border-radius: 8px 8px 0 0;
+  margin-bottom: 0;
+}
+
+.gemini-raw-text {
+  background: rgba(10, 10, 20, 0.8);
+  border: 1px solid rgba(108, 92, 231, 0.2);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  padding: 16px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #ccc;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 500px;
+  overflow-y: auto;
+  margin: 0;
+}
