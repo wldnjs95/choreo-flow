@@ -91,60 +91,40 @@ function createChoreographyPrompt(request: GeminiChoreographyRequest): string {
     };
   });
 
-  return `You are an expert dance choreographer and algorithm designer. Your task is to compute optimal movement paths for ${dancerCount} dancers transitioning between two formations.
+  return `You are an expert dance choreographer. Compute movement paths for ${dancerCount} dancers.
 
-## STAGE CONFIGURATION
-- Stage size: ${stageWidth}m (width) × ${stageHeight}m (height)
-- Coordinate system: (0,0) is top-left, x increases right, y increases down
-- Stage center: (${stageWidth / 2}, ${stageHeight / 2})
-- Total counts (music beats): ${totalCounts}
-- Collision radius: ${collisionRadius}m (dancers must stay this far apart)
+## #1 PRIORITY: COLLISION AVOIDANCE
+**ZERO COLLISIONS IS MANDATORY.** Every path must guarantee no two dancers are ever within ${collisionRadius}m of each other at any time. This is more important than aesthetics, efficiency, or smoothness.
 
-## DANCER POSITIONS
+## STAGE
+- Size: ${stageWidth}m × ${stageHeight}m (origin top-left)
+- Collision radius: ${collisionRadius}m (STRICT - dancers must NEVER be closer)
+- Total counts: ${totalCounts}
+
+## POSITIONS
 ${JSON.stringify(positionsData, null, 2)}
 
-## YOUR TASK
-Design the movement path for each dancer from start to end position. You must:
+## COLLISION AVOIDANCE STRATEGIES (USE AGGRESSIVELY)
+1. **Timing Offset (MOST EFFECTIVE)**: Stagger start times. Use startTime 0.0-0.5.
+   - If paths cross: one dancer waits, other goes first
+   - Group dancers by region: left side moves first, then right (or vice versa)
 
-1. **ASSIGNMENT**: First, decide optimal dancer-to-target assignment. Consider:
-   - Hungarian algorithm minimizes total distance
-   - But sometimes swapping assignments reduces path crossings
-   - Prioritize collision-free assignments over minimal distance
+2. **Curved Detours**: Add waypoints to go AROUND collision zones
+   - If two dancers would meet at center, one curves left, other curves right
+   - Add 2-3 intermediate points to create safe arc
 
-2. **COLLISION DETECTION**: For each pair of dancers, check if their paths intersect.
-   - Two line segments intersect if they share a point
-   - Even parallel paths can collide if dancers pass too close (<${collisionRadius}m)
-   - Calculate collision time: when distance between two moving dancers < ${collisionRadius}m
+3. **Speed Variation**: Faster dancer clears the zone before slower one enters
 
-3. **COLLISION RESOLUTION**: If collisions detected, resolve using:
-   - **Timing offset**: Delay one dancer's start (0.0 to 0.5 of total time)
-   - **Curved paths**: Add control point to create arc (bypass around collision point)
-   - **Speed variation**: Faster/slower movement for certain segments
-   - Priority: Longer-distance dancers start first (they need more time)
+## VERIFICATION CHECKLIST (DO THIS MENTALLY)
+For each time t = 0.0, 0.1, 0.2, ... 1.0:
+  - Calculate position of ALL dancers
+  - Check distance between EVERY pair
+  - If ANY pair < ${collisionRadius}m → FIX IT before outputting
 
-4. **PATH SMOOTHNESS**: Generate smooth paths with these considerations:
-   - Straight line is default if no collision
-   - Bezier curve if detour needed (add 1-2 control points)
-   - Path should stay within stage bounds with 0.5m margin
-
-5. **OUTPUT FORMAT**: For each dancer, provide:
-   - dancerId: 1-indexed
-   - path: Array of {x, y, t} points where t is 0.0 to 1.0 (normalized time)
-   - startTime: When dancer begins moving (0.0 to 0.5)
-   - speed: Movement speed multiplier (0.8 to 1.5)
-   - Include 5-8 path points per dancer (balance between smoothness and response size)
-
-${userPreference ? `## USER PREFERENCE\n${userPreference}\n` : ''}
-## ALGORITHM HINTS
-- For crossing paths: Calculate intersection point, offset timing so dancers pass at different times
-- For parallel paths: If moving in same direction, no collision; if opposite, may need curve
-- Wave effect: Outer dancers move first, inner follow (or vice versa)
-- Symmetry: If formation is symmetric, mirror the path design
-
-## RESPONSE FORMAT (JSON ONLY)
+## OUTPUT FORMAT (JSON ONLY)
 {
-  "strategy": "Brief description of chosen strategy (1 sentence)",
-  "reasoning": "Explain key decisions: assignments, collision handling, timing (2-3 sentences)",
+  "strategy": "1 sentence",
+  "reasoning": "How you avoided collisions (2-3 sentences)",
   "confidence": 0.0-1.0,
   "paths": [
     {
@@ -152,25 +132,21 @@ ${userPreference ? `## USER PREFERENCE\n${userPreference}\n` : ''}
       "startTime": 0.0,
       "speed": 1.0,
       "totalDistance": 3.5,
-      "path": [
-        {"x": 2.0, "y": 3.0, "t": 0.0},
-        {"x": 2.5, "y": 3.2, "t": 0.1},
-        ...
-        {"x": 5.0, "y": 6.0, "t": 1.0}
-      ]
-    },
-    ...
+      "path": [{"x": 2.0, "y": 3.0, "t": 0.0}, ..., {"x": 5.0, "y": 6.0, "t": 1.0}]
+    }
   ]
 }
 
-CRITICAL REQUIREMENTS:
-- First path point must match start position with t=0.0
-- Last path point must match end position with t=1.0
-- Provide exactly ${dancerCount} dancer paths
-- All coordinates must be within stage bounds (0-${stageWidth}, 0-${stageHeight})
-- Validate: NO two dancers should be within ${collisionRadius}m at the same time
+REQUIREMENTS:
+- First point: start position, t=0.0
+- Last point: end position, t=1.0
+- Exactly ${dancerCount} paths
+- 5-8 points per path
+- Stay within bounds (0-${stageWidth}, 0-${stageHeight})
+- **ZERO COLLISIONS** (distance >= ${collisionRadius}m at ALL times)
 
-Output JSON only. No explanation outside JSON.`;
+${userPreference ? `USER PREFERENCE: ${userPreference}\n` : ''}
+Output JSON only.`;
 }
 
 /**
