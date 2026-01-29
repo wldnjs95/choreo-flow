@@ -256,11 +256,18 @@ export function computeAllPathsSimple(
 
       case 'staggered':
         // Sequential start times (wave effect)
-        startTime = dancerIndex * staggerDelay;
+        // Limit startTime to leave room for movement
+        const maxStartTime = cfg.totalCounts * 0.6;  // Don't start later than 60% of total time
+        startTime = Math.min(dancerIndex * staggerDelay, maxStartTime);
         endTime = Math.min(startTime + cfg.totalCounts * 0.7, cfg.totalCounts);
         // Ensure minimum travel time
         if (endTime - startTime < 2) {
           endTime = Math.min(startTime + 2, cfg.totalCounts);
+        }
+        // Final safeguard: ensure there's always movement time
+        if (startTime >= endTime) {
+          startTime = 0;
+          endTime = cfg.totalCounts;
         }
         break;
 
@@ -286,6 +293,13 @@ export function computeAllPathsSimple(
       if (endTime - startTime < 1) {
         endTime = Math.min(startTime + 1, cfg.totalCounts);
       }
+    }
+
+    // Final safeguard: ensure valid movement time (at least 1 count duration)
+    if (endTime <= startTime) {
+      console.warn(`[Pathfinder] Invalid timing for dancer ${dancerId}: startTime=${startTime}, endTime=${endTime}. Resetting.`);
+      startTime = 0;
+      endTime = Math.max(2, cfg.totalCounts);
     }
 
     dancerIndex++;
@@ -411,10 +425,26 @@ export function computeAllPathsSimple(
       }
     }
 
+    // Verify path has valid time range
+    const pathStartT = path[0]?.t ?? 0;
+    const pathEndT = path[path.length - 1]?.t ?? cfg.totalCounts;
+    if (pathEndT <= pathStartT) {
+      console.warn(`[Pathfinder] Dancer ${dancerId} has invalid path time: ${pathStartT} to ${pathEndT}. Regenerating.`);
+      // Regenerate with default timing
+      path = generateLinearPath(startPosition, endPosition, 0, cfg.totalCounts, cfg.numPoints);
+      startTime = 0;
+      endTime = cfg.totalCounts;
+    }
+
     // Calculate speed
     const pathDistance = calculatePathDistance(path);
     const duration = endTime - startTime;
     const speed = duration > 0 ? pathDistance / duration / (maxDist / cfg.totalCounts || 1) : 1;
+
+    // Debug log for short duration paths
+    if (duration < 1 && pathDistance > 0.5) {
+      console.warn(`[Pathfinder] Dancer ${dancerId} has very short duration (${duration.toFixed(2)}) for distance ${pathDistance.toFixed(2)}m`);
+    }
 
     computedPaths.push({ dancerId, path });
 
