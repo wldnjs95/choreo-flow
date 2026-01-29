@@ -12,6 +12,7 @@ export default function TestingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
+  const [elapsedTime, setElapsedTime] = useState<number | null>(null);
 
   const handleSubmit = async () => {
     if (!prompt.trim()) return;
@@ -19,6 +20,9 @@ export default function TestingPage() {
     setLoading(true);
     setError('');
     setResponse('');
+    setElapsedTime(null);
+
+    const startTime = performance.now();
 
     try {
       const res = await fetch(GEMINI_API_URL, {
@@ -49,8 +53,12 @@ export default function TestingPage() {
         throw new Error('Empty response from Gemini');
       }
 
+      const endTime = performance.now();
+      setElapsedTime(endTime - startTime);
       setResponse(text);
     } catch (err) {
+      const endTime = performance.now();
+      setElapsedTime(endTime - startTime);
       setError(err instanceof Error ? err.message : 'Unknown error occurred');
     } finally {
       setLoading(false);
@@ -145,7 +153,22 @@ export default function TestingPage() {
           marginBottom: '16px',
           maxWidth: '800px'
         }}>
-          <strong style={{ color: '#e94560' }}>Error:</strong>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <strong style={{ color: '#e94560' }}>Error:</strong>
+            {elapsedTime !== null && (
+              <span style={{
+                backgroundColor: '#3a1a1a',
+                padding: '4px 12px',
+                borderRadius: '16px',
+                fontSize: '13px',
+                color: '#f87171'
+              }}>
+                {elapsedTime >= 1000
+                  ? `${(elapsedTime / 1000).toFixed(2)}s`
+                  : `${Math.round(elapsedTime)}ms`}
+              </span>
+            )}
+          </div>
           <p style={{ margin: '8px 0 0 0' }}>{error}</p>
         </div>
       )}
@@ -158,7 +181,22 @@ export default function TestingPage() {
           borderRadius: '8px',
           maxWidth: '800px'
         }}>
-          <strong style={{ color: '#4ade80' }}>Response:</strong>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <strong style={{ color: '#4ade80' }}>Response:</strong>
+            {elapsedTime !== null && (
+              <span style={{
+                backgroundColor: '#0f3460',
+                padding: '4px 12px',
+                borderRadius: '16px',
+                fontSize: '13px',
+                color: '#60a5fa'
+              }}>
+                {elapsedTime >= 1000
+                  ? `${(elapsedTime / 1000).toFixed(2)}s`
+                  : `${Math.round(elapsedTime)}ms`}
+              </span>
+            )}
+          </div>
           <pre style={{
             margin: '12px 0 0 0',
             whiteSpace: 'pre-wrap',
