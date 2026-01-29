@@ -13,7 +13,7 @@ export const config = {
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const DEFAULT_MODEL = 'gemini-3-pro-preview';
-const ALLOWED_MODELS = ['gemini-3-pro-preview', 'gemini-2.5-flash-preview-05-20'];
+const ALLOWED_MODELS = ['gemini-3-pro-preview', 'gemini-3-flash-preview'];
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS 헤더

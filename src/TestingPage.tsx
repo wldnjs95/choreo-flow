@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { GEMINI_API_URL, GEMINI_CONFIG } from './gemini/config';
 
 const MODELS = [
-  { id: 'gemini-3-pro-preview', name: 'Gemini 2.5 Pro Preview' },
-  { id: 'gemini-2.5-flash-preview-05-20', name: 'Gemini 2.5 Flash Preview' },
+  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro Preview' },
+  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash Preview' },
 ];
 
 export default function TestingPage() {
