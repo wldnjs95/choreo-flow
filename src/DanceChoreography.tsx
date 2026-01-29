@@ -1706,16 +1706,22 @@ function DancerInfoPanel({ dancers, currentCount, totalCounts, selectedDancer, o
 
 // Convert ChoreographyResult to DancerData array
 function resultToDancerData(result: ChoreographyResult): DancerData[] {
-  return result.smoothPaths.map((sp: SmoothPath, index: number) => ({
-    id: sp.dancerId,
-    color: sp.color,
-    startPosition: result.startPositions[index],
-    endPosition: result.endPositions[index],
-    path: sp.points,
-    startTime: sp.startTime,
-    speed: sp.speed,
-    distance: sp.distance,
-  }));
+  return result.smoothPaths.map((sp: SmoothPath) => {
+    // Use path's actual start/end points (handles optimal assignment correctly)
+    const pathStart = sp.points[0];
+    const pathEnd = sp.points[sp.points.length - 1];
+
+    return {
+      id: sp.dancerId,
+      color: sp.color,
+      startPosition: { x: pathStart.x, y: pathStart.y },
+      endPosition: { x: pathEnd.x, y: pathEnd.y },
+      path: sp.points,
+      startTime: sp.startTime,
+      speed: sp.speed,
+      distance: sp.distance,
+    };
+  });
 }
 
 type StagePreset = keyof typeof STAGE_PRESETS;

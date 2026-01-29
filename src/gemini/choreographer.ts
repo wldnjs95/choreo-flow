@@ -252,7 +252,7 @@ function validateResponse(
  */
 export async function generateChoreographyWithGemini(
   request: GeminiChoreographyRequest,
-  maxRetries: number = 3
+  maxRetries: number = 1
 ): Promise<GeminiChoreographyResponse> {
   const prompt = createChoreographyPrompt(request);
   let lastError: Error | null = null;
@@ -306,12 +306,14 @@ export async function generateChoreographyWithGemini(
         console.warn('Validation errors:', validation.errors);
         lastValidationErrors = validation.errors;
 
-        // If too many errors, retry
-        if (validation.errors.length > 3 && attempt < maxRetries) {
+        // Only retry once for validation errors (attempt 0 can retry to attempt 1)
+        // After that, accept with collisions to avoid infinite loop
+        if (validation.errors.length > 5 && attempt === 0) {
+          console.warn(`[Gemini Only] Too many collisions (${validation.errors.length}), retrying once...`);
           throw new Error(`Validation failed: ${validation.errors.length} errors`);
         }
-        // Otherwise, log but continue (minor errors)
-        console.warn('Proceeding with minor validation errors');
+        // Accept result with collisions - show in UI
+        console.warn(`[Gemini Only] Accepting result with ${validation.errors.length} collision(s)`);
       }
 
       // Calculate total distance if not provided
