@@ -40,19 +40,14 @@ import {
 } from '../gemini/preConstraint';
 import type { GeminiPreConstraint } from '../gemini/preConstraint';
 import { isApiKeyConfigured } from '../gemini/config';
-import {
-  generateChoreographyWithGemini,
-} from '../gemini/choreographer';
-import type { GeminiChoreographyResponse } from '../gemini/choreographer';
 
 /**
  * Pipeline mode for Gemini integration
  */
 export type GeminiPipelineMode =
-  | 'without_gemini'    // Without Gemini: Algorithm only, local ranking
-  | 'ranking_only'      // Gemini Ranking Only: Algorithm → Gemini ranking
-  | 'pre_and_ranking'   // Gemini Pre + Ranking: Gemini constraints → Algorithm → Gemini ranking
-  | 'gemini_only';      // Gemini Only: Gemini computes all paths directly (experimental)
+  | 'without_gemini'      // Without Gemini: Algorithm only (5 strategies), local ranking
+  | 'pre_and_ranking'     // Gemini Pre + Ranking: Gemini constraints → Algorithm → Gemini ranking
+  | 'testing_algorithm';  // Testing Algorithm: Simple linear paths with timing-based collision avoidance
 
 /**
  * Pipeline result
@@ -369,9 +364,6 @@ export interface MultiCandidateResult {
   // Gemini pre-constraint (only in pre_and_ranking mode)
   preConstraint?: GeminiPreConstraint;
 
-  // Gemini choreography response (only in gemini_only mode)
-  geminiChoreography?: GeminiChoreographyResponse;
-
   // Metadata
   metadata: {
     totalCandidates: number;
@@ -380,7 +372,6 @@ export interface MultiCandidateResult {
     usedGeminiRanking: boolean;
     pipelineMode: GeminiPipelineMode;
     usedGeminiPreConstraint: boolean;
-    usedGeminiChoreography?: boolean;
   };
 
   // Gemini enhancement status (for progressive UX)
@@ -395,8 +386,9 @@ export interface MultiCandidateResult {
  * Multi-candidate generation + Gemini ranking pipeline
  *
  * Modes:
- * - ranking_only: Algorithm → Gemini ranking only
+ * - without_gemini: Algorithm only (5 strategies), local ranking
  * - pre_and_ranking: Gemini pre-constraint → Algorithm → Gemini ranking
+ * - testing_algorithm: Simple linear paths with timing-based collision avoidance
  */
 export async function generateChoreographyWithCandidates(
   startFormation: FormationType,
@@ -428,7 +420,7 @@ export async function generateChoreographyWithCandidates(
     stageHeight = 10,
     userPreference = {},
     useGeminiRanking = false,
-    pipelineMode = 'ranking_only',
+    pipelineMode = 'without_gemini',
     assignmentMode = 'fixed',
     lockedDancers,
   } = options;
@@ -443,109 +435,23 @@ export async function generateChoreographyWithCandidates(
   console.log('=== Pipeline Debug ===');
   console.log('Pipeline Mode:', pipelineMode);
 
-  // Special case: Gemini Only mode - Gemini computes everything
-  if (pipelineMode === 'gemini_only') {
-    console.log('Gemini Only mode: Gemini will compute all paths directly');
-
-    const geminiResponse = await generateChoreographyWithGemini({
-      startPositions,
-      endPositions,
-      stageWidth,
-      stageHeight,
-      totalCounts,
-      collisionRadius: 0.5,
-      userPreference: userPreference.description,
-    });
-
-    console.log('Gemini choreography strategy:', geminiResponse.strategy);
-    console.log('Gemini confidence:', geminiResponse.confidence);
-
-    // Convert Gemini paths to our format
-    const paths: DancerPath[] = geminiResponse.paths.map(p => ({
-      dancerId: p.dancerId,
-      path: p.path,
-      totalDistance: p.totalDistance,
-      startTime: p.startTime,
-      speed: p.speed,
-    }));
-
-    const smoothPaths = pathsToSmoothPaths(paths);
-    const validation = validatePathsSimple(paths, 0.5, totalCounts);
-
-    const request: ChoreographyRequest = {
-      startFormation: { type: startFormation },
-      endFormation: { type: endFormation },
-      constraints: [],
-      style: { spread, symmetry: false, smoothness: 0.7, speed: 'normal', dramatic: false },
-      mainDancer,
-      keyframes: [],
-      totalCounts,
-      originalInput: '',
-    };
-
-    const distances = paths.map(p => p.totalDistance);
-    const resultMetadata = {
-      totalDistance: distances.reduce((sum, d) => sum + d, 0),
-      averageDistance: distances.reduce((sum, d) => sum + d, 0) / distances.length,
-      maxDistance: Math.max(...distances),
-      minDistance: Math.min(...distances),
-      computeTimeMs: performance.now() - startTime,
-    };
-
-    const pathResults = paths.map(p => ({
-      dancerId: p.dancerId,
-      path: p.path,
-      totalDistance: p.totalDistance,
-      collisionFree: true,
-    }));
-    const aestheticScore = evaluateChoreographyLocal(pathResults, mainDancer);
-
-    // Build assignments from Gemini paths (identity mapping since Gemini decides)
-    const assignments: Assignment[] = paths.map((p) => ({
-      dancerId: p.dancerId,
-      startPosition: startPositions[p.dancerId - 1],
-      endPosition: endPositions[p.dancerId - 1],
-      distance: p.totalDistance,
-    }));
-
-    const selectedResult: ChoreographyResult = {
-      request,
-      startPositions,
-      endPositions,
-      assignments,
-      paths,
-      smoothPaths,
-      validation,
-      aestheticScore,
-      metadata: resultMetadata,
-    };
-
-    console.log('=== End Pipeline Debug ===');
-
-    return {
-      selectedResult,
-      candidates: [],  // No candidates in gemini_only mode
-      ranking: null,
-      candidatesSummary: {},
-      geminiChoreography: geminiResponse,
-      metadata: {
-        totalCandidates: 0,
-        selectedStrategy: `Gemini: ${geminiResponse.strategy}`,
-        computeTimeMs: performance.now() - startTime,
-        usedGeminiRanking: false,
-        pipelineMode,
-        usedGeminiPreConstraint: false,
-        usedGeminiChoreography: true,
-      },
-    };
-  }
-
   // 2. Generate candidates (depends on mode)
   let candidates: CandidateResult[];
   let preConstraint: GeminiPreConstraint | undefined;
   let usedGeminiPreConstraint = false;
 
-  if (pipelineMode === 'pre_and_ranking') {
+  if (pipelineMode === 'testing_algorithm') {
+    // Testing Algorithm: Generate all algorithm strategies for comparison
+    console.log('Testing Algorithm mode: Generating all algorithm strategies');
+    candidates = generateAllCandidates(startPositions, endPositions, {
+      totalCounts,
+      collisionRadius: 0.5,
+      stageWidth,
+      stageHeight,
+      assignmentMode,
+      lockedDancers,
+    });
+  } else if (pipelineMode === 'pre_and_ranking') {
     // Pre + Ranking mode: Gemini pre-constraint → constraint-based generation (required)
     preConstraint = await generatePreConstraint(startPositions, endPositions, stageWidth, stageHeight);
     usedGeminiPreConstraint = true;
@@ -560,7 +466,7 @@ export async function generateChoreographyWithCandidates(
       lockedDancers,
     });
   } else {
-    // Without Gemini or Ranking Only mode: standard 5 strategies
+    // Without Gemini mode: standard 5 strategies
     candidates = generateAllCandidates(startPositions, endPositions, {
       totalCounts,
       collisionRadius: 0.5,
@@ -578,9 +484,9 @@ export async function generateChoreographyWithCandidates(
   console.log('Candidates count:', candidates.length);
   console.log('Candidate IDs:', candidates.map(c => c.id));
 
-  if (pipelineMode === 'without_gemini') {
-    // Without Gemini: No ranking, just use first candidate (already sorted by best metrics)
-    console.log('Without Gemini mode: using first candidate (best metrics)');
+  if (pipelineMode === 'without_gemini' || pipelineMode === 'testing_algorithm') {
+    // Without Gemini or Testing Algorithm: No ranking, just use first candidate
+    console.log(`${pipelineMode} mode: using first candidate`);
     console.log('Selected:', candidates[0]?.id);
   } else if (useGeminiRanking) {
     // Gemini ranking (required - no fallback)
@@ -695,7 +601,7 @@ export async function generateWithProgressiveEnhancement(
     stageWidth = 12,
     stageHeight = 10,
     userPreference = {},
-    pipelineMode = 'ranking_only',
+    pipelineMode = 'without_gemini',
     assignmentMode = 'fixed',
     lockedDancers,
     onGeminiResult,
@@ -712,7 +618,18 @@ export async function generateWithProgressiveEnhancement(
   let preConstraint: GeminiPreConstraint | undefined;
   let usedGeminiPreConstraint = false;
 
-  if (pipelineMode === 'pre_and_ranking') {
+  if (pipelineMode === 'testing_algorithm') {
+    // Testing Algorithm: Generate all algorithm strategies for comparison
+    console.log('[Progressive] Testing Algorithm mode: Generating all algorithm strategies');
+    candidates = generateAllCandidates(startPositions, endPositions, {
+      totalCounts,
+      collisionRadius: 0.5,
+      stageWidth,
+      stageHeight,
+      assignmentMode,
+      lockedDancers,
+    });
+  } else if (pipelineMode === 'pre_and_ranking') {
     // Pre + Ranking mode: Get Gemini pre-constraint first (required, no fallback)
     console.log('[Progressive] Fetching Gemini pre-constraint...');
     preConstraint = await generatePreConstraint(startPositions, endPositions, stageWidth, stageHeight);
@@ -728,7 +645,7 @@ export async function generateWithProgressiveEnhancement(
       lockedDancers,
     });
   } else {
-    // Standard candidate generation
+    // Without Gemini: Standard 5 strategies
     candidates = generateAllCandidates(startPositions, endPositions, {
       totalCounts,
       collisionRadius: 0.5,
@@ -801,11 +718,11 @@ export async function generateWithProgressiveEnhancement(
       pipelineMode,
       usedGeminiPreConstraint,
     },
-    geminiEnhancement: pipelineMode !== 'without_gemini' ? { status: 'pending' } : undefined,
+    geminiEnhancement: pipelineMode === 'pre_and_ranking' ? { status: 'pending' } : undefined,
   };
 
   // 5. If not using Gemini, return immediately
-  if (pipelineMode === 'without_gemini' || !onGeminiResult) {
+  if (pipelineMode !== 'pre_and_ranking' || !onGeminiResult) {
     return initialResult;
   }
 

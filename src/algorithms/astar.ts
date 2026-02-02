@@ -10,6 +10,90 @@
 
 import type { Position } from './hungarian';
 
+/**
+ * Smooth path using Catmull-Rom spline interpolation
+ * This function is imported from pathfinder but we'll define a local version
+ */
+function smoothPathWithSpline(
+  path: PathPoint[],
+  numPoints: number = 20
+): PathPoint[] {
+  if (path.length < 2) return path;
+  if (path.length === 2) {
+    // Simple linear interpolation for 2 points
+    const result: PathPoint[] = [];
+    const start = path[0];
+    const end = path[path.length - 1];
+    for (let i = 0; i <= numPoints; i++) {
+      const t = i / numPoints;
+      const time = start.t + (end.t - start.t) * t;
+      result.push({
+        x: start.x + (end.x - start.x) * t,
+        y: start.y + (end.y - start.y) * t,
+        t: time,
+      });
+    }
+    return result;
+  }
+
+  // Catmull-Rom spline interpolation
+  const smoothed: PathPoint[] = [];
+  const startTime = path[0].t;
+  const endTime = path[path.length - 1].t;
+
+  for (let i = 0; i <= numPoints; i++) {
+    const t = i / numPoints;
+    const globalT = startTime + (endTime - startTime) * t;
+
+    // Map t to path segment
+    const segmentCount = path.length - 1;
+    const segmentT = t * segmentCount;
+    const segmentIndex = Math.floor(segmentT);
+    const localT = segmentT - segmentIndex;
+
+    const clampedIndex = Math.min(segmentIndex, segmentCount - 1);
+    const clampedT = clampedIndex === segmentCount - 1 ? 1 : localT;
+
+    // Get 4 points for Catmull-Rom
+    const p0 = path[Math.max(0, clampedIndex - 1)];
+    const p1 = path[clampedIndex];
+    const p2 = path[Math.min(path.length - 1, clampedIndex + 1)];
+    const p3 = path[Math.min(path.length - 1, clampedIndex + 2)];
+
+    // Catmull-Rom spline interpolation
+    const t2 = clampedT * clampedT;
+    const t3 = t2 * clampedT;
+
+    const x = 0.5 * (
+      (2 * p1.x) +
+      (-p0.x + p2.x) * clampedT +
+      (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
+      (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3
+    );
+
+    const y = 0.5 * (
+      (2 * p1.y) +
+      (-p0.y + p2.y) * clampedT +
+      (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
+      (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3
+    );
+
+    smoothed.push({ x, y, t: globalT });
+  }
+
+  // Ensure first and last points are exactly at start and end
+  if (smoothed.length > 0) {
+    smoothed[0] = { x: path[0].x, y: path[0].y, t: path[0].t };
+    smoothed[smoothed.length - 1] = {
+      x: path[path.length - 1].x,
+      y: path[path.length - 1].y,
+      t: path[path.length - 1].t,
+    };
+  }
+
+  return smoothed;
+}
+
 export interface PathPoint {
   x: number;
   y: number;
@@ -370,13 +454,17 @@ export function computeAllPaths(
   });
 
   for (const assignment of sortedAssignments) {
-    const path = findPath(
+    let path = findPath(
       assignment.startPosition,
       assignment.endPosition,
       0,  // Start time
       computedPaths,
       cfg
     );
+
+    // Smooth the path using Catmull-Rom spline to avoid jagged edges
+    // A* produces grid-based paths which can be jagged
+    path = smoothPathWithSpline(path, 30);  // Use 30 points for smooth curve
 
     const totalDistance = calculatePathDistance(path);
 

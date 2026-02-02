@@ -11,6 +11,13 @@ import { computeAssignment } from './hungarian';
 import type { Position, Assignment, AssignmentMode } from './hungarian';
 import { computeAllPathsSimple, validatePathsSimple } from './pathfinder';
 import type { DancerPath, PathPoint, SortStrategy, TimingMode } from './pathfinder';
+import { computeAllPathsWithPotentialField } from './potentialField';
+import { computeAllPathsWithRVO } from './rvo';
+import { computeAllPaths } from './astar';
+import { computeAllPathsWithCBS } from './cbs';
+import { computeAllPathsWithBoids } from './boids';
+import { computeAllPathsWithJPS } from './jps';
+import { computeAllPathsWithHybrid } from './choreographyHybrid';
 
 /**
  * Candidate generation strategy
@@ -23,7 +30,14 @@ export type CandidateStrategy =
   | 'center_priority'          // Center dancer first
   | 'curved_smooth'            // Force curved paths for aesthetic
   | 'quick_burst'              // Fast movement, all start together
-  | 'slow_dramatic';           // Slow dramatic entrance with delays
+  | 'slow_dramatic'            // Slow dramatic entrance with delays
+  | 'potential_field'         // Potential field algorithm
+  | 'rvo'                      // RVO (Reciprocal Velocity Obstacles) algorithm
+  | 'astar'                    // A* pathfinding algorithm
+  | 'cbs'                      // CBS (Conflict-Based Search) algorithm
+  | 'boids'                    // Boids (flocking/swarming) algorithm
+  | 'jps'                      // JPS (Jump Point Search) algorithm
+  | 'hybrid';                  // Hybrid algorithm (Cubic Bezier + heuristic timing)
 
 /**
  * Candidate metrics
@@ -64,12 +78,13 @@ export interface CandidateGeneratorConfig {
 }
 
 const DEFAULT_STRATEGIES: CandidateStrategy[] = [
-  'distance_longest_first',
-  'synchronized_arrival',
-  'staggered_wave',
-  'curved_smooth',
-  'quick_burst',
-  'slow_dramatic',
+  'hybrid',
+  'potential_field',
+  'rvo',
+  'astar',
+  'cbs',
+  'boids',
+  'jps',
 ];
 
 /**
@@ -345,6 +360,7 @@ function getPathfinderConfig(strategy: CandidateStrategy, totalCounts: number) {
     totalCounts,
     collisionRadius: 0.5,
     numPoints: 20,
+    maxCurveOffset: 3.0,  // Allow larger curves for extreme collision scenarios
   };
 
   switch (strategy) {
@@ -393,7 +409,7 @@ function getPathfinderConfig(strategy: CandidateStrategy, totalCounts: number) {
         ...baseConfig,
         sortStrategy: 'distance_longest_first' as SortStrategy,
         timingMode: 'proportional' as TimingMode,
-        maxCurveOffset: 1.5,  // Force curves
+        maxCurveOffset: 2.0,  // Force curves
         forceCurve: true,
       };
 
@@ -415,6 +431,34 @@ function getPathfinderConfig(strategy: CandidateStrategy, totalCounts: number) {
         staggerDelay: 1.0,  // Longer delay between dancers
         speedMultiplier: 0.7,  // Slower
       };
+
+    case 'potential_field':
+      // Potential field algorithm (handled separately in generateCandidate)
+      return baseConfig;
+
+    case 'rvo':
+      // RVO algorithm (handled separately in generateCandidate)
+      return baseConfig;
+
+    case 'astar':
+      // A* algorithm (handled separately in generateCandidate)
+      return baseConfig;
+
+    case 'cbs':
+      // CBS algorithm (handled separately in generateCandidate)
+      return baseConfig;
+
+    case 'boids':
+      // Boids algorithm (handled separately in generateCandidate)
+      return baseConfig;
+
+    case 'jps':
+      // JPS algorithm (handled separately in generateCandidate)
+      return baseConfig;
+
+    case 'hybrid':
+      // Hybrid algorithm (handled separately in generateCandidate)
+      return baseConfig;
 
     default:
       return baseConfig;
@@ -446,9 +490,127 @@ export function generateCandidate(
     ? sortAssignmentsForCenterPriority(assignments, config.stageWidth, config.stageHeight)
     : assignments;
 
-  // 3. Generate paths (with strategy-specific sortStrategy)
-  const pathfinderConfig = getPathfinderConfig(strategy, config.totalCounts);
-  const paths = computeAllPathsSimple(processedAssignments, pathfinderConfig);
+  // 3. Generate paths (with strategy-specific algorithm)
+  let paths: DancerPath[];
+  if (strategy === 'potential_field') {
+    // Use potential field algorithm
+    paths = computeAllPathsWithPotentialField(processedAssignments, {
+      totalCounts: config.totalCounts,
+      collisionRadius: config.collisionRadius,
+      stageWidth: config.stageWidth,
+      stageHeight: config.stageHeight,
+      numPoints: 20,
+      attractiveGain: 1.0,
+      repulsiveGain: 2.0,
+      repulsiveRange: config.collisionRadius * 2.0,
+      stepSize: 0.1,
+      maxIterations: 100,
+    });
+  } else if (strategy === 'rvo') {
+    // Use RVO algorithm with enhanced head-on collision avoidance
+    paths = computeAllPathsWithRVO(processedAssignments, {
+      totalCounts: config.totalCounts,
+      collisionRadius: config.collisionRadius,
+      stageWidth: config.stageWidth,
+      stageHeight: config.stageHeight,
+      numPoints: 20,
+      timeHorizon: 3.0,  // Increased for early head-on collision detection
+      neighborDist: 8.0,  // Increased to detect head-on collisions earlier
+      maxSpeed: 2.0,
+      timeStep: 0.1,
+    });
+  } else if (strategy === 'astar') {
+    // Use A* algorithm
+    const astarAssignments = processedAssignments.map(a => ({
+      dancerId: a.dancerId,
+      startPosition: a.startPosition,
+      endPosition: a.endPosition,
+    }));
+    
+    const astarResults = computeAllPaths(astarAssignments, {
+      stageWidth: config.stageWidth,
+      stageHeight: config.stageHeight,
+      totalCounts: config.totalCounts,
+      gridResolution: 0.5,
+      timeResolution: 0.5,
+      collisionRadius: config.collisionRadius,
+      diagonalCost: 1.414,
+    });
+
+    // Convert PathResult[] to DancerPath[]
+    paths = astarResults.map(result => {
+      // Calculate startTime and speed from path
+      const startTime = result.path.length > 0 ? result.path[0].t : 0;
+      const endTime = result.path.length > 0 ? result.path[result.path.length - 1].t : config.totalCounts;
+      const duration = endTime - startTime;
+      const speed = duration > 0 ? result.totalDistance / duration : 1.0;
+
+      return {
+        dancerId: result.dancerId,
+        path: result.path,
+        startTime,
+        speed: Math.max(0.3, Math.min(2.0, speed)),
+        totalDistance: result.totalDistance,
+      };
+    });
+  } else if (strategy === 'cbs') {
+    // Use CBS (Conflict-Based Search) algorithm
+    // CBS is more efficient than A* for multi-agent scenarios with conflicts
+    paths = computeAllPathsWithCBS(processedAssignments, {
+      totalCounts: config.totalCounts,
+      collisionRadius: config.collisionRadius,
+      stageWidth: config.stageWidth,
+      stageHeight: config.stageHeight,
+      gridResolution: 0.5,
+      timeResolution: 0.5,
+      maxIterations: 100,
+    });
+  } else if (strategy === 'boids') {
+    // Use Boids (flocking/swarming) algorithm
+    paths = computeAllPathsWithBoids(processedAssignments, {
+      totalCounts: config.totalCounts,
+      collisionRadius: config.collisionRadius,
+      stageWidth: config.stageWidth,
+      stageHeight: config.stageHeight,
+      numPoints: 20,
+      separationWeight: 1.5,
+      alignmentWeight: 1.0,
+      cohesionWeight: 1.0,
+      goalWeight: 2.0,
+      separationRadius: config.collisionRadius * 1.5,
+      neighborRadius: 3.0,
+      maxSpeed: 2.0,
+      maxForce: 0.5,
+      timeStep: 0.2,
+    });
+  } else if (strategy === 'jps') {
+    // Use JPS (Jump Point Search) algorithm
+    paths = computeAllPathsWithJPS(processedAssignments, {
+      totalCounts: config.totalCounts,
+      collisionRadius: config.collisionRadius,
+      stageWidth: config.stageWidth,
+      stageHeight: config.stageHeight,
+      gridResolution: 0.5,
+      timeResolution: 0.5,
+      maxIterations: 10000,
+    });
+  } else if (strategy === 'hybrid') {
+    // Use Hybrid algorithm (Cubic Bezier + heuristic timing)
+    // Best for: natural curved paths, human speed limits, back stage positioning
+    paths = computeAllPathsWithHybrid(processedAssignments, {
+      totalCounts: config.totalCounts,
+      collisionRadius: config.collisionRadius,
+      stageWidth: config.stageWidth,
+      stageHeight: config.stageHeight,
+      numPoints: 30,
+      maxHumanSpeed: 1.5,  // meters per count
+      preferSimultaneousArrival: true,
+    });
+  } else {
+    // Use standard pathfinder
+    const pathfinderConfig = getPathfinderConfig(strategy, config.totalCounts);
+    paths = computeAllPathsSimple(processedAssignments, pathfinderConfig);
+  }
 
   // 4. Calculate metrics
   const metrics = calculateMetrics(

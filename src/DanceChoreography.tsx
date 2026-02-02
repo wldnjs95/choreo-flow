@@ -4,7 +4,6 @@ import {
   // generateChoreographyFromText,  // Hidden - NLP input disabled
   generateChoreographyDirect,
   generateWithProgressiveEnhancement,
-  generateChoreographyWithCandidates,
   generateFormation,
   type ChoreographyResult,
   type SmoothPath,
@@ -15,7 +14,7 @@ import {
   type AssignmentMode,
   type MultiCandidateResult,
 } from './algorithms';
-import { isApiKeyConfigured, type AestheticScore, type RankingResult, type GeminiPreConstraint, type GeminiChoreographyResponse } from './gemini';
+import { isApiKeyConfigured, type AestheticScore, type RankingResult, type GeminiPreConstraint } from './gemini';
 
 // Visualization constants
 const DEFAULT_STAGE_WIDTH = 15;  // Large: 49ft ≈ 15m
@@ -32,6 +31,145 @@ const STAGE_PRESETS = {
   'medium': { width: 10, height: 8, label: 'Medium (33×26ft)' },
   'large': { width: 15, height: 12, label: 'Large (49×39ft)' },
   'custom': { width: 15, height: 12, label: 'Custom' },
+};
+
+// Collision test case presets - extreme scenarios for testing collision avoidance
+type TestCasePreset = 'none' | 'two_lines_swap' | 'line_reverse' | 'v_shape_invert' | 'circle_180' | 'diagonal_cross' | 'grid_shuffle';
+
+interface TestCase {
+  label: string;
+  description: string;
+  dancerCount: number;
+  stageWidth: number;
+  stageHeight: number;
+  getPositions: () => { start: Position[]; end: Position[] };
+}
+
+const COLLISION_TEST_CASES: Record<TestCasePreset, TestCase | null> = {
+  'none': null,
+  'two_lines_swap': {
+    label: '2 Lines Swap',
+    description: 'Top row ↔ Bottom row (12 dancers)',
+    dancerCount: 12,
+    stageWidth: 15,
+    stageHeight: 12,
+    getPositions: () => {
+      const start: Position[] = [];
+      const end: Position[] = [];
+      // Top row: 1-6 at y=9, Bottom row: 7-12 at y=3
+      for (let i = 0; i < 6; i++) {
+        start.push({ x: 2 + i * 2.2, y: 9 });  // Top row
+        end.push({ x: 2 + i * 2.2, y: 3 });    // Goes to bottom
+      }
+      for (let i = 0; i < 6; i++) {
+        start.push({ x: 2 + i * 2.2, y: 3 });  // Bottom row
+        end.push({ x: 2 + i * 2.2, y: 9 });    // Goes to top
+      }
+      return { start, end };
+    },
+  },
+  'line_reverse': {
+    label: 'Line Reverse',
+    description: 'Line reverses order 1↔12 (12 dancers)',
+    dancerCount: 12,
+    stageWidth: 15,
+    stageHeight: 12,
+    getPositions: () => {
+      const start: Position[] = [];
+      const end: Position[] = [];
+      for (let i = 0; i < 12; i++) {
+        start.push({ x: 1.5 + i * 1.1, y: 6 });
+        end.push({ x: 1.5 + (11 - i) * 1.1, y: 6 });
+      }
+      return { start, end };
+    },
+  },
+  'v_shape_invert': {
+    label: 'V-Shape Invert',
+    description: 'V flips upside down (10 dancers)',
+    dancerCount: 10,
+    stageWidth: 15,
+    stageHeight: 12,
+    getPositions: () => {
+      const start: Position[] = [];
+      const end: Position[] = [];
+      // V shape pointing down
+      for (let i = 0; i < 5; i++) {
+        start.push({ x: 3 + i * 1.5, y: 10 - i * 1.5 });  // Left side of V
+        end.push({ x: 3 + i * 1.5, y: 2 + i * 1.5 });     // Inverted
+      }
+      for (let i = 0; i < 5; i++) {
+        start.push({ x: 12 - i * 1.5, y: 10 - i * 1.5 }); // Right side of V
+        end.push({ x: 12 - i * 1.5, y: 2 + i * 1.5 });    // Inverted
+      }
+      return { start, end };
+    },
+  },
+  'circle_180': {
+    label: 'Circle 180°',
+    description: 'Circle rotates 180° (12 dancers)',
+    dancerCount: 12,
+    stageWidth: 15,
+    stageHeight: 12,
+    getPositions: () => {
+      const start: Position[] = [];
+      const end: Position[] = [];
+      const cx = 7.5, cy = 6, r = 4;
+      for (let i = 0; i < 12; i++) {
+        const angle = (i / 12) * Math.PI * 2;
+        start.push({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) });
+        // 180 degree opposite
+        end.push({ x: cx + r * Math.cos(angle + Math.PI), y: cy + r * Math.sin(angle + Math.PI) });
+      }
+      return { start, end };
+    },
+  },
+  'diagonal_cross': {
+    label: 'Diagonal Cross',
+    description: 'Two diagonal lines cross (8 dancers)',
+    dancerCount: 8,
+    stageWidth: 15,
+    stageHeight: 12,
+    getPositions: () => {
+      const start: Position[] = [];
+      const end: Position[] = [];
+      // Diagonal 1: top-left to bottom-right
+      for (let i = 0; i < 4; i++) {
+        start.push({ x: 2 + i * 2, y: 10 - i * 2 });
+        end.push({ x: 13 - i * 2, y: 2 + i * 2 });
+      }
+      // Diagonal 2: top-right to bottom-left
+      for (let i = 0; i < 4; i++) {
+        start.push({ x: 13 - i * 2, y: 10 - i * 2 });
+        end.push({ x: 2 + i * 2, y: 2 + i * 2 });
+      }
+      return { start, end };
+    },
+  },
+  'grid_shuffle': {
+    label: 'Grid Shuffle',
+    description: '3x4 grid corners swap (12 dancers)',
+    dancerCount: 12,
+    stageWidth: 15,
+    stageHeight: 12,
+    getPositions: () => {
+      const start: Position[] = [];
+      const end: Position[] = [];
+      // 3 columns x 4 rows
+      const positions: Position[] = [];
+      for (let row = 0; row < 4; row++) {
+        for (let col = 0; col < 3; col++) {
+          positions.push({ x: 4 + col * 3.5, y: 2.5 + row * 2.5 });
+        }
+      }
+      // Shuffle: reverse order
+      for (let i = 0; i < 12; i++) {
+        start.push(positions[i]);
+        end.push(positions[11 - i]);
+      }
+      return { start, end };
+    },
+  },
 };
 
 // Dancer colors
@@ -165,54 +303,38 @@ function Dancer({ dancer, position, showPath, isSelected, onSelect, scale, stage
         />
       )}
 
-      <motion.circle
-        cx={x}
-        cy={y}
-        r={dancerRadius}
-        fill={dancer.color}
-        stroke={isSelected ? '#fff' : 'rgba(255,255,255,0.3)'}
-        strokeWidth={isSelected ? 3 : 2}
-        initial={false}
-        animate={{ cx: x, cy: y }}
-        transition={{ type: 'tween', duration: 0.05 }}
-        style={{
-          filter: isSelected ? 'drop-shadow(0 0 10px rgba(255,255,255,0.5))' : 'none',
-        }}
-      />
-
-      {/* Dancer number with shadow for visibility */}
-      <motion.text
-        x={x}
-        y={y}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fill="#000"
-        fontSize={Math.max(12, dancerRadius * 0.9)}
-        fontWeight="bold"
-        style={{ pointerEvents: 'none', userSelect: 'none' }}
+      {/* Group circle and text together for synchronized animation */}
+      <motion.g
         initial={false}
         animate={{ x, y }}
         transition={{ type: 'tween', duration: 0.05 }}
       >
-        {dancer.id}
-      </motion.text>
-      <motion.text
-        x={x}
-        y={y}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fill="#fff"
-        fontSize={Math.max(12, dancerRadius * 0.9)}
-        fontWeight="bold"
-        stroke="#000"
-        strokeWidth={0.5}
-        style={{ pointerEvents: 'none', userSelect: 'none' }}
-        initial={false}
-        animate={{ x, y }}
-        transition={{ type: 'tween', duration: 0.05 }}
-      >
-        {dancer.id}
-      </motion.text>
+        <circle
+          cx={0}
+          cy={0}
+          r={dancerRadius}
+          fill={dancer.color}
+          stroke={isSelected ? '#fff' : 'rgba(255,255,255,0.3)'}
+          strokeWidth={isSelected ? 3 : 2}
+          style={{
+            filter: isSelected ? 'drop-shadow(0 0 10px rgba(255,255,255,0.5))' : 'none',
+          }}
+        />
+        <text
+          x={0}
+          y={0}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill="#fff"
+          fontSize={Math.max(12, dancerRadius * 0.9)}
+          fontWeight="bold"
+          stroke="#000"
+          strokeWidth={0.5}
+          style={{ pointerEvents: 'none', userSelect: 'none' }}
+        >
+          {dancer.id}
+        </text>
+      </motion.g>
     </g>
   );
 }
@@ -1423,6 +1545,13 @@ function CandidateComparisonPanel({
       'candidate_constrained_curve_0.8': 'Constrained + Curve 0.8',
       'candidate_baseline_distance_longest_first': 'Baseline: Longest',
       'candidate_baseline_timing_priority': 'Baseline: Timing',
+      'hybrid': 'Hybrid (Bezier + Timing)',
+      'potential_field': 'Potential Field',
+      'rvo': 'RVO',
+      'astar': 'A*',
+      'cbs': 'CBS',
+      'boids': 'Boids',
+      'jps': 'JPS',
     };
     return labels[strategy] || strategy;
   };
@@ -1445,7 +1574,7 @@ function CandidateComparisonPanel({
         <h3>Candidate Comparison</h3>
         <div className="header-badges">
           <span className={`pipeline-badge ${pipelineMode}`}>
-            {pipelineMode === 'without_gemini' ? '⚡ Algorithm Only' : pipelineMode === 'pre_and_ranking' ? '🧠 Pre+Ranking' : '📊 Ranking Only'}
+            {pipelineMode === 'without_gemini' ? '⚡ Algorithm Only' : pipelineMode === 'pre_and_ranking' ? '🧠 Pre+Ranking' : '🧪 Testing'}
           </span>
           <span className={`ranking-badge ${usedGeminiRanking ? 'gemini' : 'local'}`}>
             {usedGeminiRanking ? '🤖 Gemini' : '📊 Local'}
@@ -1764,6 +1893,10 @@ export default function DanceChoreography() {
   const [customEndPositions, setCustomEndPositions] = useState<Position[]>([]);
   const [editingFormation, setEditingFormation] = useState<'start' | 'end' | null>(null);
 
+  // Collision test case preset
+  const [testCasePreset, setTestCasePreset] = useState<TestCasePreset>('none');
+  const skipPositionUpdateRef = useRef(false);
+
   // Choreography result
   const [result, setResult] = useState<ChoreographyResult | null>(null);
   const [dancers, setDancers] = useState<DancerData[]>([]);
@@ -1776,14 +1909,13 @@ export default function DanceChoreography() {
   const [usedGeminiRanking, setUsedGeminiRanking] = useState(false);
   const [useMultiCandidate, setUseMultiCandidate] = useState(true); // Multi-candidate mode toggle
   const [apiConfigured, setApiConfigured] = useState(false);
-  const [pipelineMode, setPipelineMode] = useState<GeminiPipelineMode>('ranking_only');
+  const [pipelineMode, setPipelineMode] = useState<GeminiPipelineMode>('without_gemini');
   const [assignmentMode, setAssignmentMode] = useState<AssignmentMode>('fixed');
   const [lockedDancers, setLockedDancers] = useState<Set<number>>(new Set());
   const [preConstraint, setPreConstraint] = useState<GeminiPreConstraint | null>(null);
   const [usedGeminiPreConstraint, setUsedGeminiPreConstraint] = useState(false);
   const [geminiStatus, setGeminiStatus] = useState<'idle' | 'pending' | 'success' | 'failed' | 'timeout'>('idle');
   const [pendingGeminiResult, setPendingGeminiResult] = useState<MultiCandidateResult | null>(null);
-  const [geminiOnlyResponse, setGeminiOnlyResponse] = useState<GeminiChoreographyResponse | null>(null);
 
   // Check API configuration on mount
   useEffect(() => {
@@ -1791,7 +1923,12 @@ export default function DanceChoreography() {
   }, []);
 
   // Initialize custom positions when dancer count or stage size changes
+  // Skip if test case preset just updated (to preserve test case positions)
   useEffect(() => {
+    if (skipPositionUpdateRef.current) {
+      skipPositionUpdateRef.current = false;
+      return;
+    }
     const startPos = generateFormation(startFormation === 'custom' ? 'line' : startFormation, dancerCount, { stageWidth, stageHeight });
     const endPos = generateFormation(endFormation === 'custom' ? 'v_shape' : endFormation, dancerCount, { stageWidth, stageHeight });
     setCustomStartPositions(startPos);
@@ -1800,31 +1937,51 @@ export default function DanceChoreography() {
 
   // Do not generate formation initially (user clicks generate button)
 
-  // Animation loop
-  useEffect(() => {
-    if (!isPlaying) return;
+  // Animation refs to avoid re-triggering effect on every frame
+  const animationRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const startCountRef = useRef<number>(0);
 
-    const startTime = performance.now();
-    const startCount = currentCount;
+  // Animation loop - only depends on isPlaying and playbackSpeed
+  useEffect(() => {
+    if (!isPlaying) {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+      return;
+    }
+
+    // Capture start values when animation begins
+    startTimeRef.current = performance.now();
+    startCountRef.current = currentCount;
     const countDuration = 1000 / playbackSpeed;
 
     const animate = (time: number) => {
-      const elapsed = time - startTime;
-      const newCount = startCount + (elapsed / countDuration);
+      const elapsed = time - startTimeRef.current;
+      const newCount = startCountRef.current + (elapsed / countDuration);
 
       if (newCount >= totalCounts) {
         setCurrentCount(totalCounts);
         setIsPlaying(false);
+        animationRef.current = null;
         return;
       }
 
       setCurrentCount(newCount);
-      requestAnimationFrame(animate);
+      animationRef.current = requestAnimationFrame(animate);
     };
 
-    const frameId = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frameId);
-  }, [isPlaying, playbackSpeed, currentCount, totalCounts]);
+    animationRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, playbackSpeed, totalCounts]); // currentCount intentionally excluded
 
   /* handleNLPGenerate - Hidden but code preserved for future use
   const handleNLPGenerate = useCallback(async (input: string) => {
@@ -1862,50 +2019,8 @@ export default function DanceChoreography() {
 
     try {
       if (useMultiCandidate) {
-        // Special case: Gemini Only mode - no progressive enhancement needed
-        if (pipelineMode === 'gemini_only') {
-          setGeminiStatus('pending');
-
-          const multiResult = await generateChoreographyWithCandidates(
-            startFormation,
-            endFormation,
-            {
-              dancerCount: dancerCount,
-              spread: 1.0,
-              totalCounts: 8,
-              customStartPositions: customStartPositions.slice(0, dancerCount),
-              customEndPositions: customEndPositions.slice(0, dancerCount),
-              stageWidth: stageWidth,
-              stageHeight: stageHeight,
-              pipelineMode: 'gemini_only',
-              useGeminiRanking: false, // No ranking in gemini_only mode
-            }
-          );
-
-          setCandidates([]); // No candidates in gemini_only mode
-          setRanking(null);
-          setSelectedCandidateId('');
-          setUsedGeminiRanking(false);
-          setPreConstraint(null);
-          setUsedGeminiPreConstraint(false);
-          setResult(multiResult.selectedResult);
-          setDancers(resultToDancerData(multiResult.selectedResult));
-          setTotalCounts(multiResult.selectedResult.request.totalCounts);
-          setGeminiStatus('success');
-
-          // Store and log Gemini choreography info
-          if (multiResult.geminiChoreography) {
-            setGeminiOnlyResponse(multiResult.geminiChoreography);
-            console.log('[Gemini Only] Strategy:', multiResult.geminiChoreography.strategy);
-            console.log('[Gemini Only] Reasoning:', multiResult.geminiChoreography.reasoning);
-            console.log('[Gemini Only] Confidence:', multiResult.geminiChoreography.confidence);
-            console.log('[Gemini Only] Raw response length:', multiResult.geminiChoreography.rawResponseLength);
-          } else {
-            setGeminiOnlyResponse(null);
-          }
-        } else {
-          // Progressive Enhancement: Local result first, Gemini in background
-          const shouldUseGemini = pipelineMode !== 'without_gemini';
+        // Progressive Enhancement: Local result first, Gemini in background
+        const shouldUseGemini = pipelineMode === 'pre_and_ranking';
 
           const multiResult = await generateWithProgressiveEnhancement(
             startFormation,
@@ -1954,7 +2069,6 @@ export default function DanceChoreography() {
           if (shouldUseGemini) {
             setGeminiStatus('pending');
           }
-        }
       } else {
         // Single result mode (legacy)
         const choreographyResult = generateChoreographyDirect(
@@ -2051,7 +2165,28 @@ export default function DanceChoreography() {
     const endPos = generateFormation(endFormation === 'custom' ? 'v_shape' : endFormation, count, { stageWidth, stageHeight });
     setCustomStartPositions(startPos);
     setCustomEndPositions(endPos);
+    setTestCasePreset('none');
   }, [startFormation, endFormation, stageWidth, stageHeight]);
+
+  // Handle test case preset change
+  const handleTestCaseChange = useCallback((preset: TestCasePreset) => {
+    setTestCasePreset(preset);
+    const testCase = COLLISION_TEST_CASES[preset];
+    if (!testCase) return;
+
+    // Skip the position update in the useEffect
+    skipPositionUpdateRef.current = true;
+
+    const { start, end } = testCase.getPositions();
+    setDancerCount(testCase.dancerCount);
+    setStageWidth(testCase.stageWidth);
+    setStageHeight(testCase.stageHeight);
+    setCustomStartPositions(start);
+    setCustomEndPositions(end);
+    setStartFormation('custom');
+    setEndFormation('custom');
+    setStagePreset('custom');
+  }, []);
 
   // Handle stage preset change
   const handleStagePresetChange = useCallback((preset: StagePreset) => {
@@ -2137,6 +2272,33 @@ export default function DanceChoreography() {
           isLoading={isLoading}
         />
 
+        {/* Collision Test Case Presets */}
+        <div className="test-case-selector">
+          <label className="test-case-label">
+            <span>🧪 Collision Test Cases</span>
+            <select
+              value={testCasePreset}
+              onChange={(e) => handleTestCaseChange(e.target.value as TestCasePreset)}
+            >
+              <option value="none">-- Select Test Case --</option>
+              {Object.entries(COLLISION_TEST_CASES)
+                .filter(([key]) => key !== 'none')
+                .map(([key, testCase]) => (
+                  <option key={key} value={key}>
+                    {testCase?.label}
+                  </option>
+                ))}
+            </select>
+          </label>
+          {testCasePreset !== 'none' && COLLISION_TEST_CASES[testCasePreset] && (
+            <div className="test-case-info">
+              <span className="test-case-desc">
+                {COLLISION_TEST_CASES[testCasePreset]?.description}
+              </span>
+            </div>
+          )}
+        </div>
+
         <div className="multi-candidate-toggle">
           <label className="toggle-label">
             <input
@@ -2157,18 +2319,7 @@ export default function DanceChoreography() {
                   onChange={() => setPipelineMode('without_gemini')}
                 />
                 <span className="mode-label">Without Gemini</span>
-                <span className="mode-desc">Algorithm only, local ranking</span>
-              </label>
-              <label className={`mode-option ${pipelineMode === 'ranking_only' ? 'active' : ''}`}>
-                <input
-                  type="radio"
-                  name="pipelineMode"
-                  value="ranking_only"
-                  checked={pipelineMode === 'ranking_only'}
-                  onChange={() => setPipelineMode('ranking_only')}
-                />
-                <span className="mode-label">Ranking Only</span>
-                <span className="mode-desc">Algorithm → Gemini ranking</span>
+                <span className="mode-desc">5 strategies, local ranking</span>
               </label>
               <label className={`mode-option ${pipelineMode === 'pre_and_ranking' ? 'active' : ''}`}>
                 <input
@@ -2179,30 +2330,28 @@ export default function DanceChoreography() {
                   onChange={() => setPipelineMode('pre_and_ranking')}
                 />
                 <span className="mode-label">Pre + Ranking</span>
-                <span className="mode-desc">Gemini constraints → Algorithm → Gemini ranking</span>
+                <span className="mode-desc">Gemini constraints + ranking</span>
               </label>
-              <label className={`mode-option gemini-only ${pipelineMode === 'gemini_only' ? 'active' : ''}`}>
+              <label className={`mode-option ${pipelineMode === 'testing_algorithm' ? 'active' : ''}`}>
                 <input
                   type="radio"
                   name="pipelineMode"
-                  value="gemini_only"
-                  checked={pipelineMode === 'gemini_only'}
-                  onChange={() => setPipelineMode('gemini_only')}
+                  value="testing_algorithm"
+                  checked={pipelineMode === 'testing_algorithm'}
+                  onChange={() => setPipelineMode('testing_algorithm')}
                 />
-                <span className="mode-label">🧪 Gemini Only</span>
-                <span className="mode-desc">Gemini computes all paths directly (experimental)</span>
+                <span className="mode-label">Testing Algorithm</span>
+                <span className="mode-desc">Simple linear paths with timing offset</span>
               </label>
             </div>
           )}
           {useMultiCandidate && (
             <span className="toggle-hint">
               {pipelineMode === 'without_gemini'
-                ? '5 strategies → Local ranking'
-                : pipelineMode === 'ranking_only'
-                  ? `5 strategies → ${apiConfigured ? 'Gemini' : 'Local'} ranking`
-                  : pipelineMode === 'gemini_only'
-                    ? '🧪 Gemini computes all paths directly (no algorithm)'
-                    : `Gemini constraints → ${apiConfigured ? 'Gemini' : 'Local'} ranking`}
+                ? '5 strategies with local ranking'
+                : pipelineMode === 'testing_algorithm'
+                  ? 'Simple linear paths + timing-based collision avoidance'
+                  : `Gemini constraints + ${apiConfigured ? 'Gemini' : 'Local'} ranking`}
             </span>
           )}
         </div>
@@ -2334,32 +2483,6 @@ export default function DanceChoreography() {
               {result.validation.valid ? 'None' : `${result.validation.collisions.length}`}
             </strong>
           </div>
-        </div>
-      )}
-
-      {/* Gemini Only Raw Response Display */}
-      {pipelineMode === 'gemini_only' && geminiOnlyResponse && (
-        <div className="gemini-raw-response">
-          <div className="gemini-raw-header">
-            <h3>Gemini Only - Raw Response</h3>
-            <div className="gemini-raw-meta">
-              <span className="meta-badge">Length: {geminiOnlyResponse.rawResponseLength?.toLocaleString() || 'N/A'} chars</span>
-              <span className="meta-badge">Confidence: {((geminiOnlyResponse.confidence || 0) * 100).toFixed(0)}%</span>
-              <span className="meta-badge">Paths: {geminiOnlyResponse.paths?.length || 0}</span>
-            </div>
-          </div>
-          <div className="gemini-raw-info">
-            <div className="info-row">
-              <strong>Strategy:</strong> {geminiOnlyResponse.strategy || 'N/A'}
-            </div>
-            <div className="info-row">
-              <strong>Reasoning:</strong> {geminiOnlyResponse.reasoning || 'N/A'}
-            </div>
-          </div>
-          <details className="gemini-raw-details">
-            <summary>View Raw Response ({geminiOnlyResponse.rawResponseLength?.toLocaleString() || 0} chars)</summary>
-            <pre className="gemini-raw-text">{geminiOnlyResponse.rawResponse || 'No raw response available'}</pre>
-          </details>
         </div>
       )}
 

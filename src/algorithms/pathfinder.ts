@@ -152,8 +152,14 @@ function hasCollision(
 }
 
 /**
- * Generate curved path with slight offset
- * offset: deviation of midpoint from straight line
+ * Generate curved path using Catmull-Rom Spline
+ * offset: deviation of control points from straight line
+ * 
+ * Catmull-Rom Spline advantages:
+ * - Passes through all control points (unlike B-spline)
+ * - More flexible than Quadratic Bezier (can create S-curves)
+ * - Natural and smooth curves
+ * - Better for complex path patterns
  */
 function generateCurvedPath(
   start: Position,
@@ -175,23 +181,82 @@ function generateCurvedPath(
   const len = Math.sqrt(dx * dx + dy * dy);
 
   // Perpendicular vector (normalized)
-  const perpX = -dy / len;
-  const perpY = dx / len;
+  const perpX = len > 0.001 ? -dy / len : 0;
+  const perpY = len > 0.001 ? dx / len : 1;
 
-  // Midpoint with offset applied
-  const ctrlX = midX + perpX * curveOffset;
-  const ctrlY = midY + perpY * curveOffset;
+  // Create control points for Catmull-Rom spline
+  // We need at least 4 points: P0 (start), P1, P2 (control), P3 (end)
+  // For more complex curves, we can add more control points
+  
+  // Control point 1: offset from start towards midpoint
+  const ctrl1X = start.x + (midX - start.x) * 0.3 + perpX * curveOffset * 0.5;
+  const ctrl1Y = start.y + (midY - start.y) * 0.3 + perpY * curveOffset * 0.5;
 
+  // Control point 2: offset from midpoint towards end
+  const ctrl2X = midX + perpX * curveOffset;
+  const ctrl2Y = midY + perpY * curveOffset;
+
+  // Control point 3: offset from end back towards midpoint
+  const ctrl3X = end.x - (end.x - midX) * 0.3 + perpX * curveOffset * 0.5;
+  const ctrl3Y = end.y - (end.y - midY) * 0.3 + perpY * curveOffset * 0.5;
+
+  // Catmull-Rom spline points: [start, ctrl1, ctrl2, ctrl3, end]
+  const splinePoints: Position[] = [
+    start,
+    { x: ctrl1X, y: ctrl1Y },
+    { x: ctrl2X, y: ctrl2Y },
+    { x: ctrl3X, y: ctrl3Y },
+    end,
+  ];
+
+  // Generate path using Catmull-Rom interpolation
   for (let i = 0; i <= numPoints; i++) {
     const t = i / numPoints;
     const time = startTime + (endTime - startTime) * t;
 
-    // Quadratic Bezier curve: (1-t)²P0 + 2(1-t)tP1 + t²P2
-    const oneMinusT = 1 - t;
-    const x = oneMinusT * oneMinusT * start.x + 2 * oneMinusT * t * ctrlX + t * t * end.x;
-    const y = oneMinusT * oneMinusT * start.y + 2 * oneMinusT * t * ctrlY + t * t * end.y;
+    // Map t (0-1) to spline segment index
+    // We have 4 segments (5 points = 4 segments)
+    const segmentCount = splinePoints.length - 1;
+    const segmentT = t * segmentCount;
+    const segmentIndex = Math.floor(segmentT);
+    const localT = segmentT - segmentIndex;
+
+    // Clamp segment index
+    const clampedIndex = Math.min(segmentIndex, segmentCount - 1);
+    const clampedT = clampedIndex === segmentCount - 1 ? 1 : localT;
+
+    // Get 4 points for Catmull-Rom (P0, P1, P2, P3)
+    // For edge cases, use the point itself
+    const p0 = splinePoints[Math.max(0, clampedIndex - 1)];
+    const p1 = splinePoints[clampedIndex];
+    const p2 = splinePoints[Math.min(splinePoints.length - 1, clampedIndex + 1)];
+    const p3 = splinePoints[Math.min(splinePoints.length - 1, clampedIndex + 2)];
+
+    // Catmull-Rom spline interpolation
+    const t2 = clampedT * clampedT;
+    const t3 = t2 * clampedT;
+
+    const x = 0.5 * (
+      (2 * p1.x) +
+      (-p0.x + p2.x) * clampedT +
+      (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
+      (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3
+    );
+
+    const y = 0.5 * (
+      (2 * p1.y) +
+      (-p0.y + p2.y) * clampedT +
+      (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
+      (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3
+    );
 
     path.push({ x, y, t: time });
+  }
+
+  // Ensure first and last points are exactly at start and end
+  if (path.length > 0) {
+    path[0] = { x: start.x, y: start.y, t: startTime };
+    path[path.length - 1] = { x: end.x, y: end.y, t: endTime };
   }
 
   return path;
@@ -355,13 +420,17 @@ export function computeAllPathsSimple(
         }
       }
 
-      // Method 2: Start late (various delays)
+      // Method 2: Start late (various delays) - extended range
       if (hasConflict) {
-        for (let delay = 0.5; delay <= 4 && hasConflict; delay += 0.5) {
+        for (let delay = 0.5; delay <= 6 && hasConflict; delay += 0.5) {
           // Late start + same speed
           const newStartTime = delay;
-          const duration = originalEndTime;
+          const duration = originalEndTime - startTime;  // Keep original duration
           const newEndTime = Math.min(newStartTime + duration, cfg.totalCounts);
+
+          // Skip if not enough time to complete
+          if (newEndTime - newStartTime < 1) continue;
+
           path = generateLinearPath(startPosition, endPosition, newStartTime, newEndTime, cfg.numPoints);
 
           hasConflict = false;
@@ -379,12 +448,37 @@ export function computeAllPathsSimple(
         }
       }
 
-      // Method 3: Late start + fast movement combination
+      // Method 3: Move SLOWER (increase duration) - let others pass first
       if (hasConflict) {
-        for (const delay of [1, 2, 3]) {
-          for (const speedFactor of [0.5, 0.4, 0.3]) {
+        for (const slowFactor of [1.5, 2.0, 2.5, 3.0]) {
+          const newEndTime = Math.min(originalEndTime * slowFactor, cfg.totalCounts);
+          path = generateLinearPath(startPosition, endPosition, 0, newEndTime, cfg.numPoints);
+
+          hasConflict = false;
+          for (const computed of computedPaths) {
+            if (hasCollision(path, computed.path, cfg.collisionRadius, cfg.totalCounts)) {
+              hasConflict = true;
+              break;
+            }
+          }
+
+          if (!hasConflict) {
+            startTime = 0;
+            endTime = newEndTime;
+            break;
+          }
+        }
+      }
+
+      // Method 4: Late start + fast movement combination
+      if (hasConflict) {
+        for (const delay of [0.5, 1, 1.5, 2, 2.5, 3, 4]) {
+          for (const speedFactor of [0.7, 0.5, 0.4, 0.3]) {
             const newStartTime = delay;
             const newEndTime = Math.min(newStartTime + originalEndTime * speedFactor, cfg.totalCounts);
+
+            if (newEndTime - newStartTime < 1) continue;
+
             path = generateLinearPath(startPosition, endPosition, newStartTime, newEndTime, cfg.numPoints);
 
             hasConflict = false;
@@ -405,11 +499,56 @@ export function computeAllPathsSimple(
         }
       }
 
-      // Method 4: Last resort - minimal curve (limited by maxCurveOffset)
+      // Method 5: Late start + SLOW movement (wait then take your time)
+      if (hasConflict) {
+        for (const delay of [1, 2, 3, 4]) {
+          for (const slowFactor of [1.2, 1.5, 2.0]) {
+            const newStartTime = delay;
+            const baseDuration = originalEndTime - startTime;
+            const newEndTime = Math.min(newStartTime + baseDuration * slowFactor, cfg.totalCounts);
+
+            if (newEndTime - newStartTime < 1) continue;
+
+            path = generateLinearPath(startPosition, endPosition, newStartTime, newEndTime, cfg.numPoints);
+
+            hasConflict = false;
+            for (const computed of computedPaths) {
+              if (hasCollision(path, computed.path, cfg.collisionRadius, cfg.totalCounts)) {
+                hasConflict = true;
+                break;
+              }
+            }
+
+            if (!hasConflict) {
+              startTime = newStartTime;
+              endTime = newEndTime;
+              break;
+            }
+          }
+          if (!hasConflict) break;
+        }
+      }
+
+      // Method 6: Curved path (uses maxCurveOffset)
       if (hasConflict) {
         const maxOffset = cfg.maxCurveOffset ?? 0.5;
-        const curveOffsets = [0.2, -0.2, 0.35, -0.35, 0.5, -0.5].filter(o => Math.abs(o) <= maxOffset);
+        // Generate curve offsets dynamically based on maxOffset
+        // Try small curves first, then progressively larger ones
+        const curveOffsets: number[] = [];
+        for (let o = 0.2; o <= maxOffset; o += 0.3) {
+          curveOffsets.push(o, -o);
+        }
+        // Also add some larger offsets if maxOffset allows
+        if (maxOffset > 1.0) {
+          curveOffsets.push(1.0, -1.0, 1.5, -1.5);
+        }
+        if (maxOffset > 2.0) {
+          curveOffsets.push(2.0, -2.0);
+        }
+
         for (const offset of curveOffsets) {
+          if (Math.abs(offset) > maxOffset) continue;
+
           path = generateCurvedPath(startPosition, endPosition, startTime, endTime, cfg.numPoints, offset);
 
           hasConflict = false;
@@ -421,6 +560,35 @@ export function computeAllPathsSimple(
           }
 
           if (!hasConflict) break;
+        }
+      }
+
+      // Method 7: Combined timing + curve if still conflicting
+      if (hasConflict) {
+        const maxOffset = cfg.maxCurveOffset ?? 0.5;
+        outerLoop:
+        for (let delay = 0.5; delay <= 3; delay += 0.5) {
+          for (const offset of [0.5, -0.5, 1.0, -1.0, 1.5, -1.5]) {
+            if (Math.abs(offset) > maxOffset) continue;
+
+            const newStartTime = delay;
+            const newEndTime = Math.min(newStartTime + cfg.totalCounts * 0.7, cfg.totalCounts);
+            path = generateCurvedPath(startPosition, endPosition, newStartTime, newEndTime, cfg.numPoints, offset);
+
+            hasConflict = false;
+            for (const computed of computedPaths) {
+              if (hasCollision(path, computed.path, cfg.collisionRadius, cfg.totalCounts)) {
+                hasConflict = true;
+                break;
+              }
+            }
+
+            if (!hasConflict) {
+              startTime = newStartTime;
+              endTime = newEndTime;
+              break outerLoop;
+            }
+          }
         }
       }
     }
