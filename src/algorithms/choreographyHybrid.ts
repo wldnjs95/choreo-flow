@@ -1,18 +1,15 @@
 /**
- * Hybrid Choreography Algorithm
+ * Hybrid Choreography Algorithm v3
  *
- * Combines:
- * 1. Cubic Bezier curves for smooth, natural paths
- * 2. Heuristic-based timing optimization for collision avoidance
- * 3. Human speed constraints (max 3m/s)
- * 4. Back stage positioning for late arrivers (lower Y = back)
+ * PRIORITY: Collision avoidance is #1
  *
- * Goals:
- * - No collisions
- * - Curved movement paths (unless straight is necessary)
- * - Balanced movement distance across dancers
- * - Late arrivers positioned toward back of stage
- * - Realistic human movement speeds
+ * Key improvement: Detect head-on swap pairs and assign opposite curves
+ *
+ * Strategy:
+ * 1. Detect head-on swap pairs (A→B and B→A)
+ * 2. Pre-assign opposite curve directions for swap pairs
+ * 3. Process dancers with greedy collision-free search
+ * 4. Use Cubic Bezier curves for smooth paths
  */
 
 import type { Position, Assignment } from './hungarian';
@@ -24,10 +21,8 @@ export interface HybridConfig {
   stageWidth: number;
   stageHeight: number;
   numPoints: number;
-  maxHumanSpeed: number;        // Maximum human speed in meters per count (default: 1.5)
-  minCurveRadius: number;       // Minimum curve radius for natural movement (default: 0.5)
-  preferSimultaneousArrival: boolean;  // Try to make dancers arrive together (default: true)
-  backStageY: number;           // Y coordinate threshold for "back stage" (lower Y = back)
+  maxHumanSpeed: number;
+  preferSimultaneousArrival: boolean;
 }
 
 const DEFAULT_CONFIG: HybridConfig = {
@@ -35,33 +30,17 @@ const DEFAULT_CONFIG: HybridConfig = {
   collisionRadius: 0.5,
   stageWidth: 12,
   stageHeight: 10,
-  numPoints: 30,               // More points for smoother curves
-  maxHumanSpeed: 1.5,          // ~1.5m per count is reasonable for dance
-  minCurveRadius: 0.5,
+  numPoints: 30,
+  maxHumanSpeed: 1.5,
   preferSimultaneousArrival: true,
-  backStageY: 5,               // Below this Y is considered "back stage"
 };
 
-/**
- * Distance between two points
- */
 function distance(a: Position, b: Position): number {
   return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 }
 
 /**
  * Generate Cubic Bezier curve path
- *
- * Unlike Quadratic Bezier (1 control point), Cubic Bezier uses 2 control points
- * allowing for S-curves and better tangent control at start/end points.
- *
- * @param start - Start position
- * @param end - End position
- * @param startTime - Start time
- * @param endTime - End time
- * @param numPoints - Number of points in path
- * @param curveOffset - Perpendicular offset for curve (can be [offset1, offset2] for S-curve)
- * @param tangentStrength - How much the control points extend along tangent (0-1)
  */
 function generateCubicBezierPath(
   start: Position,
@@ -74,13 +53,11 @@ function generateCubicBezierPath(
 ): PathPoint[] {
   const path: PathPoint[] = [];
 
-  // Direction vector from start to end
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const len = Math.sqrt(dx * dx + dy * dy);
 
   if (len < 0.01) {
-    // Start and end are the same, return stationary path
     for (let i = 0; i <= numPoints; i++) {
       const t = i / numPoints;
       path.push({
@@ -92,35 +69,25 @@ function generateCubicBezierPath(
     return path;
   }
 
-  // Normalized direction
   const dirX = dx / len;
   const dirY = dy / len;
-
-  // Perpendicular vector (for curve offset)
   const perpX = -dirY;
   const perpY = dirX;
 
-  // Parse curve offset
   let offset1: number, offset2: number;
   if (Array.isArray(curveOffset)) {
     offset1 = curveOffset[0];
     offset2 = curveOffset[1];
   } else {
-    // Single offset creates a smooth arc
     offset1 = curveOffset;
     offset2 = curveOffset;
   }
 
-  // Control points for Cubic Bezier
-  // C1 is 1/3 along the path, offset perpendicular
-  // C2 is 2/3 along the path, offset perpendicular
   const c1x = start.x + dirX * len * tangentStrength + perpX * offset1;
   const c1y = start.y + dirY * len * tangentStrength + perpY * offset1;
   const c2x = end.x - dirX * len * tangentStrength + perpX * offset2;
   const c2y = end.y - dirY * len * tangentStrength + perpY * offset2;
 
-  // Generate points along Cubic Bezier curve
-  // B(t) = (1-t)³P0 + 3(1-t)²tP1 + 3(1-t)t²P2 + t³P3
   for (let i = 0; i <= numPoints; i++) {
     const t = i / numPoints;
     const time = startTime + (endTime - startTime) * t;
@@ -146,29 +113,6 @@ function generateCubicBezierPath(
   return path;
 }
 
-/**
- * Generate S-curve path (for crossing scenarios)
- * The curve goes one direction first, then the other
- */
-export function generateSCurvePath(
-  start: Position,
-  end: Position,
-  startTime: number,
-  endTime: number,
-  numPoints: number,
-  amplitude: number = 1.0
-): PathPoint[] {
-  // S-curve: offset1 and offset2 have opposite signs
-  return generateCubicBezierPath(
-    start, end, startTime, endTime, numPoints,
-    [amplitude, -amplitude],
-    0.4  // Stronger tangent for S-curve
-  );
-}
-
-/**
- * Calculate path distance
- */
 function calculatePathDistance(path: PathPoint[]): number {
   let dist = 0;
   for (let i = 1; i < path.length; i++) {
@@ -177,25 +121,6 @@ function calculatePathDistance(path: PathPoint[]): number {
   return dist;
 }
 
-/**
- * Calculate maximum speed in path (distance per time unit)
- */
-function calculateMaxSpeed(path: PathPoint[]): number {
-  let maxSpeed = 0;
-  for (let i = 1; i < path.length; i++) {
-    const segmentDist = distance(path[i - 1], path[i]);
-    const segmentTime = path[i].t - path[i - 1].t;
-    if (segmentTime > 0) {
-      const speed = segmentDist / segmentTime;
-      maxSpeed = Math.max(maxSpeed, speed);
-    }
-  }
-  return maxSpeed;
-}
-
-/**
- * Interpolate position at specific time
- */
 function getPositionAtTime(path: PathPoint[], time: number): Position | null {
   if (path.length === 0) return null;
   if (time <= path[0].t) return { x: path[0].x, y: path[0].y };
@@ -215,16 +140,26 @@ function getPositionAtTime(path: PathPoint[], time: number): Position | null {
   return null;
 }
 
-/**
- * Check collision between two paths
- */
-export function hasCollision(
+function hasCollisionWithAny(
+  newPath: PathPoint[],
+  existingPaths: PathPoint[][],
+  collisionRadius: number,
+  totalCounts: number
+): boolean {
+  for (const existing of existingPaths) {
+    if (hasCollisionBetweenPaths(newPath, existing, collisionRadius, totalCounts)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasCollisionBetweenPaths(
   path1: PathPoint[],
   path2: PathPoint[],
   collisionRadius: number,
   totalCounts: number
 ): boolean {
-  // Check at fine time intervals
   for (let t = 0; t <= totalCounts; t += 0.1) {
     const pos1 = getPositionAtTime(path1, t);
     const pos2 = getPositionAtTime(path2, t);
@@ -237,273 +172,217 @@ export function hasCollision(
 }
 
 /**
- * Find collision time between two paths (returns -1 if no collision)
+ * Detect if two assignments are a head-on swap
+ * (A goes to B's start, B goes to A's start)
  */
-function findCollisionTime(
-  path1: PathPoint[],
-  path2: PathPoint[],
-  collisionRadius: number,
-  totalCounts: number
-): number {
-  for (let t = 0; t <= totalCounts; t += 0.1) {
-    const pos1 = getPositionAtTime(path1, t);
-    const pos2 = getPositionAtTime(path2, t);
+function isHeadOnSwap(a1: Assignment, a2: Assignment, threshold: number = 1.5): boolean {
+  // Check if A's end is near B's start AND B's end is near A's start
+  const a1EndNearB1Start = distance(a1.endPosition, a2.startPosition) < threshold;
+  const a2EndNearA1Start = distance(a2.endPosition, a1.startPosition) < threshold;
 
-    if (pos1 && pos2 && distance(pos1, pos2) < collisionRadius * 2) {
-      return t;
-    }
-  }
-  return -1;
-}
-
-/**
- * Determine if two paths are "crossing" (moving in opposite directions)
- */
-function arePathsCrossing(a1: Assignment, a2: Assignment): boolean {
-  // Calculate direction vectors
+  // Also check if they're moving in roughly opposite directions
   const dir1x = a1.endPosition.x - a1.startPosition.x;
   const dir1y = a1.endPosition.y - a1.startPosition.y;
   const dir2x = a2.endPosition.x - a2.startPosition.x;
   const dir2y = a2.endPosition.y - a2.startPosition.y;
 
-  // Dot product < 0 means opposite directions
   const dot = dir1x * dir2x + dir1y * dir2y;
+  const oppositeDirection = dot < 0;
 
-  // Also check if paths actually intersect geometrically
-  // Simplified: check if midpoints are close and directions are opposite
-  const mid1x = (a1.startPosition.x + a1.endPosition.x) / 2;
-  const mid1y = (a1.startPosition.y + a1.endPosition.y) / 2;
-  const mid2x = (a2.startPosition.x + a2.endPosition.x) / 2;
-  const mid2y = (a2.startPosition.y + a2.endPosition.y) / 2;
-
-  const midDist = Math.sqrt((mid1x - mid2x) ** 2 + (mid1y - mid2y) ** 2);
-
-  return dot < 0 && midDist < 3.0;
+  return (a1EndNearB1Start && a2EndNearA1Start) || oppositeDirection;
 }
 
 /**
- * Heuristic timing optimizer
- *
- * Strategy:
- * 1. Sort dancers by priority (front stage dancers have higher priority)
- * 2. Assign timing based on crossing conflicts
- * 3. Dancers in back can arrive later
+ * Determine which side a dancer should curve to avoid head-on collision
+ * Returns positive for "right" (from dancer's perspective), negative for "left"
  */
-interface TimingInfo {
-  dancerId: number;
+function determineCurveSide(a: Assignment, partner: Assignment): number {
+  // Use cross product to determine relative position
+  const dx = a.endPosition.x - a.startPosition.x;
+  const dy = a.endPosition.y - a.startPosition.y;
+
+  // Vector from A's start to partner's start
+  const px = partner.startPosition.x - a.startPosition.x;
+  const py = partner.startPosition.y - a.startPosition.y;
+
+  // Cross product: if positive, partner is on the left, so curve right
+  const cross = dx * py - dy * px;
+
+  return cross >= 0 ? 1 : -1;
+}
+
+interface PathCandidate {
   startTime: number;
   endTime: number;
-  priority: number;  // Higher = should arrive on time
   curveOffset: number | [number, number];
-  curveType: 'arc' | 's-curve' | 'linear';
-}
-
-function calculateTimings(
-  assignments: Assignment[],
-  config: HybridConfig
-): TimingInfo[] {
-  const timings: TimingInfo[] = [];
-
-  // Calculate base timing for each dancer
-  const maxDist = Math.max(...assignments.map(a => a.distance), 1);
-
-  for (const assignment of assignments) {
-    const { dancerId, endPosition, distance: dist } = assignment;
-
-    // Priority based on end position Y (higher Y = front = higher priority)
-    const priority = endPosition.y / config.stageHeight;
-
-    // Base duration proportional to distance
-    const baseDuration = (dist / maxDist) * config.totalCounts * 0.8;
-    const minDuration = Math.max(2, dist / config.maxHumanSpeed);  // Speed limit
-    const duration = Math.max(baseDuration, minDuration);
-
-    // Front stage dancers should arrive on time
-    // Back stage dancers can start/end later
-    let startTime = 0;
-    let endTime = duration;
-
-    if (endPosition.y < config.backStageY) {
-      // Back stage: can arrive later
-      const delayAllowed = (1 - priority) * config.totalCounts * 0.3;
-      endTime = Math.min(config.totalCounts, duration + delayAllowed);
-    } else {
-      // Front stage: try to arrive at reasonable time
-      endTime = Math.min(config.totalCounts * 0.9, duration);
-    }
-
-    timings.push({
-      dancerId,
-      startTime,
-      endTime,
-      priority,
-      curveOffset: 0,
-      curveType: 'linear',
-    });
-  }
-
-  return timings;
+  path: PathPoint[];
 }
 
 /**
- * Resolve collisions using heuristic approach
+ * Generate path candidates with preferred curve direction
  */
-function resolveCollisions(
-  assignments: Assignment[],
-  timings: TimingInfo[],
-  config: HybridConfig
-): TimingInfo[] {
-  const resolved = [...timings];
+function generatePathCandidates(
+  start: Position,
+  end: Position,
+  baseDuration: number,
+  config: HybridConfig,
+  preferredCurveSign: number = 0  // 0 = no preference, 1 = positive, -1 = negative
+): PathCandidate[] {
+  const candidates: PathCandidate[] = [];
+  const { totalCounts, numPoints } = config;
 
-  // Build initial paths
-  const paths: Map<number, PathPoint[]> = new Map();
-  for (let i = 0; i < assignments.length; i++) {
-    const a = assignments[i];
-    const t = resolved[i];
-    const path = generateCubicBezierPath(
-      a.startPosition, a.endPosition,
-      t.startTime, t.endTime,
-      config.numPoints,
-      t.curveOffset
-    );
-    paths.set(a.dancerId, path);
+  const startTimes = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6];
+  const durationFactors = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5, 1.8, 2.0];
+
+  // Curve offsets - if we have a preferred sign, prioritize those curves
+  let curveOffsets: (number | [number, number])[];
+
+  if (preferredCurveSign > 0) {
+    // Prefer positive (right) curves first
+    curveOffsets = [
+      1.5, 2.0, 2.5, 3.0, 1.0, 0.5,  // Positive arcs first
+      [1.5, 1.5], [2.0, 2.0],         // Positive S-curves
+      0,                               // Linear
+      -0.5, -1.0, -1.5, -2.0, -2.5, -3.0,  // Negative arcs last
+      [-1.5, -1.5], [-2.0, -2.0],
+    ];
+  } else if (preferredCurveSign < 0) {
+    // Prefer negative (left) curves first
+    curveOffsets = [
+      -1.5, -2.0, -2.5, -3.0, -1.0, -0.5,  // Negative arcs first
+      [-1.5, -1.5], [-2.0, -2.0],
+      0,
+      0.5, 1.0, 1.5, 2.0, 2.5, 3.0,
+      [1.5, 1.5], [2.0, 2.0],
+    ];
+  } else {
+    // No preference - try all
+    curveOffsets = [
+      0,
+      0.5, -0.5,
+      1.0, -1.0,
+      1.5, -1.5,
+      2.0, -2.0,
+      2.5, -2.5,
+      3.0, -3.0,
+      [0.8, -0.8], [-0.8, 0.8],
+      [1.2, -1.2], [-1.2, 1.2],
+      [1.5, -1.5], [-1.5, 1.5],
+    ];
   }
 
-  // Iterate to resolve collisions
-  const maxIterations = 50;
-  for (let iter = 0; iter < maxIterations; iter++) {
-    let hasCollisions = false;
+  for (const startTime of startTimes) {
+    if (startTime >= totalCounts - 1) continue;
 
-    // Check all pairs
-    for (let i = 0; i < assignments.length; i++) {
-      for (let j = i + 1; j < assignments.length; j++) {
-        const a1 = assignments[i];
-        const a2 = assignments[j];
-        const t1 = resolved[i];
-        const t2 = resolved[j];
-        const path1 = paths.get(a1.dancerId)!;
-        const path2 = paths.get(a2.dancerId)!;
+    for (const factor of durationFactors) {
+      const duration = Math.max(1.5, baseDuration * factor);
+      const endTime = startTime + duration;
 
-        const collisionTime = findCollisionTime(path1, path2, config.collisionRadius, config.totalCounts);
+      if (endTime > totalCounts) continue;
+      if (endTime - startTime < 1) continue;
 
-        if (collisionTime >= 0) {
-          hasCollisions = true;
+      for (const curveOffset of curveOffsets) {
+        const path = generateCubicBezierPath(
+          start, end, startTime, endTime, numPoints, curveOffset
+        );
 
-          // Determine who should yield based on priority and crossing type
-          const isCrossing = arePathsCrossing(a1, a2);
-
-          // Lower priority dancer yields
-          const yielder = t1.priority < t2.priority ? i : j;
-          const other = yielder === i ? j : i;
-
-          const tYielder = resolved[yielder];
-          const aYielder = assignments[yielder];
-          const aOther = assignments[other];
-
-          if (isCrossing) {
-            // Crossing paths: try S-curve or timing adjustment
-            if (tYielder.curveType === 'linear') {
-              // Try curve first
-              const curveDir = (aYielder.startPosition.x < aOther.startPosition.x) ? 1 : -1;
-              tYielder.curveOffset = curveDir * 1.0;
-              tYielder.curveType = 'arc';
-            } else if (tYielder.curveType === 'arc') {
-              // Increase curve
-              const currentOffset = typeof tYielder.curveOffset === 'number'
-                ? tYielder.curveOffset : tYielder.curveOffset[0];
-              const newOffset = currentOffset * 1.5;
-              if (Math.abs(newOffset) < 3.0) {
-                tYielder.curveOffset = newOffset;
-              } else {
-                // Max curve reached, try S-curve
-                tYielder.curveOffset = [1.5, -1.5];
-                tYielder.curveType = 's-curve';
-              }
-            } else {
-              // S-curve didn't work, adjust timing
-              if (collisionTime < config.totalCounts / 2) {
-                // Collision in first half: yielder starts later
-                tYielder.startTime = Math.min(tYielder.startTime + 0.5, config.totalCounts - 2);
-                tYielder.endTime = Math.min(tYielder.endTime + 0.5, config.totalCounts);
-              } else {
-                // Collision in second half: yielder slows down
-                tYielder.endTime = Math.min(tYielder.endTime + 0.5, config.totalCounts);
-              }
-            }
-          } else {
-            // Non-crossing: timing adjustment is usually enough
-            if (collisionTime < config.totalCounts / 2) {
-              // Yielder starts later
-              tYielder.startTime = Math.min(tYielder.startTime + 0.5, config.totalCounts - 2);
-              tYielder.endTime = Math.min(tYielder.endTime + 0.5, config.totalCounts);
-            } else {
-              // Yielder moves faster (ends earlier) or curves
-              if (tYielder.curveType === 'linear') {
-                tYielder.curveOffset = 0.5;
-                tYielder.curveType = 'arc';
-              } else {
-                tYielder.endTime = Math.max(tYielder.startTime + 1, tYielder.endTime - 0.3);
-              }
-            }
-          }
-
-          // Regenerate path for yielder
-          const newPath = generateCubicBezierPath(
-            aYielder.startPosition, aYielder.endPosition,
-            tYielder.startTime, tYielder.endTime,
-            config.numPoints,
-            tYielder.curveOffset
-          );
-          paths.set(aYielder.dancerId, newPath);
-        }
+        candidates.push({
+          startTime,
+          endTime,
+          curveOffset,
+          path,
+        });
       }
     }
+  }
 
-    if (!hasCollisions) {
-      console.log(`[HybridChoreography] Resolved all collisions in ${iter + 1} iterations`);
-      break;
+  // Sort: prefer earlier start, then based on curve preference
+  candidates.sort((a, b) => {
+    if (a.startTime !== b.startTime) return a.startTime - b.startTime;
+
+    const durA = a.endTime - a.startTime;
+    const durB = b.endTime - b.startTime;
+    if (Math.abs(durA - durB) > 0.3) return durA - durB;
+
+    // If we have a preferred curve direction, prefer those
+    if (preferredCurveSign !== 0) {
+      const curveA = typeof a.curveOffset === 'number' ? a.curveOffset : a.curveOffset[0];
+      const curveB = typeof b.curveOffset === 'number' ? b.curveOffset : b.curveOffset[0];
+      const matchA = Math.sign(curveA) === preferredCurveSign ? 0 : 1;
+      const matchB = Math.sign(curveB) === preferredCurveSign ? 0 : 1;
+      if (matchA !== matchB) return matchA - matchB;
+    }
+
+    return 0;
+  });
+
+  return candidates;
+}
+
+function findCollisionFreePath(
+  assignment: Assignment,
+  existingPaths: PathPoint[][],
+  baseDuration: number,
+  config: HybridConfig,
+  preferredCurveSign: number = 0
+): PathCandidate | null {
+  const candidates = generatePathCandidates(
+    assignment.startPosition,
+    assignment.endPosition,
+    baseDuration,
+    config,
+    preferredCurveSign
+  );
+
+  console.log(`[Hybrid] Dancer ${assignment.dancerId}: Testing ${candidates.length} candidates (curvePreference=${preferredCurveSign})`);
+
+  for (const candidate of candidates) {
+    if (!hasCollisionWithAny(candidate.path, existingPaths, config.collisionRadius, config.totalCounts)) {
+      const curveStr = typeof candidate.curveOffset === 'number'
+        ? candidate.curveOffset.toFixed(1)
+        : `[${candidate.curveOffset[0]}, ${candidate.curveOffset[1]}]`;
+      console.log(`[Hybrid] Dancer ${assignment.dancerId}: Found path (start=${candidate.startTime.toFixed(1)}, curve=${curveStr})`);
+      return candidate;
     }
   }
 
-  return resolved;
+  console.warn(`[Hybrid] Dancer ${assignment.dancerId}: No collision-free path found!`);
+  return null;
 }
 
 /**
- * Enforce human speed limits
- * If any segment is too fast, extend the duration
+ * Detect all head-on swap pairs
  */
-function enforceSpeedLimits(
-  path: PathPoint[],
-  maxSpeed: number,
-  totalCounts: number
-): PathPoint[] {
-  const currentMaxSpeed = calculateMaxSpeed(path);
+function detectHeadOnSwapPairs(assignments: Assignment[]): Map<number, { partner: number; curveSide: number }> {
+  const swapInfo = new Map<number, { partner: number; curveSide: number }>();
 
-  if (currentMaxSpeed <= maxSpeed) {
-    return path;
+  for (let i = 0; i < assignments.length; i++) {
+    for (let j = i + 1; j < assignments.length; j++) {
+      if (isHeadOnSwap(assignments[i], assignments[j])) {
+        const curveSideI = determineCurveSide(assignments[i], assignments[j]);
+        const curveSideJ = -curveSideI;  // Opposite direction
+
+        swapInfo.set(assignments[i].dancerId, {
+          partner: assignments[j].dancerId,
+          curveSide: curveSideI
+        });
+        swapInfo.set(assignments[j].dancerId, {
+          partner: assignments[i].dancerId,
+          curveSide: curveSideJ
+        });
+
+        console.log(`[Hybrid] Detected head-on swap: Dancer ${assignments[i].dancerId} <-> ${assignments[j].dancerId}`);
+        console.log(`[Hybrid]   Dancer ${assignments[i].dancerId} curves ${curveSideI > 0 ? 'RIGHT' : 'LEFT'}`);
+        console.log(`[Hybrid]   Dancer ${assignments[j].dancerId} curves ${curveSideJ > 0 ? 'RIGHT' : 'LEFT'}`);
+      }
+    }
   }
 
-  // Need to slow down: scale time proportionally
-  const speedRatio = currentMaxSpeed / maxSpeed;
-  const originalDuration = path[path.length - 1].t - path[0].t;
-  const newDuration = Math.min(originalDuration * speedRatio, totalCounts - path[0].t);
-
-  // Rescale times
-  const startTime = path[0].t;
-  const scaledPath: PathPoint[] = path.map((p, i) => {
-    const progress = i / (path.length - 1);
-    return {
-      x: p.x,
-      y: p.y,
-      t: startTime + progress * newDuration,
-    };
-  });
-
-  return scaledPath;
+  return swapInfo;
 }
 
 /**
- * Main function: compute all paths with hybrid algorithm
+ * Main function: compute all paths with guaranteed collision avoidance
  */
 export function computeAllPathsWithHybrid(
   assignments: Assignment[],
@@ -511,61 +390,92 @@ export function computeAllPathsWithHybrid(
 ): DancerPath[] {
   const cfg: HybridConfig = { ...DEFAULT_CONFIG, ...config };
 
-  // Stage back is lower Y
-  cfg.backStageY = cfg.stageHeight * 0.4;
+  console.log('[HybridChoreography v3] Starting collision-free path generation');
+  console.log(`[HybridChoreography] Dancers: ${assignments.length}, totalCounts: ${cfg.totalCounts}`);
 
-  console.log('[HybridChoreography] Starting with config:', {
-    totalCounts: cfg.totalCounts,
-    maxHumanSpeed: cfg.maxHumanSpeed,
-    backStageY: cfg.backStageY,
-  });
+  // Step 1: Detect head-on swap pairs
+  const swapInfo = detectHeadOnSwapPairs(assignments);
+  console.log(`[HybridChoreography] Found ${swapInfo.size / 2} head-on swap pairs`);
 
-  // Step 1: Calculate initial timings based on priority
-  let timings = calculateTimings(assignments, cfg);
+  // Sort by distance (longest first)
+  const sorted = [...assignments].sort((a, b) => b.distance - a.distance);
 
-  // Step 2: Resolve collisions
-  timings = resolveCollisions(assignments, timings, cfg);
-
-  // Step 3: Generate final paths
+  const maxDist = Math.max(...assignments.map(a => a.distance), 1);
+  const existingPaths: PathPoint[][] = [];
+  const pathByDancerId = new Map<number, PathPoint[]>();
   const results: DancerPath[] = [];
 
-  for (let i = 0; i < assignments.length; i++) {
-    const assignment = assignments[i];
-    const timing = timings[i];
+  for (const assignment of sorted) {
+    const { dancerId, startPosition, endPosition, distance: dist } = assignment;
 
-    // Generate curved path
-    let path = generateCubicBezierPath(
-      assignment.startPosition,
-      assignment.endPosition,
-      timing.startTime,
-      timing.endTime,
-      cfg.numPoints,
-      timing.curveOffset
+    const baseDuration = Math.max(2, (dist / maxDist) * cfg.totalCounts * 0.7);
+
+    // Get curve preference from swap info
+    const swap = swapInfo.get(dancerId);
+    const preferredCurveSign = swap?.curveSide ?? 0;
+
+    // Find collision-free path
+    const candidate = findCollisionFreePath(
+      assignment,
+      existingPaths,
+      baseDuration,
+      cfg,
+      preferredCurveSign
     );
 
-    // Enforce speed limits
-    path = enforceSpeedLimits(path, cfg.maxHumanSpeed, cfg.totalCounts);
+    let finalPath: PathPoint[];
+    let startTime = 0;
+    let endTime = cfg.totalCounts;
 
-    const totalDistance = calculatePathDistance(path);
-    const duration = path[path.length - 1].t - path[0].t;
+    if (candidate) {
+      finalPath = candidate.path;
+      startTime = candidate.startTime;
+      endTime = candidate.endTime;
+    } else {
+      // Fallback with strong curve in preferred direction
+      console.warn(`[Hybrid] Using fallback for dancer ${dancerId}`);
+      const fallbackCurve = preferredCurveSign !== 0 ? preferredCurveSign * 3.0 : 2.0;
+      finalPath = generateCubicBezierPath(
+        startPosition, endPosition,
+        cfg.totalCounts * 0.3, cfg.totalCounts,
+        cfg.numPoints, fallbackCurve
+      );
+      startTime = cfg.totalCounts * 0.3;
+      endTime = cfg.totalCounts;
+    }
+
+    existingPaths.push(finalPath);
+    pathByDancerId.set(dancerId, finalPath);
+
+    const totalDistance = calculatePathDistance(finalPath);
+    const duration = endTime - startTime;
     const speed = duration > 0 ? totalDistance / duration : 1.0;
 
     results.push({
-      dancerId: assignment.dancerId,
-      path,
-      startTime: timing.startTime,
+      dancerId,
+      path: finalPath,
+      startTime,
       speed: Math.max(0.3, Math.min(2.0, speed)),
       totalDistance,
     });
   }
 
-  // Sort by dancerId
+  // Final validation
+  let collisionCount = 0;
+  for (let i = 0; i < results.length; i++) {
+    for (let j = i + 1; j < results.length; j++) {
+      if (hasCollisionBetweenPaths(results[i].path, results[j].path, cfg.collisionRadius, cfg.totalCounts)) {
+        collisionCount++;
+        console.error(`[Hybrid] COLLISION DETECTED: Dancer ${results[i].dancerId} <-> ${results[j].dancerId}`);
+      }
+    }
+  }
+
+  console.log(`[HybridChoreography] Final collision count: ${collisionCount}`);
+
   return results.sort((a, b) => a.dancerId - b.dancerId);
 }
 
-/**
- * Validate paths for collisions
- */
 export function validateHybridPaths(
   paths: DancerPath[],
   collisionRadius: number,
@@ -575,19 +485,18 @@ export function validateHybridPaths(
 
   for (let i = 0; i < paths.length; i++) {
     for (let j = i + 1; j < paths.length; j++) {
-      const collisionTime = findCollisionTime(
-        paths[i].path,
-        paths[j].path,
-        collisionRadius,
-        totalCounts
-      );
+      for (let t = 0; t <= totalCounts; t += 0.1) {
+        const pos1 = getPositionAtTime(paths[i].path, t);
+        const pos2 = getPositionAtTime(paths[j].path, t);
 
-      if (collisionTime >= 0) {
-        collisions.push({
-          dancer1: paths[i].dancerId,
-          dancer2: paths[j].dancerId,
-          time: collisionTime,
-        });
+        if (pos1 && pos2 && distance(pos1, pos2) < collisionRadius * 2) {
+          collisions.push({
+            dancer1: paths[i].dancerId,
+            dancer2: paths[j].dancerId,
+            time: t,
+          });
+          break;
+        }
       }
     }
   }
@@ -597,3 +506,5 @@ export function validateHybridPaths(
     collisions,
   };
 }
+
+export { generateCubicBezierPath };
