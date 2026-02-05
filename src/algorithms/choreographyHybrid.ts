@@ -14,6 +14,11 @@
 
 import type { Position, Assignment } from './hungarian';
 import type { PathPoint, DancerPath } from './pathfinder';
+import {
+  distance,
+  calculatePathDistance,
+  getPositionAtTime,
+} from './utils/pathUtils';
 
 export interface HybridConfig {
   totalCounts: number;
@@ -34,10 +39,6 @@ const DEFAULT_CONFIG: HybridConfig = {
   maxHumanSpeed: 1.5,
   preferSimultaneousArrival: true,
 };
-
-function distance(a: Position, b: Position): number {
-  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
-}
 
 /**
  * Generate Cubic Bezier curve path
@@ -111,33 +112,6 @@ function generateCubicBezierPath(
   }
 
   return path;
-}
-
-function calculatePathDistance(path: PathPoint[]): number {
-  let dist = 0;
-  for (let i = 1; i < path.length; i++) {
-    dist += distance(path[i - 1], path[i]);
-  }
-  return dist;
-}
-
-function getPositionAtTime(path: PathPoint[], time: number): Position | null {
-  if (path.length === 0) return null;
-  if (time <= path[0].t) return { x: path[0].x, y: path[0].y };
-  if (time >= path[path.length - 1].t) {
-    return { x: path[path.length - 1].x, y: path[path.length - 1].y };
-  }
-
-  for (let i = 0; i < path.length - 1; i++) {
-    if (time >= path[i].t && time <= path[i + 1].t) {
-      const ratio = (time - path[i].t) / (path[i + 1].t - path[i].t);
-      return {
-        x: path[i].x + (path[i + 1].x - path[i].x) * ratio,
-        y: path[i].y + (path[i + 1].y - path[i].y) * ratio,
-      };
-    }
-  }
-  return null;
 }
 
 function hasCollisionWithAny(

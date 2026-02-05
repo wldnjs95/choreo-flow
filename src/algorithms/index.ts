@@ -40,8 +40,6 @@ export {
 export {
   generateCandidate,
   generateAllCandidates,
-  generateCandidateWithConstraint,
-  generateCandidatesWithConstraint,
   calculateMetrics,
   summarizeCandidatesForGemini,
   type CandidateStrategy,
@@ -64,3 +62,11 @@ export {
   type MultiCandidateResult,
   type GeminiPipelineMode,
 } from './pipeline';
+
+// Hybrid Pathfinding Algorithms
+export { computeAllPathsWithHybrid } from './choreographyHybrid';
+export { computeAllPathsWithHybridByCodex } from './hybridByCodex';
+export { computeAllPathsWithHybridByClaude, type SyncMode, type HybridByClaudeConfig } from './hybridByClaude';
+export { computeAllPathsWithHybridByClaudeCubic, type HybridByClaudeCubicConfig } from './hybridByClaudeCubic';
+export { computeAllPathsWithHybridByGemini } from './choreographyHybridByGemini';
+export { computeAllPathsWithHybridByCursor } from './hybridByCursor';

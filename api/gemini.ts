@@ -13,7 +13,8 @@ export const config = {
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const DEFAULT_MODEL = 'gemini-3-pro-preview';
-const ALLOWED_MODELS = ['gemini-3-pro-preview', 'gemini-3-flash-preview'];
+const VISION_MODEL = 'gemini-3-pro-preview';
+const ALLOWED_MODELS = ['gemini-3-pro-preview'];
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS 헤더
@@ -38,7 +39,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const { model, ...body } = req.body;
-    const selectedModel = ALLOWED_MODELS.includes(model) ? model : DEFAULT_MODEL;
+
+    // Check if request contains image data (multimodal)
+    const hasImage = body.contents?.some((content: { parts?: Array<{ inlineData?: unknown }> }) =>
+      content.parts?.some((part: { inlineData?: unknown }) => part.inlineData)
+    );
+
+    // Select appropriate model: explicit model > vision model for images > default
+    const selectedModel = ALLOWED_MODELS.includes(model)
+      ? model
+      : (hasImage ? VISION_MODEL : DEFAULT_MODEL);
+
+    console.log(`[Gemini] Using model: ${selectedModel}, hasImage: ${hasImage}`);
     const apiUrl = `${GEMINI_API_BASE}/${selectedModel}:generateContent`;
 
     const response = await fetch(`${apiUrl}?key=${apiKey}`, {

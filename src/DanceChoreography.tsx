@@ -14,27 +14,26 @@ import {
   type AssignmentMode,
   type MultiCandidateResult,
 } from './algorithms';
-import { isApiKeyConfigured, type AestheticScore, type RankingResult, type GeminiPreConstraint } from './gemini';
+import { type AestheticScore, type RankingResult } from './gemini';
+import { generateFormationFromText, generateFormationFromSketch, FORMATION_EXAMPLES } from './gemini/formationGenerator';
+import { generateCueSheet, type CueSheetResult } from './gemini/cueSheetGenerator';
+import { CueSheetModal } from './components/CueSheetModal';
+import preFormationData from '../formation_data/pre-formation.json';
+import {
+  DEFAULT_STAGE_WIDTH,
+  DEFAULT_STAGE_HEIGHT,
+  BASE_SCALE,
+  PADDING,
+  BASE_DANCER_RADIUS,
+  GRID_COLOR,
+  BACKGROUND_COLOR,
+  STAGE_PRESETS,
+  DANCER_COLORS,
+  type StagePresetKey,
+} from './constants';
 
-// Visualization constants
-const DEFAULT_STAGE_WIDTH = 15;  // Large: 49ft ≈ 15m
-const DEFAULT_STAGE_HEIGHT = 12; // Large: 39ft ≈ 12m
-const BASE_SCALE = 50; // Base scale (adjusts based on stage size)
-const PADDING = 40;
-const BASE_DANCER_RADIUS = 0.4; // Dancer radius in meters (based on human shoulder width)
-const GRID_COLOR = '#2a2a3e';
-const BACKGROUND_COLOR = '#1a1a2e';
-
-// Stage presets
-const STAGE_PRESETS = {
-  'small': { width: 8, height: 6, label: 'Small (26×20ft)' },
-  'medium': { width: 10, height: 8, label: 'Medium (33×26ft)' },
-  'large': { width: 15, height: 12, label: 'Large (49×39ft)' },
-  'custom': { width: 15, height: 12, label: 'Custom' },
-};
-
-// Collision test case presets - extreme scenarios for testing collision avoidance
-type TestCasePreset = 'none' | 'two_lines_swap' | 'line_reverse' | 'v_shape_invert' | 'circle_180' | 'diagonal_cross' | 'grid_shuffle';
+// Collision test case presets - from pre-formation.json (4~12 dancers)
+type TestCasePreset = 'none' | '4_dancers' | '5_dancers' | '6_dancers' | '7_dancers' | '8_dancers' | '9_dancers' | '10_dancers' | '11_dancers' | '12_dancers';
 
 interface TestCase {
   label: string;
@@ -45,140 +44,115 @@ interface TestCase {
   getPositions: () => { start: Position[]; end: Position[] };
 }
 
+// Helper function to get formation positions from pre-formation.json
+function getFormationByName(name: string): Position[] {
+  const formation = preFormationData.formations.find(f => f.name === name);
+  if (!formation) return [];
+  return formation.positions.map(p => ({ x: p.x, y: p.y }));
+}
+
 const COLLISION_TEST_CASES: Record<TestCasePreset, TestCase | null> = {
   'none': null,
-  'two_lines_swap': {
-    label: '2 Lines Swap',
-    description: 'Top row ↔ Bottom row (12 dancers)',
-    dancerCount: 12,
+  '4_dancers': {
+    label: '4 Dancers',
+    description: '4_2line_1 → 4_2line_2',
+    dancerCount: 4,
     stageWidth: 15,
     stageHeight: 12,
-    getPositions: () => {
-      const start: Position[] = [];
-      const end: Position[] = [];
-      // Top row: 1-6 at y=9, Bottom row: 7-12 at y=3
-      for (let i = 0; i < 6; i++) {
-        start.push({ x: 2 + i * 2.2, y: 9 });  // Top row
-        end.push({ x: 2 + i * 2.2, y: 3 });    // Goes to bottom
-      }
-      for (let i = 0; i < 6; i++) {
-        start.push({ x: 2 + i * 2.2, y: 3 });  // Bottom row
-        end.push({ x: 2 + i * 2.2, y: 9 });    // Goes to top
-      }
-      return { start, end };
-    },
+    getPositions: () => ({
+      start: getFormationByName('4_2line_1'),
+      end: getFormationByName('4_2line_2'),
+    }),
   },
-  'line_reverse': {
-    label: 'Line Reverse',
-    description: 'Line reverses order 1↔12 (12 dancers)',
-    dancerCount: 12,
+  '5_dancers': {
+    label: '5 Dancers',
+    description: '5_2line_1 → 5_2line_2',
+    dancerCount: 5,
     stageWidth: 15,
     stageHeight: 12,
-    getPositions: () => {
-      const start: Position[] = [];
-      const end: Position[] = [];
-      for (let i = 0; i < 12; i++) {
-        start.push({ x: 1.5 + i * 1.1, y: 6 });
-        end.push({ x: 1.5 + (11 - i) * 1.1, y: 6 });
-      }
-      return { start, end };
-    },
+    getPositions: () => ({
+      start: getFormationByName('5_2line_1'),
+      end: getFormationByName('5_2line_2'),
+    }),
   },
-  'v_shape_invert': {
-    label: 'V-Shape Invert',
-    description: 'V flips upside down (10 dancers)',
-    dancerCount: 10,
+  '6_dancers': {
+    label: '6 Dancers',
+    description: '6_2line_1 → 6_vshape_2',
+    dancerCount: 6,
     stageWidth: 15,
     stageHeight: 12,
-    getPositions: () => {
-      const start: Position[] = [];
-      const end: Position[] = [];
-      // V shape pointing down
-      for (let i = 0; i < 5; i++) {
-        start.push({ x: 3 + i * 1.5, y: 10 - i * 1.5 });  // Left side of V
-        end.push({ x: 3 + i * 1.5, y: 2 + i * 1.5 });     // Inverted
-      }
-      for (let i = 0; i < 5; i++) {
-        start.push({ x: 12 - i * 1.5, y: 10 - i * 1.5 }); // Right side of V
-        end.push({ x: 12 - i * 1.5, y: 2 + i * 1.5 });    // Inverted
-      }
-      return { start, end };
-    },
+    getPositions: () => ({
+      start: getFormationByName('6_2line_1'),
+      end: getFormationByName('6_vshape_2'),
+    }),
   },
-  'circle_180': {
-    label: 'Circle 180°',
-    description: 'Circle rotates 180° (12 dancers)',
-    dancerCount: 12,
+  '7_dancers': {
+    label: '7 Dancers',
+    description: '7_round_1 → 7_vvshape_2',
+    dancerCount: 7,
     stageWidth: 15,
     stageHeight: 12,
-    getPositions: () => {
-      const start: Position[] = [];
-      const end: Position[] = [];
-      const cx = 7.5, cy = 6, r = 4;
-      for (let i = 0; i < 12; i++) {
-        const angle = (i / 12) * Math.PI * 2;
-        start.push({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) });
-        // 180 degree opposite
-        end.push({ x: cx + r * Math.cos(angle + Math.PI), y: cy + r * Math.sin(angle + Math.PI) });
-      }
-      return { start, end };
-    },
+    getPositions: () => ({
+      start: getFormationByName('7_round_1'),
+      end: getFormationByName('7_vvshape_2'),
+    }),
   },
-  'diagonal_cross': {
-    label: 'Diagonal Cross',
-    description: 'Two diagonal lines cross (8 dancers)',
+  '8_dancers': {
+    label: '8 Dancers',
+    description: '8_2line_1 → 8_v2line_2',
     dancerCount: 8,
     stageWidth: 15,
     stageHeight: 12,
-    getPositions: () => {
-      const start: Position[] = [];
-      const end: Position[] = [];
-      // Diagonal 1: top-left to bottom-right
-      for (let i = 0; i < 4; i++) {
-        start.push({ x: 2 + i * 2, y: 10 - i * 2 });
-        end.push({ x: 13 - i * 2, y: 2 + i * 2 });
-      }
-      // Diagonal 2: top-right to bottom-left
-      for (let i = 0; i < 4; i++) {
-        start.push({ x: 13 - i * 2, y: 10 - i * 2 });
-        end.push({ x: 2 + i * 2, y: 2 + i * 2 });
-      }
-      return { start, end };
-    },
+    getPositions: () => ({
+      start: getFormationByName('8_2line_1'),
+      end: getFormationByName('8_v2line_2'),
+    }),
   },
-  'grid_shuffle': {
-    label: 'Grid Shuffle',
-    description: '3x4 grid corners swap (12 dancers)',
+  '9_dancers': {
+    label: '9 Dancers',
+    description: '9_v2line_1 → 9_4line_2',
+    dancerCount: 9,
+    stageWidth: 15,
+    stageHeight: 12,
+    getPositions: () => ({
+      start: getFormationByName('9_v2line_1'),
+      end: getFormationByName('9_4line_2'),
+    }),
+  },
+  '10_dancers': {
+    label: '10 Dancers',
+    description: '10_rvline_1 → 10_4line_2',
+    dancerCount: 10,
+    stageWidth: 15,
+    stageHeight: 12,
+    getPositions: () => ({
+      start: getFormationByName('10_rvline_1'),
+      end: getFormationByName('10_4line_2'),
+    }),
+  },
+  '11_dancers': {
+    label: '11 Dancers',
+    description: '11_3vline_1 → 11_2dline_2',
+    dancerCount: 11,
+    stageWidth: 15,
+    stageHeight: 12,
+    getPositions: () => ({
+      start: getFormationByName('11_3vline_1'),
+      end: getFormationByName('11_2dline_2'),
+    }),
+  },
+  '12_dancers': {
+    label: '12 Dancers',
+    description: '12_2dline_1 → 12_heart_2',
     dancerCount: 12,
     stageWidth: 15,
     stageHeight: 12,
-    getPositions: () => {
-      const start: Position[] = [];
-      const end: Position[] = [];
-      // 3 columns x 4 rows
-      const positions: Position[] = [];
-      for (let row = 0; row < 4; row++) {
-        for (let col = 0; col < 3; col++) {
-          positions.push({ x: 4 + col * 3.5, y: 2.5 + row * 2.5 });
-        }
-      }
-      // Shuffle: reverse order
-      for (let i = 0; i < 12; i++) {
-        start.push(positions[i]);
-        end.push(positions[11 - i]);
-      }
-      return { start, end };
-    },
+    getPositions: () => ({
+      start: getFormationByName('12_2dline_1'),
+      end: getFormationByName('12_heart_2'),
+    }),
   },
 };
-
-// Dancer colors
-const DANCER_COLORS = [
-  '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
-  '#FFD93D', '#6C5CE7', '#A8E6CF', '#FF8C42',
-  '#E056FD', '#686DE0', '#BADC58', '#F9CA24',
-  '#30336B', '#22A6B3', '#BE2EDD', '#F79F1F',
-];
 
 interface PathPoint {
   x: number;
@@ -616,10 +590,10 @@ function FormationSelector({
 
 // Stage Size Selector Component
 interface StageSizeSelectorProps {
-  preset: keyof typeof STAGE_PRESETS;
+  preset: StagePresetKey;
   width: number;
   height: number;
-  onPresetChange: (preset: keyof typeof STAGE_PRESETS) => void;
+  onPresetChange: (preset: StagePresetKey) => void;
   onWidthChange: (width: number) => void;
   onHeightChange: (height: number) => void;
 }
@@ -631,7 +605,7 @@ function StageSizeSelector({ preset, width, height, onPresetChange, onWidthChang
       <div className="stage-preset-row">
         <select
           value={preset}
-          onChange={(e) => onPresetChange(e.target.value as keyof typeof STAGE_PRESETS)}
+          onChange={(e) => onPresetChange(e.target.value as StagePresetKey)}
         >
           {Object.entries(STAGE_PRESETS).map(([key, val]) => (
             <option key={key} value={key}>{val.label}</option>
@@ -725,6 +699,18 @@ function FormationEditor({
   // Local state for locked dancers (for partial assignment)
   const [localLockedDancers, setLocalLockedDancers] = useState<Set<number>>(lockedDancers);
 
+  // AI Formation Generation State
+  const [aiMode, setAiMode] = useState<'none' | 'text' | 'draw'>('none');
+  const [textPrompt, setTextPrompt] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [generationTime, setGenerationTime] = useState<number | null>(null);
+  const [lastTextPrompt, setLastTextPrompt] = useState('');
+  const [lastGenerationType, setLastGenerationType] = useState<'text' | 'sketch' | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [hasDrawing, setHasDrawing] = useState(false);
+
   // Multi-selection state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   // Selection box drag state
@@ -797,6 +783,209 @@ function FormationEditor({
     isInternalChange.current = true;
     onPositionsChange(nextState);
   }, [future, localPositions, onPositionsChange]);
+
+  // AI Formation Generation - Text to Formation
+  const handleTextGenerate = useCallback(async () => {
+    if (!textPrompt.trim() || isGenerating) return;
+
+    setIsGenerating(true);
+    setAiError(null);
+    setGenerationTime(null);
+    const startTime = performance.now();
+
+    try {
+      const result = await generateFormationFromText(
+        textPrompt,
+        dancerCount,
+        stageWidth,
+        stageHeight
+      );
+
+      const endTime = performance.now();
+      setGenerationTime(endTime - startTime);
+      setLastTextPrompt(textPrompt);
+      setLastGenerationType('text');
+
+      if (result.success && result.positions) {
+        saveToHistory(localPositions);
+        setLocalPositions(result.positions);
+        isInternalChange.current = true;
+        onPositionsChange(result.positions);
+        setCurrentPreset(null);
+        // Keep input visible - don't clear aiMode or textPrompt
+      } else {
+        setAiError(result.error || 'Failed to generate formation');
+      }
+    } catch (error) {
+      const endTime = performance.now();
+      setGenerationTime(endTime - startTime);
+      setAiError(error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [textPrompt, isGenerating, dancerCount, stageWidth, stageHeight, localPositions, saveToHistory, onPositionsChange]);
+
+  // AI Formation Generation - Sketch to Formation
+  const handleSketchGenerate = useCallback(async () => {
+    if (!canvasRef.current || isGenerating || !hasDrawing) return;
+
+    setIsGenerating(true);
+    setAiError(null);
+    setGenerationTime(null);
+    const startTime = performance.now();
+
+    try {
+      const imageBase64 = canvasRef.current.toDataURL('image/png');
+
+      const result = await generateFormationFromSketch(
+        imageBase64,
+        dancerCount,
+        stageWidth,
+        stageHeight
+      );
+
+      const endTime = performance.now();
+      setGenerationTime(endTime - startTime);
+      setLastGenerationType('sketch');
+
+      if (result.success && result.positions) {
+        saveToHistory(localPositions);
+        setLocalPositions(result.positions);
+        isInternalChange.current = true;
+        onPositionsChange(result.positions);
+        setCurrentPreset(null);
+        // Keep sketch visible - don't clear aiMode or canvas
+      } else {
+        setAiError(result.error || 'Failed to generate formation');
+      }
+    } catch (error) {
+      const endTime = performance.now();
+      setGenerationTime(endTime - startTime);
+      setAiError(error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [isGenerating, hasDrawing, dancerCount, stageWidth, stageHeight, localPositions, saveToHistory, onPositionsChange]);
+
+  // Canvas drawing functions
+  const initCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Clear and draw stage background
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw stage border
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+
+    // Draw grid
+    ctx.strokeStyle = '#2a2a3e';
+    ctx.lineWidth = 1;
+    const gridSize = 30;
+    for (let x = 10; x < canvas.width - 10; x += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(x, 10);
+      ctx.lineTo(x, canvas.height - 10);
+      ctx.stroke();
+    }
+    for (let y = 10; y < canvas.height - 10; y += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(10, y);
+      ctx.lineTo(canvas.width - 10, y);
+      ctx.stroke();
+    }
+
+    // Add label
+    ctx.fillStyle = '#666';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('← Back of Stage', 15, canvas.height - 20);
+    ctx.fillText('Front (Audience) →', canvas.width - 120, 25);
+
+    setHasDrawing(false);
+  }, []);
+
+  const clearCanvas = useCallback(() => {
+    initCanvas();
+    setHasDrawing(false);
+  }, [initCanvas]);
+
+  // Initialize canvas when switching to draw mode
+  useEffect(() => {
+    if (aiMode === 'draw') {
+      setTimeout(initCanvas, 50);  // Wait for canvas to be mounted
+    }
+  }, [aiMode, initCanvas]);
+
+  const handleCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    setIsDrawing(true);
+    setHasDrawing(true);
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.strokeStyle = '#4ECDC4';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+    }
+  }, []);
+
+  const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    }
+  }, [isDrawing]);
+
+  const handleCanvasMouseUp = useCallback(() => {
+    setIsDrawing(false);
+  }, []);
+
+  // Add point on click (for placing dancer positions)
+  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      // Draw a point/circle to indicate dancer position
+      ctx.beginPath();
+      ctx.arc(x, y, 8, 0, Math.PI * 2);
+      ctx.fillStyle = '#FF6B6B';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      setHasDrawing(true);
+    }
+  }, []);
 
   // Keyboard shortcuts (Ctrl+Z, Ctrl+Shift+Z)
   useEffect(() => {
@@ -1164,6 +1353,120 @@ function FormationEditor({
           </div>
         </div>
 
+        {/* AI Formation Generation Section */}
+        <div className="ai-formation-section">
+          <div className="ai-mode-tabs">
+            <button
+              className={`ai-tab ${aiMode === 'none' ? 'active' : ''}`}
+              onClick={() => setAiMode('none')}
+            >
+              Manual
+            </button>
+            <button
+              className={`ai-tab ${aiMode === 'text' ? 'active' : ''}`}
+              onClick={() => setAiMode('text')}
+            >
+              ✨ AI Text
+            </button>
+            <button
+              className={`ai-tab ${aiMode === 'draw' ? 'active' : ''}`}
+              onClick={() => setAiMode('draw')}
+            >
+              🎨 AI Sketch
+            </button>
+          </div>
+
+          {aiMode === 'text' && (
+            <div className="ai-text-section">
+              <div className="ai-input-group">
+                <input
+                  type="text"
+                  className="ai-text-input"
+                  placeholder="예: V자 대형으로 배치해줘, 원형으로 만들어줘..."
+                  value={textPrompt}
+                  onChange={(e) => setTextPrompt(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleTextGenerate()}
+                  disabled={isGenerating}
+                />
+                <button
+                  className="ai-generate-btn"
+                  onClick={handleTextGenerate}
+                  disabled={isGenerating || !textPrompt.trim()}
+                >
+                  {isGenerating ? '생성중...' : '생성'}
+                </button>
+              </div>
+              <div className="ai-examples">
+                <span className="examples-label">예시:</span>
+                {FORMATION_EXAMPLES.slice(0, 4).map((ex, i) => (
+                  <button
+                    key={i}
+                    className="example-chip"
+                    onClick={() => setTextPrompt(ex)}
+                  >
+                    {ex}
+                  </button>
+                ))}
+              </div>
+              {generationTime !== null && lastGenerationType === 'text' && lastTextPrompt && (
+                <div className="ai-generation-info">
+                  <span className="generation-prompt">"{lastTextPrompt}"</span>
+                  <span className="generation-time">
+                    {generationTime >= 1000
+                      ? `${(generationTime / 1000).toFixed(2)}초`
+                      : `${Math.round(generationTime)}ms`}
+                  </span>
+                </div>
+              )}
+              {aiError && <div className="ai-error">{aiError}</div>}
+            </div>
+          )}
+
+          {aiMode === 'draw' && (
+            <div className="ai-draw-section">
+              <p className="draw-instruction">
+                아래 캔버스에 원하는 대형을 그려주세요. 점을 찍거나 선을 그려서 댄서 위치를 표시하세요.
+              </p>
+              <div className="canvas-container">
+                <canvas
+                  ref={canvasRef}
+                  width={400}
+                  height={280}
+                  className="drawing-canvas"
+                  onMouseDown={handleCanvasMouseDown}
+                  onMouseMove={handleCanvasMouseMove}
+                  onMouseUp={handleCanvasMouseUp}
+                  onMouseLeave={handleCanvasMouseUp}
+                  onClick={handleCanvasClick}
+                />
+              </div>
+              <div className="canvas-controls">
+                <button className="canvas-btn" onClick={clearCanvas}>
+                  지우기
+                </button>
+                <button
+                  className="ai-generate-btn"
+                  onClick={handleSketchGenerate}
+                  disabled={isGenerating || !hasDrawing}
+                >
+                  {isGenerating ? '분석중...' : 'AI로 대형 생성'}
+                </button>
+              </div>
+              {generationTime !== null && lastGenerationType === 'sketch' && (
+                <div className="ai-generation-info">
+                  <span className="generation-prompt">스케치에서 생성됨</span>
+                  <span className="generation-time">
+                    {generationTime >= 1000
+                      ? `${(generationTime / 1000).toFixed(2)}초`
+                      : `${Math.round(generationTime)}ms`}
+                  </span>
+                </div>
+              )}
+              {aiError && <div className="ai-error">{aiError}</div>}
+            </div>
+          )}
+        </div>
+
         {/* Assignment Mode (End Formation Only) */}
         {isEndFormation && onAssignmentModeChange && (
           <div className="assignment-mode-section">
@@ -1511,8 +1814,6 @@ interface CandidateComparisonPanelProps {
   selectedId: string;
   onSelectCandidate: (id: string) => void;
   usedGeminiRanking: boolean;
-  preConstraint: GeminiPreConstraint | null;
-  usedGeminiPreConstraint: boolean;
   pipelineMode: GeminiPipelineMode;
   geminiStatus: 'idle' | 'pending' | 'success' | 'failed' | 'timeout';
   pendingGeminiResult: MultiCandidateResult | null;
@@ -1525,8 +1826,6 @@ function CandidateComparisonPanel({
   selectedId,
   onSelectCandidate,
   usedGeminiRanking,
-  preConstraint,
-  usedGeminiPreConstraint,
   pipelineMode,
   geminiStatus,
   pendingGeminiResult,
@@ -1534,24 +1833,12 @@ function CandidateComparisonPanel({
 }: CandidateComparisonPanelProps) {
   const getStrategyLabel = (strategy: string) => {
     const labels: Record<string, string> = {
-      'distance_longest_first': 'Longest First',
-      'distance_shortest_first': 'Shortest First',
-      'timing_priority': 'Timing Priority',
-      'curve_allowed': 'Curve Allowed',
-      'center_priority': 'Center Priority',
-      'candidate_gemini_constrained': 'Gemini Constrained',
-      'candidate_constrained_curve_0.2': 'Constrained + Curve 0.2',
-      'candidate_constrained_curve_0.5': 'Constrained + Curve 0.5',
-      'candidate_constrained_curve_0.8': 'Constrained + Curve 0.8',
-      'candidate_baseline_distance_longest_first': 'Baseline: Longest',
-      'candidate_baseline_timing_priority': 'Baseline: Timing',
-      'hybrid': 'Hybrid (Bezier + Timing)',
-      'potential_field': 'Potential Field',
-      'rvo': 'RVO',
-      'astar': 'A*',
-      'cbs': 'CBS',
-      'boids': 'Boids',
-      'jps': 'JPS',
+      'hybrid': 'Hybrid',
+      'hybrid_by_codex': 'Hybrid By Codex',
+      'hybrid_by_cursor': 'Hybrid By Cursor',
+      'hybrid_by_claude_quad': 'Hybrid By Claude (Quad)',
+      'hybrid_by_claude_cubic': 'Hybrid By Claude (Cubic)',
+      'hybrid_by_gemini': 'Hybrid By Gemini',
     };
     return labels[strategy] || strategy;
   };
@@ -1574,7 +1861,7 @@ function CandidateComparisonPanel({
         <h3>Candidate Comparison</h3>
         <div className="header-badges">
           <span className={`pipeline-badge ${pipelineMode}`}>
-            {pipelineMode === 'without_gemini' ? '⚡ Algorithm Only' : pipelineMode === 'pre_and_ranking' ? '🧠 Pre+Ranking' : '🧪 Testing'}
+            🧪 Testing
           </span>
           <span className={`ranking-badge ${usedGeminiRanking ? 'gemini' : 'local'}`}>
             {usedGeminiRanking ? '🤖 Gemini' : '📊 Local'}
@@ -1611,21 +1898,6 @@ function CandidateComparisonPanel({
       {geminiStatus === 'failed' && (
         <div className="gemini-status-banner failed">
           <span>⚠️ AI 연결 실패 - 로컬 결과 사용중</span>
-        </div>
-      )}
-
-      {pipelineMode === 'pre_and_ranking' && preConstraint && (
-        <div className="pre-constraint-info">
-          <div className="constraint-header">
-            <span className="constraint-label">Gemini Pre-Constraint</span>
-            {usedGeminiPreConstraint && <span className="gemini-badge">✓ Gemini</span>}
-          </div>
-          <p className="constraint-strategy">{preConstraint.overallStrategy}</p>
-          <div className="constraint-details">
-            <span>Order: {preConstraint.movementOrder}</span>
-            <span>Curve: {(preConstraint.suggestedCurveAmount * 100).toFixed(0)}%</span>
-            <span>Confidence: {(preConstraint.confidence * 100).toFixed(0)}%</span>
-          </div>
         </div>
       )}
 
@@ -1853,8 +2125,6 @@ function resultToDancerData(result: ChoreographyResult): DancerData[] {
   });
 }
 
-type StagePreset = keyof typeof STAGE_PRESETS;
-
 export default function DanceChoreography() {
   const [currentCount, setCurrentCount] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -1865,7 +2135,7 @@ export default function DanceChoreography() {
   const [error, setError] = useState<string | null>(null);
 
   // Stage size state
-  const [stagePreset, setStagePreset] = useState<StagePreset>('large');
+  const [stagePreset, setStagePreset] = useState<StagePresetKey>('large');
   const [stageWidth, setStageWidth] = useState(DEFAULT_STAGE_WIDTH);
   const [stageHeight, setStageHeight] = useState(DEFAULT_STAGE_HEIGHT);
 
@@ -1908,19 +2178,18 @@ export default function DanceChoreography() {
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>('');
   const [usedGeminiRanking, setUsedGeminiRanking] = useState(false);
   const [useMultiCandidate, setUseMultiCandidate] = useState(true); // Multi-candidate mode toggle
-  const [apiConfigured, setApiConfigured] = useState(false);
-  const [pipelineMode, setPipelineMode] = useState<GeminiPipelineMode>('without_gemini');
+  const pipelineMode: GeminiPipelineMode = 'testing_algorithm';
   const [assignmentMode, setAssignmentMode] = useState<AssignmentMode>('fixed');
   const [lockedDancers, setLockedDancers] = useState<Set<number>>(new Set());
-  const [preConstraint, setPreConstraint] = useState<GeminiPreConstraint | null>(null);
-  const [usedGeminiPreConstraint, setUsedGeminiPreConstraint] = useState(false);
   const [geminiStatus, setGeminiStatus] = useState<'idle' | 'pending' | 'success' | 'failed' | 'timeout'>('idle');
   const [pendingGeminiResult, setPendingGeminiResult] = useState<MultiCandidateResult | null>(null);
 
-  // Check API configuration on mount
-  useEffect(() => {
-    isApiKeyConfigured().then(setApiConfigured);
-  }, []);
+  // Cue Sheet state
+  const [cueSheetModalOpen, setCueSheetModalOpen] = useState(false);
+  const [cueSheet, setCueSheet] = useState<CueSheetResult | null>(null);
+  const [cueSheetLoading, setCueSheetLoading] = useState(false);
+  const [cueSheetError, setCueSheetError] = useState<string | null>(null);
+  const [cueSheetLanguage, setCueSheetLanguage] = useState<'ko' | 'en'>('ko');
 
   // Initialize custom positions when dancer count or stage size changes
   // Skip if test case preset just updated (to preserve test case positions)
@@ -2019,56 +2288,32 @@ export default function DanceChoreography() {
 
     try {
       if (useMultiCandidate) {
-        // Progressive Enhancement: Local result first, Gemini in background
-        const shouldUseGemini = pipelineMode === 'pre_and_ranking';
-
-          const multiResult = await generateWithProgressiveEnhancement(
-            startFormation,
-            endFormation,
-            {
-              dancerCount: dancerCount,
-              spread: 1.0,
-              totalCounts: 8,
-              customStartPositions: customStartPositions.slice(0, dancerCount),
-              customEndPositions: customEndPositions.slice(0, dancerCount),
-              stageWidth: stageWidth,
-              stageHeight: stageHeight,
-              pipelineMode: pipelineMode,
-              assignmentMode: assignmentMode,
-              lockedDancers: assignmentMode === 'partial' ? lockedDancers : undefined,
-              // Callback when Gemini result arrives
-              onGeminiResult: shouldUseGemini ? (geminiResult) => {
-                console.log('[UI] Gemini result received:', geminiResult.geminiEnhancement?.status);
-                const status = geminiResult.geminiEnhancement?.status || 'failed';
-                setGeminiStatus(status);
-
-                if (status === 'success' && geminiResult.geminiEnhancement?.enhancedResult) {
-                  // Gemini selected different candidate - offer to user
-                  setPendingGeminiResult(geminiResult);
-                } else if (status === 'success') {
-                  // Gemini agreed with local - just update ranking info
-                  setRanking(geminiResult.ranking);
-                  setUsedGeminiRanking(true);
-                }
-              } : undefined,
-            }
-          );
-
-          // Immediately show local result
-          setCandidates(multiResult.candidates);
-          setRanking(multiResult.ranking);
-          setSelectedCandidateId(multiResult.ranking?.selectedId || multiResult.candidates[0]?.id);
-          setUsedGeminiRanking(multiResult.metadata.usedGeminiRanking);
-          setPreConstraint(multiResult.preConstraint || null);
-          setUsedGeminiPreConstraint(multiResult.metadata.usedGeminiPreConstraint);
-          setResult(multiResult.selectedResult);
-          setDancers(resultToDancerData(multiResult.selectedResult));
-          setTotalCounts(multiResult.selectedResult.request.totalCounts);
-
-          // Set pending status if Gemini is being called
-          if (shouldUseGemini) {
-            setGeminiStatus('pending');
+        // Generate candidates with local ranking
+        const multiResult = await generateWithProgressiveEnhancement(
+          startFormation,
+          endFormation,
+          {
+            dancerCount: dancerCount,
+            spread: 1.0,
+            totalCounts: 8,
+            customStartPositions: customStartPositions.slice(0, dancerCount),
+            customEndPositions: customEndPositions.slice(0, dancerCount),
+            stageWidth: stageWidth,
+            stageHeight: stageHeight,
+            pipelineMode: pipelineMode,
+            assignmentMode: assignmentMode,
+            lockedDancers: assignmentMode === 'partial' ? lockedDancers : undefined,
           }
+        );
+
+        // Show result
+        setCandidates(multiResult.candidates);
+        setRanking(multiResult.ranking);
+        setSelectedCandidateId(multiResult.ranking?.selectedId || multiResult.candidates[0]?.id);
+        setUsedGeminiRanking(multiResult.metadata.usedGeminiRanking);
+        setResult(multiResult.selectedResult);
+        setDancers(resultToDancerData(multiResult.selectedResult));
+        setTotalCounts(multiResult.selectedResult.request.totalCounts);
       } else {
         // Single result mode (legacy)
         const choreographyResult = generateChoreographyDirect(
@@ -2145,6 +2390,43 @@ export default function DanceChoreography() {
     setGeminiStatus('success');
   }, [pendingGeminiResult]);
 
+  // Generate cue sheet from current paths
+  const handleGenerateCueSheet = useCallback(async () => {
+    if (!result || dancers.length === 0) {
+      setCueSheetError('No choreography data available. Generate paths first.');
+      return;
+    }
+
+    setCueSheetLoading(true);
+    setCueSheetError(null);
+
+    try {
+      // Convert dancers to DancerPath format for the cue sheet generator
+      const paths = dancers.map(dancer => ({
+        dancerId: dancer.id,
+        path: dancer.path,
+        totalDistance: dancer.distance,
+        startTime: 0,
+        speed: 1,
+      }));
+
+      const cueSheetResult = await generateCueSheet(paths, {
+        language: cueSheetLanguage,
+        stageWidth,
+        stageHeight,
+        totalCounts,
+        includeRelativePositioning: true,
+        includeArtisticNuance: true,
+      });
+
+      setCueSheet(cueSheetResult);
+    } catch (err) {
+      setCueSheetError(err instanceof Error ? err.message : 'Failed to generate cue sheet');
+    } finally {
+      setCueSheetLoading(false);
+    }
+  }, [result, dancers, cueSheetLanguage, stageWidth, stageHeight, totalCounts]);
+
   // Handle formation preset in editor
   const handleApplyPreset = useCallback((formation: FormationType, target: 'start' | 'end', spread: number = 1.0) => {
     const positions = generateFormation(formation, dancerCount, { stageWidth, stageHeight, spread });
@@ -2189,7 +2471,7 @@ export default function DanceChoreography() {
   }, []);
 
   // Handle stage preset change
-  const handleStagePresetChange = useCallback((preset: StagePreset) => {
+  const handleStagePresetChange = useCallback((preset: StagePresetKey) => {
     setStagePreset(preset);
     if (preset !== 'custom') {
       setStageWidth(STAGE_PRESETS[preset].width);
@@ -2309,49 +2591,8 @@ export default function DanceChoreography() {
             <span>🤖 Multi-Candidate Mode</span>
           </label>
           {useMultiCandidate && (
-            <div className="pipeline-mode-selector">
-              <label className={`mode-option ${pipelineMode === 'without_gemini' ? 'active' : ''}`}>
-                <input
-                  type="radio"
-                  name="pipelineMode"
-                  value="without_gemini"
-                  checked={pipelineMode === 'without_gemini'}
-                  onChange={() => setPipelineMode('without_gemini')}
-                />
-                <span className="mode-label">Without Gemini</span>
-                <span className="mode-desc">5 strategies, local ranking</span>
-              </label>
-              <label className={`mode-option ${pipelineMode === 'pre_and_ranking' ? 'active' : ''}`}>
-                <input
-                  type="radio"
-                  name="pipelineMode"
-                  value="pre_and_ranking"
-                  checked={pipelineMode === 'pre_and_ranking'}
-                  onChange={() => setPipelineMode('pre_and_ranking')}
-                />
-                <span className="mode-label">Pre + Ranking</span>
-                <span className="mode-desc">Gemini constraints + ranking</span>
-              </label>
-              <label className={`mode-option ${pipelineMode === 'testing_algorithm' ? 'active' : ''}`}>
-                <input
-                  type="radio"
-                  name="pipelineMode"
-                  value="testing_algorithm"
-                  checked={pipelineMode === 'testing_algorithm'}
-                  onChange={() => setPipelineMode('testing_algorithm')}
-                />
-                <span className="mode-label">Testing Algorithm</span>
-                <span className="mode-desc">Simple linear paths with timing offset</span>
-              </label>
-            </div>
-          )}
-          {useMultiCandidate && (
             <span className="toggle-hint">
-              {pipelineMode === 'without_gemini'
-                ? '5 strategies with local ranking'
-                : pipelineMode === 'testing_algorithm'
-                  ? 'Simple linear paths + timing-based collision avoidance'
-                  : `Gemini constraints + ${apiConfigured ? 'Gemini' : 'Local'} ranking`}
+              All strategies, select best by collision/crossing metrics
             </span>
           )}
         </div>
@@ -2432,8 +2673,6 @@ export default function DanceChoreography() {
               selectedId={selectedCandidateId}
               onSelectCandidate={handleSelectCandidate}
               usedGeminiRanking={usedGeminiRanking}
-              preConstraint={preConstraint}
-              usedGeminiPreConstraint={usedGeminiPreConstraint}
               pipelineMode={pipelineMode}
               geminiStatus={geminiStatus}
               pendingGeminiResult={pendingGeminiResult}
@@ -2483,6 +2722,13 @@ export default function DanceChoreography() {
               {result.validation.valid ? 'None' : `${result.validation.collisions.length}`}
             </strong>
           </div>
+          <button
+            className="cue-sheet-button"
+            onClick={() => setCueSheetModalOpen(true)}
+            title="Generate Cue Sheet for Dancers"
+          >
+            📋 Cue Sheet
+          </button>
         </div>
       )}
 
@@ -2500,6 +2746,18 @@ export default function DanceChoreography() {
           <span>Movement Path</span>
         </div>
       </div>
+
+      {/* Cue Sheet Modal */}
+      <CueSheetModal
+        isOpen={cueSheetModalOpen}
+        onClose={() => setCueSheetModalOpen(false)}
+        cueSheet={cueSheet}
+        isLoading={cueSheetLoading}
+        error={cueSheetError}
+        onGenerate={handleGenerateCueSheet}
+        language={cueSheetLanguage}
+        onLanguageChange={setCueSheetLanguage}
+      />
     </div>
   );
 }

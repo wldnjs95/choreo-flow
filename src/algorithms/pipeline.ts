@@ -17,7 +17,6 @@ import { generateFormation, applySpread } from './formations';
 import type { FormationType } from './formations';
 import {
   generateAllCandidates,
-  generateCandidatesWithConstraint,
   summarizeCandidatesForGemini,
 } from './candidateGenerator';
 import type { CandidateResult } from './candidateGenerator';
@@ -31,23 +30,17 @@ import {
 } from '../gemini/evaluator';
 import type { AestheticScore } from '../gemini/evaluator';
 import {
-  rankCandidatesWithGemini,
   rankCandidatesLocal,
 } from '../gemini/ranker';
 import type { UserPreference, RankingResult } from '../gemini/ranker';
-import {
-  generatePreConstraint,
-} from '../gemini/preConstraint';
-import type { GeminiPreConstraint } from '../gemini/preConstraint';
 import { isApiKeyConfigured } from '../gemini/config';
+import { DANCER_COLORS } from '../constants';
 
 /**
  * Pipeline mode for Gemini integration
  */
 export type GeminiPipelineMode =
-  | 'without_gemini'      // Without Gemini: Algorithm only (5 strategies), local ranking
-  | 'pre_and_ranking'     // Gemini Pre + Ranking: Gemini constraints → Algorithm → Gemini ranking
-  | 'testing_algorithm';  // Testing Algorithm: Simple linear paths with timing-based collision avoidance
+  | 'testing_algorithm';  // Testing Algorithm: All strategies, select best by metrics
 
 /**
  * Pipeline result
@@ -96,18 +89,6 @@ export interface SmoothPath {
   speed: number;
   distance: number;
 }
-
-// Dancer colors
-const DANCER_COLORS = [
-  '#FF6B6B',  // Coral Red
-  '#4ECDC4',  // Teal
-  '#45B7D1',  // Sky Blue
-  '#96CEB4',  // Sage Green
-  '#FFD93D',  // Golden Yellow
-  '#6C5CE7',  // Purple
-  '#A8E6CF',  // Mint
-  '#FF8C42',  // Orange
-];
 
 /**
  * Generate choreography from natural language input
@@ -355,14 +336,11 @@ export interface MultiCandidateResult {
   // All candidates
   candidates: CandidateResult[];
 
-  // Ranking result (null in without_gemini mode)
+  // Ranking result (null in testing_algorithm mode)
   ranking: RankingResult | null;
 
   // Candidates summary (for Gemini)
   candidatesSummary: object;
-
-  // Gemini pre-constraint (only in pre_and_ranking mode)
-  preConstraint?: GeminiPreConstraint;
 
   // Metadata
   metadata: {
@@ -371,24 +349,14 @@ export interface MultiCandidateResult {
     computeTimeMs: number;
     usedGeminiRanking: boolean;
     pipelineMode: GeminiPipelineMode;
-    usedGeminiPreConstraint: boolean;
-  };
-
-  // Gemini enhancement status (for progressive UX)
-  geminiEnhancement?: {
-    status: 'pending' | 'success' | 'failed' | 'timeout';
-    enhancedRanking?: RankingResult;
-    enhancedResult?: ChoreographyResult;
   };
 }
 
 /**
- * Multi-candidate generation + Gemini ranking pipeline
+ * Multi-candidate generation pipeline
  *
  * Modes:
- * - without_gemini: Algorithm only (5 strategies), local ranking
- * - pre_and_ranking: Gemini pre-constraint → Algorithm → Gemini ranking
- * - testing_algorithm: Simple linear paths with timing-based collision avoidance
+ * - testing_algorithm: All strategies, select best by metrics (collision count, crossings)
  */
 export async function generateChoreographyWithCandidates(
   startFormation: FormationType,
@@ -418,9 +386,9 @@ export async function generateChoreographyWithCandidates(
     customEndPositions,
     stageWidth = 12,
     stageHeight = 10,
-    userPreference = {},
-    useGeminiRanking = false,
-    pipelineMode = 'without_gemini',
+    userPreference: _userPreference = {},
+    useGeminiRanking: _useGeminiRanking = false,
+    pipelineMode = 'testing_algorithm',
     assignmentMode = 'fixed',
     lockedDancers,
   } = options;
@@ -435,77 +403,26 @@ export async function generateChoreographyWithCandidates(
   console.log('=== Pipeline Debug ===');
   console.log('Pipeline Mode:', pipelineMode);
 
-  // 2. Generate candidates (depends on mode)
-  let candidates: CandidateResult[];
-  let preConstraint: GeminiPreConstraint | undefined;
-  let usedGeminiPreConstraint = false;
+  // 2. Generate all algorithm strategies
+  console.log(`${pipelineMode} mode: Generating all algorithm strategies`);
+  const candidates = generateAllCandidates(startPositions, endPositions, {
+    totalCounts,
+    collisionRadius: 0.5,
+    stageWidth,
+    stageHeight,
+    assignmentMode,
+    lockedDancers,
+  });
 
-  if (pipelineMode === 'testing_algorithm') {
-    // Testing Algorithm: Generate all algorithm strategies for comparison
-    console.log('Testing Algorithm mode: Generating all algorithm strategies');
-    candidates = generateAllCandidates(startPositions, endPositions, {
-      totalCounts,
-      collisionRadius: 0.5,
-      stageWidth,
-      stageHeight,
-      assignmentMode,
-      lockedDancers,
-    });
-  } else if (pipelineMode === 'pre_and_ranking') {
-    // Pre + Ranking mode: Gemini pre-constraint → constraint-based generation (required)
-    preConstraint = await generatePreConstraint(startPositions, endPositions, stageWidth, stageHeight);
-    usedGeminiPreConstraint = true;
-    console.log('Gemini Pre-constraint generated:', preConstraint.overallStrategy);
-
-    candidates = generateCandidatesWithConstraint(preConstraint, startPositions, endPositions, {
-      totalCounts,
-      collisionRadius: 0.5,
-      stageWidth,
-      stageHeight,
-      assignmentMode,
-      lockedDancers,
-    });
-  } else {
-    // Without Gemini mode: standard 5 strategies
-    candidates = generateAllCandidates(startPositions, endPositions, {
-      totalCounts,
-      collisionRadius: 0.5,
-      stageWidth,
-      stageHeight,
-      assignmentMode,
-      lockedDancers,
-    });
-  }
-
-  // 3. Ranking (Gemini or Local)
-  let ranking: RankingResult | null = null;
-  let usedGeminiRanking = false;
-
+  // 3. No ranking needed - use first candidate (best metrics)
   console.log('Candidates count:', candidates.length);
   console.log('Candidate IDs:', candidates.map(c => c.id));
-
-  if (pipelineMode === 'without_gemini' || pipelineMode === 'testing_algorithm') {
-    // Without Gemini or Testing Algorithm: No ranking, just use first candidate
-    console.log(`${pipelineMode} mode: using first candidate`);
-    console.log('Selected:', candidates[0]?.id);
-  } else if (useGeminiRanking) {
-    // Gemini ranking (required - no fallback)
-    console.log('Calling Gemini ranking...');
-    ranking = await rankCandidatesWithGemini(candidates, userPreference);
-    usedGeminiRanking = true;
-    console.log('Gemini ranking success, selected:', ranking.selectedId);
-  } else {
-    // Local ranking (for ranking_only mode without API key)
-    console.log('Using local ranking...');
-    ranking = rankCandidatesLocal(candidates, userPreference);
-    console.log('Local ranking selected:', ranking.selectedId);
-  }
+  console.log(`${pipelineMode} mode: using first candidate`);
+  console.log('Selected:', candidates[0]?.id);
   console.log('=== End Pipeline Debug ===')
 
-  // 4. Find selected candidate
-  const selectedCandidate = ranking
-    ? candidates.find(c => c.id === ranking.selectedId) || candidates[0]
-    : candidates[0];  // Without ranking, use first (best metrics)
+  // 4. Find selected candidate (first by metrics)
+  const selectedCandidate = candidates[0];
 
   // 5. Convert to ChoreographyResult format
   const smoothPaths = pathsToSmoothPaths(selectedCandidate.paths);
@@ -554,23 +471,20 @@ export async function generateChoreographyWithCandidates(
   return {
     selectedResult,
     candidates,
-    ranking,
+    ranking: null,
     candidatesSummary: summarizeCandidatesForGemini(candidates),
-    preConstraint,
     metadata: {
       totalCandidates: candidates.length,
       selectedStrategy: selectedCandidate.strategy,
       computeTimeMs: performance.now() - startTime,
-      usedGeminiRanking,
+      usedGeminiRanking: false,
       pipelineMode,
-      usedGeminiPreConstraint,
     },
   };
 }
 
 /**
- * Progressive Enhancement: Run Gemini ranking in background
- * Returns immediately with local result, calls onGeminiResult when Gemini responds
+ * Generate choreography with multiple candidates
  */
 export async function generateWithProgressiveEnhancement(
   startFormation: FormationType,
@@ -588,7 +502,6 @@ export async function generateWithProgressiveEnhancement(
     pipelineMode?: GeminiPipelineMode;
     assignmentMode?: AssignmentMode;
     lockedDancers?: Set<number>;
-    onGeminiResult?: (result: MultiCandidateResult) => void;
   } = {}
 ): Promise<MultiCandidateResult> {
   const {
@@ -601,10 +514,9 @@ export async function generateWithProgressiveEnhancement(
     stageWidth = 12,
     stageHeight = 10,
     userPreference = {},
-    pipelineMode = 'without_gemini',
+    pipelineMode = 'testing_algorithm',
     assignmentMode = 'fixed',
     lockedDancers,
-    onGeminiResult,
   } = options;
 
   const startTime = performance.now();
@@ -613,48 +525,16 @@ export async function generateWithProgressiveEnhancement(
   const startPositions = customStartPositions || generateFormation(startFormation, dancerCount, { spread, stageWidth, stageHeight });
   const endPositions = customEndPositions || generateFormation(endFormation, dancerCount, { spread, stageWidth, stageHeight });
 
-  // 2. Generate candidates (depends on pipeline mode)
-  let candidates: CandidateResult[];
-  let preConstraint: GeminiPreConstraint | undefined;
-  let usedGeminiPreConstraint = false;
-
-  if (pipelineMode === 'testing_algorithm') {
-    // Testing Algorithm: Generate all algorithm strategies for comparison
-    console.log('[Progressive] Testing Algorithm mode: Generating all algorithm strategies');
-    candidates = generateAllCandidates(startPositions, endPositions, {
-      totalCounts,
-      collisionRadius: 0.5,
-      stageWidth,
-      stageHeight,
-      assignmentMode,
-      lockedDancers,
-    });
-  } else if (pipelineMode === 'pre_and_ranking') {
-    // Pre + Ranking mode: Get Gemini pre-constraint first (required, no fallback)
-    console.log('[Progressive] Fetching Gemini pre-constraint...');
-    preConstraint = await generatePreConstraint(startPositions, endPositions, stageWidth, stageHeight);
-    usedGeminiPreConstraint = true;
-    console.log('[Progressive] Pre-constraint received:', preConstraint.overallStrategy);
-
-    candidates = generateCandidatesWithConstraint(preConstraint, startPositions, endPositions, {
-      totalCounts,
-      collisionRadius: 0.5,
-      stageWidth,
-      stageHeight,
-      assignmentMode,
-      lockedDancers,
-    });
-  } else {
-    // Without Gemini: Standard 5 strategies
-    candidates = generateAllCandidates(startPositions, endPositions, {
-      totalCounts,
-      collisionRadius: 0.5,
-      stageWidth,
-      stageHeight,
-      assignmentMode,
-      lockedDancers,
-    });
-  }
+  // 2. Generate all algorithm strategies
+  console.log(`[Progressive] ${pipelineMode} mode: Generating all algorithm strategies`);
+  const candidates = generateAllCandidates(startPositions, endPositions, {
+    totalCounts,
+    collisionRadius: 0.5,
+    stageWidth,
+    stageHeight,
+    assignmentMode,
+    lockedDancers,
+  });
 
   // 3. Local ranking (instant)
   const localRanking = rankCandidatesLocal(candidates, userPreference);
@@ -704,110 +584,20 @@ export async function generateWithProgressiveEnhancement(
     metadata: resultMetadata,
   };
 
-  const initialResult: MultiCandidateResult = {
+  // 5. Return result
+  return {
     selectedResult: localResult,
     candidates,
     ranking: localRanking,
     candidatesSummary: summarizeCandidatesForGemini(candidates),
-    preConstraint,
     metadata: {
       totalCandidates: candidates.length,
       selectedStrategy: localCandidate.strategy,
       computeTimeMs: performance.now() - startTime,
       usedGeminiRanking: false,
       pipelineMode,
-      usedGeminiPreConstraint,
     },
-    geminiEnhancement: pipelineMode === 'pre_and_ranking' ? { status: 'pending' } : undefined,
   };
-
-  // 5. If not using Gemini, return immediately
-  if (pipelineMode !== 'pre_and_ranking' || !onGeminiResult) {
-    return initialResult;
-  }
-
-  // 6. Fire Gemini ranking in background (non-blocking)
-  (async () => {
-    try {
-      console.log('[Progressive] Starting Gemini ranking in background...');
-      const geminiRanking = await rankCandidatesWithGemini(candidates, userPreference);
-
-      // Check if Gemini selected a different candidate
-      const geminiCandidate = candidates.find(c => c.id === geminiRanking.selectedId) || candidates[0];
-
-      if (geminiCandidate.id !== localCandidate.id) {
-        console.log(`[Progressive] Gemini selected different: ${geminiCandidate.id} (was: ${localCandidate.id})`);
-
-        // Build enhanced result
-        const enhancedSmoothPaths = pathsToSmoothPaths(geminiCandidate.paths);
-        const enhancedValidation = validatePathsSimple(geminiCandidate.paths, 0.5, totalCounts);
-
-        const enhancedResult: ChoreographyResult = {
-          request,
-          startPositions,
-          endPositions,
-          assignments: geminiCandidate.assignments,
-          paths: geminiCandidate.paths,
-          smoothPaths: enhancedSmoothPaths,
-          validation: enhancedValidation,
-          aestheticScore: evaluateChoreographyLocal(
-            geminiCandidate.paths.map(p => ({ dancerId: p.dancerId, path: p.path, totalDistance: p.totalDistance, collisionFree: true })),
-            mainDancer
-          ),
-          metadata: {
-            ...resultMetadata,
-            computeTimeMs: performance.now() - startTime,
-          },
-        };
-
-        onGeminiResult({
-          ...initialResult,
-          selectedResult: enhancedResult,
-          ranking: geminiRanking,
-          metadata: {
-            ...initialResult.metadata,
-            selectedStrategy: geminiCandidate.strategy,
-            usedGeminiRanking: true,
-            computeTimeMs: performance.now() - startTime,
-          },
-          geminiEnhancement: {
-            status: 'success',
-            enhancedRanking: geminiRanking,
-            enhancedResult,
-          },
-        });
-      } else {
-        console.log('[Progressive] Gemini agreed with local ranking');
-        onGeminiResult({
-          ...initialResult,
-          ranking: geminiRanking,
-          metadata: {
-            ...initialResult.metadata,
-            usedGeminiRanking: true,
-            computeTimeMs: performance.now() - startTime,
-          },
-          geminiEnhancement: {
-            status: 'success',
-            enhancedRanking: geminiRanking,
-          },
-        });
-      }
-    } catch (error) {
-      console.warn('[Progressive] Gemini ranking failed:', error);
-      const isTimeout = error instanceof Error &&
-        (error.message.includes('timeout') || error.message.includes('504'));
-
-      onGeminiResult({
-        ...initialResult,
-        geminiEnhancement: {
-          status: isTimeout ? 'timeout' : 'failed',
-        },
-      });
-    }
-  })();
-
-  // Return local result immediately
-  return initialResult;
 }
 
 /**
@@ -872,3 +662,4 @@ export async function generateChoreographyFromTextWithCandidates(
     }
   );
 }
+

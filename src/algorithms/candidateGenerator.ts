@@ -9,35 +9,25 @@
 
 import { computeAssignment } from './hungarian';
 import type { Position, Assignment, AssignmentMode } from './hungarian';
-import { computeAllPathsSimple, validatePathsSimple } from './pathfinder';
-import type { DancerPath, PathPoint, SortStrategy, TimingMode } from './pathfinder';
-import { computeAllPathsWithPotentialField } from './potentialField';
-import { computeAllPathsWithRVO } from './rvo';
-import { computeAllPaths } from './astar';
-import { computeAllPathsWithCBS } from './cbs';
-import { computeAllPathsWithBoids } from './boids';
-import { computeAllPathsWithJPS } from './jps';
+import { validatePathsSimple } from './pathfinder';
+import type { DancerPath, PathPoint } from './pathfinder';
 import { computeAllPathsWithHybrid } from './choreographyHybrid';
+import { computeAllPathsWithHybridByCodex } from './hybridByCodex';
+import { computeAllPathsWithHybridByClaude } from './hybridByClaude';
+import { computeAllPathsWithHybridByClaudeCubic } from './hybridByClaudeCubic';
+import { computeAllPathsWithHybridByCursor } from './hybridByCursor';
+import { computeAllPathsWithHybridByGemini } from './choreographyHybridByGemini';
 
 /**
- * Candidate generation strategy
+ * Candidate generation strategy (Hybrid algorithms only)
  */
 export type CandidateStrategy =
-  | 'distance_longest_first'   // Long distance first (default)
-  | 'distance_shortest_first'  // Short distance first
-  | 'synchronized_arrival'     // All dancers arrive at same time
-  | 'staggered_wave'           // Sequential start with wave effect
-  | 'center_priority'          // Center dancer first
-  | 'curved_smooth'            // Force curved paths for aesthetic
-  | 'quick_burst'              // Fast movement, all start together
-  | 'slow_dramatic'            // Slow dramatic entrance with delays
-  | 'potential_field'         // Potential field algorithm
-  | 'rvo'                      // RVO (Reciprocal Velocity Obstacles) algorithm
-  | 'astar'                    // A* pathfinding algorithm
-  | 'cbs'                      // CBS (Conflict-Based Search) algorithm
-  | 'boids'                    // Boids (flocking/swarming) algorithm
-  | 'jps'                      // JPS (Jump Point Search) algorithm
-  | 'hybrid';                  // Hybrid algorithm (Cubic Bezier + heuristic timing)
+  | 'hybrid'                   // Hybrid algorithm (Cubic Bezier + heuristic timing)
+  | 'hybrid_by_codex'          // Hybrid By Codex (linear base + curved detour)
+  | 'hybrid_by_claude_quad'    // Hybrid By Claude Quad (Quadratic Bezier, symmetric curves)
+  | 'hybrid_by_claude_cubic'   // Hybrid By Claude Cubic (Cubic Bezier, asymmetric curves)
+  | 'hybrid_by_cursor'         // Hybrid By Cursor
+  | 'hybrid_by_gemini';        // Hybrid By Gemini (time-sync, iterative collision resolution)
 
 /**
  * Candidate metrics
@@ -78,13 +68,12 @@ export interface CandidateGeneratorConfig {
 }
 
 const DEFAULT_STRATEGIES: CandidateStrategy[] = [
+  'hybrid_by_gemini',
+  'hybrid_by_cursor',
+  'hybrid_by_claude_cubic',  // Cubic Bezier (비대칭 곡선)
+  'hybrid_by_claude_quad',   // Quadratic Bezier (대칭 곡선)
+  'hybrid_by_codex',
   'hybrid',
-  'potential_field',
-  'rvo',
-  'astar',
-  'cbs',
-  'boids',
-  'jps',
 ];
 
 /**
@@ -329,141 +318,6 @@ export function calculateMetrics(
   };
 }
 
-/**
- * Sort assignments by strategy (center_priority only)
- * Other strategies are handled by pathfinder's sortStrategy
- */
-function sortAssignmentsForCenterPriority(
-  assignments: Assignment[],
-  stageWidth: number,
-  stageHeight: number
-): Assignment[] {
-  const sorted = [...assignments];
-  const centerX = stageWidth / 2;
-  const centerY = stageHeight / 2;
-
-  // Prioritize dancers closer to center
-  sorted.sort((a, b) => {
-    const distA = distance(a.startPosition, { x: centerX, y: centerY });
-    const distB = distance(b.startPosition, { x: centerX, y: centerY });
-    return distA - distB;
-  });
-
-  return sorted;
-}
-
-/**
- * Pathfinder config by strategy
- */
-function getPathfinderConfig(strategy: CandidateStrategy, totalCounts: number) {
-  const baseConfig = {
-    totalCounts,
-    collisionRadius: 0.5,
-    numPoints: 20,
-    maxCurveOffset: 3.0,  // Allow larger curves for extreme collision scenarios
-  };
-
-  switch (strategy) {
-    case 'distance_longest_first':
-      return {
-        ...baseConfig,
-        sortStrategy: 'distance_longest_first' as SortStrategy,
-        timingMode: 'proportional' as TimingMode,
-      };
-
-    case 'distance_shortest_first':
-      return {
-        ...baseConfig,
-        sortStrategy: 'distance_shortest_first' as SortStrategy,
-        timingMode: 'proportional' as TimingMode,
-      };
-
-    case 'center_priority':
-      // center_priority sorts assignments directly, so use 'none'
-      return {
-        ...baseConfig,
-        sortStrategy: 'none' as SortStrategy,
-        timingMode: 'proportional' as TimingMode,
-      };
-
-    case 'synchronized_arrival':
-      // All dancers arrive at the same time
-      return {
-        ...baseConfig,
-        sortStrategy: 'distance_longest_first' as SortStrategy,
-        timingMode: 'synchronized' as TimingMode,
-      };
-
-    case 'staggered_wave':
-      // Sequential start times with wave effect
-      return {
-        ...baseConfig,
-        sortStrategy: 'distance_longest_first' as SortStrategy,
-        timingMode: 'staggered' as TimingMode,
-        staggerDelay: 0.5,
-      };
-
-    case 'curved_smooth':
-      // Force curved paths for smooth aesthetic
-      return {
-        ...baseConfig,
-        sortStrategy: 'distance_longest_first' as SortStrategy,
-        timingMode: 'proportional' as TimingMode,
-        maxCurveOffset: 2.0,  // Force curves
-        forceCurve: true,
-      };
-
-    case 'quick_burst':
-      // Fast movement, everyone arrives quickly
-      return {
-        ...baseConfig,
-        sortStrategy: 'distance_longest_first' as SortStrategy,
-        timingMode: 'synchronized' as TimingMode,
-        speedMultiplier: 1.5,  // Faster
-      };
-
-    case 'slow_dramatic':
-      // Slow dramatic entrance with staggered delays
-      return {
-        ...baseConfig,
-        sortStrategy: 'distance_longest_first' as SortStrategy,
-        timingMode: 'staggered' as TimingMode,
-        staggerDelay: 1.0,  // Longer delay between dancers
-        speedMultiplier: 0.7,  // Slower
-      };
-
-    case 'potential_field':
-      // Potential field algorithm (handled separately in generateCandidate)
-      return baseConfig;
-
-    case 'rvo':
-      // RVO algorithm (handled separately in generateCandidate)
-      return baseConfig;
-
-    case 'astar':
-      // A* algorithm (handled separately in generateCandidate)
-      return baseConfig;
-
-    case 'cbs':
-      // CBS algorithm (handled separately in generateCandidate)
-      return baseConfig;
-
-    case 'boids':
-      // Boids algorithm (handled separately in generateCandidate)
-      return baseConfig;
-
-    case 'jps':
-      // JPS algorithm (handled separately in generateCandidate)
-      return baseConfig;
-
-    case 'hybrid':
-      // Hybrid algorithm (handled separately in generateCandidate)
-      return baseConfig;
-
-    default:
-      return baseConfig;
-  }
-}
 
 /**
  * Generate single candidate
@@ -485,119 +339,12 @@ export function generateCandidate(
   const assignmentMode = config.assignmentMode || 'fixed';
   const assignments = computeAssignment(startPositions, endPositions, assignmentMode, config.lockedDancers);
 
-  // 2. Sort assignment only for center_priority strategy, others handled by pathfinder
-  const processedAssignments = strategy === 'center_priority'
-    ? sortAssignmentsForCenterPriority(assignments, config.stageWidth, config.stageHeight)
-    : assignments;
-
-  // 3. Generate paths (with strategy-specific algorithm)
+  // 2. Generate paths with hybrid algorithm
   let paths: DancerPath[];
-  if (strategy === 'potential_field') {
-    // Use potential field algorithm
-    paths = computeAllPathsWithPotentialField(processedAssignments, {
-      totalCounts: config.totalCounts,
-      collisionRadius: config.collisionRadius,
-      stageWidth: config.stageWidth,
-      stageHeight: config.stageHeight,
-      numPoints: 20,
-      attractiveGain: 1.0,
-      repulsiveGain: 2.0,
-      repulsiveRange: config.collisionRadius * 2.0,
-      stepSize: 0.1,
-      maxIterations: 100,
-    });
-  } else if (strategy === 'rvo') {
-    // Use RVO algorithm with enhanced head-on collision avoidance
-    paths = computeAllPathsWithRVO(processedAssignments, {
-      totalCounts: config.totalCounts,
-      collisionRadius: config.collisionRadius,
-      stageWidth: config.stageWidth,
-      stageHeight: config.stageHeight,
-      numPoints: 20,
-      timeHorizon: 3.0,  // Increased for early head-on collision detection
-      neighborDist: 8.0,  // Increased to detect head-on collisions earlier
-      maxSpeed: 2.0,
-      timeStep: 0.1,
-    });
-  } else if (strategy === 'astar') {
-    // Use A* algorithm
-    const astarAssignments = processedAssignments.map(a => ({
-      dancerId: a.dancerId,
-      startPosition: a.startPosition,
-      endPosition: a.endPosition,
-    }));
-    
-    const astarResults = computeAllPaths(astarAssignments, {
-      stageWidth: config.stageWidth,
-      stageHeight: config.stageHeight,
-      totalCounts: config.totalCounts,
-      gridResolution: 0.5,
-      timeResolution: 0.5,
-      collisionRadius: config.collisionRadius,
-      diagonalCost: 1.414,
-    });
-
-    // Convert PathResult[] to DancerPath[]
-    paths = astarResults.map(result => {
-      // Calculate startTime and speed from path
-      const startTime = result.path.length > 0 ? result.path[0].t : 0;
-      const endTime = result.path.length > 0 ? result.path[result.path.length - 1].t : config.totalCounts;
-      const duration = endTime - startTime;
-      const speed = duration > 0 ? result.totalDistance / duration : 1.0;
-
-      return {
-        dancerId: result.dancerId,
-        path: result.path,
-        startTime,
-        speed: Math.max(0.3, Math.min(2.0, speed)),
-        totalDistance: result.totalDistance,
-      };
-    });
-  } else if (strategy === 'cbs') {
-    // Use CBS (Conflict-Based Search) algorithm
-    // CBS is more efficient than A* for multi-agent scenarios with conflicts
-    paths = computeAllPathsWithCBS(processedAssignments, {
-      totalCounts: config.totalCounts,
-      collisionRadius: config.collisionRadius,
-      stageWidth: config.stageWidth,
-      stageHeight: config.stageHeight,
-      gridResolution: 0.5,
-      timeResolution: 0.5,
-      maxIterations: 100,
-    });
-  } else if (strategy === 'boids') {
-    // Use Boids (flocking/swarming) algorithm
-    paths = computeAllPathsWithBoids(processedAssignments, {
-      totalCounts: config.totalCounts,
-      collisionRadius: config.collisionRadius,
-      stageWidth: config.stageWidth,
-      stageHeight: config.stageHeight,
-      numPoints: 20,
-      separationWeight: 1.5,
-      alignmentWeight: 1.0,
-      cohesionWeight: 1.0,
-      goalWeight: 2.0,
-      separationRadius: config.collisionRadius * 1.5,
-      neighborRadius: 3.0,
-      maxSpeed: 2.0,
-      maxForce: 0.5,
-      timeStep: 0.2,
-    });
-  } else if (strategy === 'jps') {
-    // Use JPS (Jump Point Search) algorithm
-    paths = computeAllPathsWithJPS(processedAssignments, {
-      totalCounts: config.totalCounts,
-      collisionRadius: config.collisionRadius,
-      stageWidth: config.stageWidth,
-      stageHeight: config.stageHeight,
-      gridResolution: 0.5,
-      timeResolution: 0.5,
-      maxIterations: 10000,
-    });
-  } else if (strategy === 'hybrid') {
+  if (strategy === 'hybrid') {
     // Use Hybrid algorithm (Cubic Bezier + heuristic timing)
     // Best for: natural curved paths, human speed limits, back stage positioning
-    paths = computeAllPathsWithHybrid(processedAssignments, {
+    paths = computeAllPathsWithHybrid(assignments, {
       totalCounts: config.totalCounts,
       collisionRadius: config.collisionRadius,
       stageWidth: config.stageWidth,
@@ -606,10 +353,66 @@ export function generateCandidate(
       maxHumanSpeed: 1.5,  // meters per count
       preferSimultaneousArrival: true,
     });
+  } else if (strategy === 'hybrid_by_codex') {
+    // Hybrid By Codex (linear base + curved detour, collision-free)
+    paths = computeAllPathsWithHybridByCodex(assignments, {
+      totalCounts: config.totalCounts,
+      collisionRadius: config.collisionRadius,
+      stageWidth: config.stageWidth,
+      stageHeight: config.stageHeight,
+      numPoints: 30,
+      maxHumanSpeed: 1.5,  // meters per count
+      maxCurveOffset: 3.0,
+      maxDetourRatio: 1.8,
+      timeStep: 0.1,
+    });
+  } else if (strategy === 'hybrid_by_claude_quad') {
+    // Hybrid By Claude Quad: Quadratic Bezier (대칭 곡선)
+    // syncMode: 'strict' (동기화 우선), 'balanced' (균형), 'relaxed' (기존 방식)
+    paths = computeAllPathsWithHybridByClaude(assignments, {
+      totalCounts: config.totalCounts,
+      collisionRadius: config.collisionRadius,
+      stageWidth: config.stageWidth,
+      stageHeight: config.stageHeight,
+      numPoints: 30,
+      maxHumanSpeed: 1.5,
+      syncMode: 'balanced',
+    });
+  } else if (strategy === 'hybrid_by_claude_cubic') {
+    // Hybrid By Claude Cubic: Cubic Bezier (비대칭 곡선)
+    // syncMode: 'strict' (동기화 우선), 'balanced' (균형), 'relaxed' (기존 방식)
+    paths = computeAllPathsWithHybridByClaudeCubic(assignments, {
+      totalCounts: config.totalCounts,
+      collisionRadius: config.collisionRadius,
+      stageWidth: config.stageWidth,
+      stageHeight: config.stageHeight,
+      numPoints: 30,
+      maxHumanSpeed: 1.5,
+      syncMode: 'balanced',
+    });
+  } else if (strategy === 'hybrid_by_cursor') {
+    // Hybrid By Cursor: Linear base + curved detour, collision-free, time sync, kinematics
+    paths = computeAllPathsWithHybridByCursor(assignments, {
+      totalCounts: config.totalCounts,
+      collisionRadius: config.collisionRadius,
+      stageWidth: config.stageWidth,
+      stageHeight: config.stageHeight,
+      numPoints: 30,
+      maxHumanSpeed: 1.5,
+      maxCurveOffset: 3.0,
+      maxDetourRatio: 1.8,
+      timeStep: 0.1,
+    });
   } else {
-    // Use standard pathfinder
-    const pathfinderConfig = getPathfinderConfig(strategy, config.totalCounts);
-    paths = computeAllPathsSimple(processedAssignments, pathfinderConfig);
+    // Default: Hybrid By Gemini (time-sync, iterative collision resolution)
+    paths = computeAllPathsWithHybridByGemini(assignments, {
+      totalCounts: config.totalCounts,
+      collisionRadius: config.collisionRadius,
+      stageWidth: config.stageWidth,
+      stageHeight: config.stageHeight,
+      numPoints: 30,
+      maxHumanSpeed: 1.5,
+    });
   }
 
   // 4. Calculate metrics
@@ -715,225 +518,3 @@ export function summarizeCandidatesForGemini(candidates: CandidateResult[]): obj
   };
 }
 
-// ============================================
-// Gemini Pre-Constraint based candidate generation
-// ============================================
-
-import type { GeminiPreConstraint } from '../gemini/preConstraint';
-
-/**
- * Map constraint to strategy
- */
-function constraintToStrategy(constraint: GeminiPreConstraint): CandidateStrategy {
-  switch (constraint.movementOrder) {
-    case 'longest_first':
-      return 'distance_longest_first';
-    case 'shortest_first':
-      return 'distance_shortest_first';
-    case 'center_first':
-      return 'center_priority';
-    case 'wave_outward':
-    case 'outer_first':
-      return 'distance_longest_first';  // Outer first = similar to longest first
-    case 'wave_inward':
-      return 'center_priority';
-    default:
-      return 'distance_longest_first';
-  }
-}
-
-/**
- * Sort assignments by constraint
- */
-function sortAssignmentsByConstraint(
-  assignments: Assignment[],
-  constraint: GeminiPreConstraint
-): Assignment[] {
-  const sorted = [...assignments];
-
-  // Sort by priority in dancerHints
-  sorted.sort((a, b) => {
-    const hintA = constraint.dancerHints.find(h => h.dancerId === a.dancerId + 1);
-    const hintB = constraint.dancerHints.find(h => h.dancerId === b.dancerId + 1);
-
-    const priorityA = hintA?.priority ?? 999;
-    const priorityB = hintB?.priority ?? 999;
-
-    return priorityA - priorityB;
-  });
-
-  return sorted;
-}
-
-/**
- * Pathfinder config from constraint
- */
-function getPathfinderConfigFromConstraint(constraint: GeminiPreConstraint, totalCounts: number) {
-  return {
-    totalCounts,
-    collisionRadius: 0.5,
-    numPoints: 20,
-    sortStrategy: 'none' as SortStrategy,  // Already sorted
-    maxCurveOffset: constraint.suggestedCurveAmount,
-    preferTiming: constraint.preferSmoothPaths,
-  };
-}
-
-/**
- * Generate single candidate based on constraint
- */
-export function generateCandidateWithConstraint(
-  constraint: GeminiPreConstraint,
-  startPositions: Position[],
-  endPositions: Position[],
-  config: {
-    totalCounts: number;
-    collisionRadius: number;
-    stageWidth: number;
-    stageHeight: number;
-    assignmentMode?: AssignmentMode;
-    lockedDancers?: Set<number>;
-  }
-): CandidateResult {
-  // 1. Assignment (fixed by default)
-  const assignmentMode = config.assignmentMode || 'fixed';
-  const assignments = computeAssignment(startPositions, endPositions, assignmentMode, config.lockedDancers);
-
-  // 2. Sort assignments by constraint
-  const sortedAssignments = sortAssignmentsByConstraint(assignments, constraint);
-
-  // 3. Apply delay (reflect delayRatio from dancerHints)
-  const adjustedAssignments = sortedAssignments.map(a => {
-    const hint = constraint.dancerHints.find(h => h.dancerId === a.dancerId + 1);
-    const delayRatio = hint?.delayRatio ?? 0;
-
-    return {
-      ...a,
-      delayStart: delayRatio * config.totalCounts * 0.3,  // Max 30% delay
-    };
-  });
-
-  // 4. Generate paths
-  const pathfinderConfig = getPathfinderConfigFromConstraint(constraint, config.totalCounts);
-  const paths = computeAllPathsSimple(adjustedAssignments, pathfinderConfig);
-
-  // 5. Calculate metrics
-  const metrics = calculateMetrics(
-    paths,
-    config.totalCounts,
-    config.collisionRadius,
-    config.stageWidth
-  );
-
-  const strategy = constraintToStrategy(constraint);
-
-  return {
-    id: `candidate_constrained_${constraint.movementOrder}`,
-    strategy,
-    paths,
-    metrics,
-    assignments: adjustedAssignments,
-  };
-}
-
-/**
- * Generate multiple candidates with constraint + variations
- */
-export function generateCandidatesWithConstraint(
-  constraint: GeminiPreConstraint,
-  startPositions: Position[],
-  endPositions: Position[],
-  config: Partial<CandidateGeneratorConfig> = {}
-): CandidateResult[] {
-  const fullConfig: CandidateGeneratorConfig = {
-    strategies: config.strategies || DEFAULT_STRATEGIES,
-    totalCounts: config.totalCounts || 8,
-    collisionRadius: config.collisionRadius || 0.5,
-    stageWidth: config.stageWidth || 12,
-    stageHeight: config.stageHeight || 10,
-    assignmentMode: config.assignmentMode || 'fixed',
-    lockedDancers: config.lockedDancers,
-  };
-
-  const candidates: CandidateResult[] = [];
-
-  // 1. Main candidate based on constraint
-  const mainCandidate = generateCandidateWithConstraint(
-    constraint,
-    startPositions,
-    endPositions,
-    {
-      totalCounts: fullConfig.totalCounts,
-      collisionRadius: fullConfig.collisionRadius,
-      stageWidth: fullConfig.stageWidth,
-      stageHeight: fullConfig.stageHeight,
-      assignmentMode: fullConfig.assignmentMode,
-      lockedDancers: fullConfig.lockedDancers,
-    }
-  );
-  mainCandidate.id = 'candidate_gemini_constrained';
-  candidates.push(mainCandidate);
-
-  // 2. Constraint variations (curve amount adjustment)
-  const curveVariants = [0.2, 0.5, 0.8];
-  for (const curveAmount of curveVariants) {
-    if (Math.abs(curveAmount - constraint.suggestedCurveAmount) < 0.1) continue;
-
-    const variantConstraint = {
-      ...constraint,
-      suggestedCurveAmount: curveAmount,
-    };
-
-    const variant = generateCandidateWithConstraint(
-      variantConstraint,
-      startPositions,
-      endPositions,
-      {
-        totalCounts: fullConfig.totalCounts,
-        collisionRadius: fullConfig.collisionRadius,
-        stageWidth: fullConfig.stageWidth,
-        stageHeight: fullConfig.stageHeight,
-        assignmentMode: fullConfig.assignmentMode,
-        lockedDancers: fullConfig.lockedDancers,
-      }
-    );
-    variant.id = `candidate_constrained_curve_${curveAmount}`;
-    candidates.push(variant);
-  }
-
-  // 3. Add some existing strategies (for comparison)
-  const additionalStrategies: CandidateStrategy[] = ['distance_longest_first', 'synchronized_arrival'];
-  for (const strategy of additionalStrategies) {
-    const candidate = generateCandidate(strategy, startPositions, endPositions, {
-      totalCounts: fullConfig.totalCounts,
-      collisionRadius: fullConfig.collisionRadius,
-      stageWidth: fullConfig.stageWidth,
-      stageHeight: fullConfig.stageHeight,
-      assignmentMode: fullConfig.assignmentMode,
-      lockedDancers: fullConfig.lockedDancers,
-    });
-    candidate.id = `candidate_baseline_${strategy}`;
-    candidates.push(candidate);
-  }
-
-  // Remove duplicates
-  const uniqueCandidates: CandidateResult[] = [];
-  for (const candidate of candidates) {
-    const isDuplicate = uniqueCandidates.some(existing =>
-      arePathsEqual(existing.paths, candidate.paths)
-    );
-    if (!isDuplicate) {
-      uniqueCandidates.push(candidate);
-    }
-  }
-
-  // Sort
-  uniqueCandidates.sort((a, b) => {
-    if (a.metrics.collisionCount !== b.metrics.collisionCount) {
-      return a.metrics.collisionCount - b.metrics.collisionCount;
-    }
-    return a.metrics.crossingCount - b.metrics.crossingCount;
-  });
-
-  return uniqueCandidates;
-}

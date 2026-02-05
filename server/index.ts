@@ -19,7 +19,9 @@ const app = new Hono();
 // CORS 설정
 app.use('/*', cors());
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent';
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const DEFAULT_MODEL = 'gemini-3-pro-preview';  // Gemini 3 Pro Preview
+const VISION_MODEL = 'gemini-3-pro-preview';   // Gemini 3 Pro Preview (also for images)
 
 // Health check
 app.get('/api/health', (c) => {
@@ -42,23 +44,53 @@ app.post('/api/gemini', async (c) => {
     }
 
     const body = await c.req.json();
+    const { model, ...requestBody } = body;
 
-    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+    // Check if request contains image data (multimodal)
+    const hasImage = requestBody.contents?.some((content: { parts?: Array<{ inlineData?: unknown }> }) =>
+      content.parts?.some((part: { inlineData?: unknown }) => part.inlineData)
+    );
+
+    // Select appropriate model
+    const selectedModel = model || (hasImage ? VISION_MODEL : DEFAULT_MODEL);
+    const apiUrl = `${GEMINI_API_BASE}/${selectedModel}:generateContent`;
+
+    console.log(`[Gemini] Using model: ${selectedModel}, hasImage: ${hasImage}`);
+
+    const response = await fetch(`${apiUrl}?key=${apiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(requestBody),
     });
 
     const data = await response.json();
 
     if (!response.ok) {
+      console.error('[Gemini] API Error:', data.error);
       return c.json({ error: data.error?.message || 'Gemini API error' }, response.status);
+    }
+
+    // Log response for debugging
+    const hasContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    console.log(`[Gemini] Response received, hasContent: ${!!hasContent}`);
+
+    // Debug: Log full response structure if empty
+    if (!hasContent) {
+      console.log('[Gemini] Empty content - Full response:', JSON.stringify(data, null, 2));
+      // Check for safety block or other issues
+      if (data.candidates?.[0]?.finishReason) {
+        console.log('[Gemini] Finish reason:', data.candidates[0].finishReason);
+      }
+      if (data.promptFeedback) {
+        console.log('[Gemini] Prompt feedback:', JSON.stringify(data.promptFeedback));
+      }
     }
 
     return c.json(data);
   } catch (error) {
+    console.error('[Gemini] Server error:', error);
     return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
   }
 });

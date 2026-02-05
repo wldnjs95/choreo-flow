@@ -22,7 +22,7 @@ export const GEMINI_CONFIG = {
   temperature: 0.7,
   topK: 40,
   topP: 0.95,
-  maxOutputTokens: 8192,
+  maxOutputTokens: 32768,  // Increased for large choreography responses (10+ dancers × 20+ steps)
 };
 
 /**

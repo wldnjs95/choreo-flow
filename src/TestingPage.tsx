@@ -4,6 +4,7 @@ import { GEMINI_API_URL, GEMINI_CONFIG } from './gemini/config';
 const MODELS = [
   { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro Preview' },
   { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash Preview' },
+  { id: 'gemini-2.5-pro-preview-05-06', name: 'Gemini 2.5 Pro Preview' },
 ];
 
 export default function TestingPage() {
@@ -13,6 +14,17 @@ export default function TestingPage() {
   const [error, setError] = useState('');
   const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
   const [elapsedTime, setElapsedTime] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(response);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!prompt.trim()) return;
@@ -183,19 +195,36 @@ export default function TestingPage() {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <strong style={{ color: '#4ade80' }}>Response:</strong>
-            {elapsedTime !== null && (
-              <span style={{
-                backgroundColor: '#0f3460',
-                padding: '4px 12px',
-                borderRadius: '16px',
-                fontSize: '13px',
-                color: '#60a5fa'
-              }}>
-                {elapsedTime >= 1000
-                  ? `${(elapsedTime / 1000).toFixed(2)}s`
-                  : `${Math.round(elapsedTime)}ms`}
-              </span>
-            )}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              {elapsedTime !== null && (
+                <span style={{
+                  backgroundColor: '#0f3460',
+                  padding: '4px 12px',
+                  borderRadius: '16px',
+                  fontSize: '13px',
+                  color: '#60a5fa'
+                }}>
+                  {elapsedTime >= 1000
+                    ? `${(elapsedTime / 1000).toFixed(2)}s`
+                    : `${Math.round(elapsedTime)}ms`}
+                </span>
+              )}
+              <button
+                onClick={handleCopy}
+                style={{
+                  padding: '4px 12px',
+                  fontSize: '13px',
+                  backgroundColor: copied ? '#4ade80' : '#0f3460',
+                  color: copied ? '#000' : '#eee',
+                  border: 'none',
+                  borderRadius: '16px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
           </div>
           <pre style={{
             margin: '12px 0 0 0',
