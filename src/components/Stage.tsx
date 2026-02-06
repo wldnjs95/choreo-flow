@@ -24,7 +24,7 @@ export interface StageProps {
   onMouseMove?: (e: React.MouseEvent) => void;
   onMouseUp?: (e: React.MouseEvent) => void;
   onMouseLeave?: (e: React.MouseEvent) => void;
-  svgRef?: React.RefObject<SVGSVGElement>;
+  svgRef?: React.RefObject<SVGSVGElement | null>;
 }
 
 /**
@@ -98,6 +98,7 @@ export function Stage({
           textAnchor="middle"
           fill="#666"
           fontSize="11"
+          style={{ pointerEvents: 'none', userSelect: 'none' }}
         >
           {x}m
         </text>
@@ -113,6 +114,7 @@ export function Stage({
           textAnchor="start"
           fill="#666"
           fontSize="11"
+          style={{ pointerEvents: 'none', userSelect: 'none' }}
         >
           {y}m
         </text>

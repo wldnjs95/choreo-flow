@@ -39,3 +39,21 @@ export type {
   FormationCollection,
   TestCase,
 } from './formation';
+
+// Timeline types
+export type {
+  TransitionType,
+  DancerPosition,
+  FormationKeyframe,
+  ChoreographyProject,
+  TimelineViewState,
+  PlaybackState,
+  ChoreographyExport,
+} from './timeline';
+
+export {
+  generateFormationId,
+  generateProjectId,
+  createEmptyFormation,
+  createNewProject,
+} from './timeline';
