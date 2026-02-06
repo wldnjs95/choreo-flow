@@ -1177,32 +1177,19 @@ function FormationEditor({
     const mouseY = stageHeight - ((e.clientY - rect.top - PADDING) / scale);
 
     // Calculate movement delta
-    let deltaX = mouseX - dragStartRef.current.x;
-    let deltaY = mouseY - dragStartRef.current.y;
+    const deltaX = mouseX - dragStartRef.current.x;
+    const deltaY = mouseY - dragStartRef.current.y;
 
     // Move selected dancers together
     const idsToMove = selectedIds.has(draggingId) ? selectedIds : new Set([draggingId]);
-    const isGroupMove = idsToMove.size > 1;
 
-    // Group move: snap the delta itself (maintain formation)
-    // Single move: snap individual position
-    if (snapEnabled && isGroupMove) {
-      deltaX = snapToGrid(deltaX, snapSize);
-      deltaY = snapToGrid(deltaY, snapSize);
-    }
-
+    // Smooth movement during drag (no snap)
     setLocalPositions(prev => prev.map((pos, i) => {
       if (!idsToMove.has(i)) return pos;
 
       const initialPos = initialPositionsRef.current[i];
-      let newX = initialPos.x + deltaX;
-      let newY = initialPos.y + deltaY;
-
-      // Only snap individual position for single dancer move
-      if (snapEnabled && !isGroupMove) {
-        newX = snapToGrid(newX, snapSize);
-        newY = snapToGrid(newY, snapSize);
-      }
+      const newX = initialPos.x + deltaX;
+      const newY = initialPos.y + deltaY;
 
       // Clamp to stage bounds
       const clampedX = Math.max(0.5, Math.min(stageWidth - 0.5, newX));
@@ -1210,7 +1197,7 @@ function FormationEditor({
 
       return { x: clampedX, y: clampedY };
     }));
-  }, [draggingId, isDraggingSelection, selectionBox, selectedIds, snapEnabled, snapSize, scale, stageWidth, stageHeight]);
+  }, [draggingId, isDraggingSelection, selectionBox, selectedIds, scale, stageWidth, stageHeight]);
 
   const handleMouseUp = useCallback(() => {
     // Selection box complete
@@ -1241,14 +1228,27 @@ function FormationEditor({
       return;
     }
 
-    // Dancer drag complete
+    // Dancer drag complete - apply snap on release
     if (draggingId !== null) {
+      const idsToMove = selectedIds.has(draggingId) ? selectedIds : new Set([draggingId]);
+
+      // Snap positions to grid on release
+      const snappedPositions = localPositions.map((pos, i) => {
+        if (!snapEnabled || !idsToMove.has(i)) return pos;
+
+        return {
+          x: Math.max(0.5, Math.min(stageWidth - 0.5, snapToGrid(pos.x, snapSize))),
+          y: Math.max(0.5, Math.min(stageHeight - 0.5, snapToGrid(pos.y, snapSize))),
+        };
+      });
+
+      setLocalPositions(snappedPositions);
       isInternalChange.current = true;
-      onPositionsChange(localPositions);
+      onPositionsChange(snappedPositions);
     }
     setDraggingId(null);
     dragStartRef.current = null;
-  }, [draggingId, isDraggingSelection, selectionBox, localPositions, dancerCount, scale, stageHeight, onPositionsChange]);
+  }, [draggingId, isDraggingSelection, selectionBox, localPositions, dancerCount, scale, stageHeight, onPositionsChange, selectedIds, snapEnabled, snapSize, stageWidth]);
 
   const presets: FormationType[] = ['line', 'circle', 'v_shape', 'diagonal', 'diamond', 'triangle', 'two_lines', 'scatter'];
 
@@ -1538,6 +1538,73 @@ function FormationEditor({
             stroke="#444"
             strokeWidth={2}
           />
+
+          {/* Exit zones (1.5m on each side) */}
+          <rect
+            className="exit-zone exit-zone-left"
+            x={PADDING}
+            y={PADDING}
+            width={1.5 * scale}
+            height={stageHeight * scale}
+            fill="rgba(255, 107, 107, 0.15)"
+            stroke="rgba(255, 107, 107, 0.4)"
+            strokeWidth={1}
+            strokeDasharray="4,4"
+          />
+          <rect
+            className="exit-zone exit-zone-right"
+            x={PADDING + (stageWidth - 1.5) * scale}
+            y={PADDING}
+            width={1.5 * scale}
+            height={stageHeight * scale}
+            fill="rgba(255, 107, 107, 0.15)"
+            stroke="rgba(255, 107, 107, 0.4)"
+            strokeWidth={1}
+            strokeDasharray="4,4"
+          />
+          {/* Exit zone labels */}
+          <text
+            x={PADDING + 0.75 * scale}
+            y={PADDING + 20}
+            textAnchor="middle"
+            fill="rgba(255, 107, 107, 0.6)"
+            fontSize="10"
+            style={{ pointerEvents: 'none', userSelect: 'none' }}
+          >
+            EXIT
+          </text>
+          <text
+            x={PADDING + (stageWidth - 0.75) * scale}
+            y={PADDING + 20}
+            textAnchor="middle"
+            fill="rgba(255, 107, 107, 0.6)"
+            fontSize="10"
+            style={{ pointerEvents: 'none', userSelect: 'none' }}
+          >
+            EXIT
+          </text>
+
+          {/* Stage direction labels */}
+          <text
+            x={PADDING + (stageWidth / 2) * scale}
+            y={PADDING - 8}
+            textAnchor="middle"
+            fill="rgba(255, 255, 255, 0.4)"
+            fontSize="10"
+            style={{ pointerEvents: 'none', userSelect: 'none' }}
+          >
+            FRONT (Audience)
+          </text>
+          <text
+            x={PADDING + (stageWidth / 2) * scale}
+            y={PADDING + stageHeight * scale + 16}
+            textAnchor="middle"
+            fill="rgba(255, 255, 255, 0.3)"
+            fontSize="10"
+            style={{ pointerEvents: 'none', userSelect: 'none' }}
+          >
+            BACK
+          </text>
 
           {/* Grid */}
           {Array.from({ length: Math.floor(stageWidth) + 1 }).map((_, x) => (

@@ -31,6 +31,7 @@ import {
   computeAllPathsWithHybridByCodex,
   computeAllPathsWithHybrid,
 } from './algorithms';
+import { generateCueSheet, type CueSheetResult, type DancerCueSheet } from './gemini/cueSheetGenerator';
 
 // Path algorithm options
 type PathAlgorithm =
@@ -127,6 +128,11 @@ const TimelineEditor: React.FC = () => {
   const [pathAlgorithm, setPathAlgorithm] = useState<PathAlgorithm>('hybrid_by_claude');
   const [isGeneratingPaths, setIsGeneratingPaths] = useState(false);
   const [pathGenerationStatus, setPathGenerationStatus] = useState<string | null>(null);
+
+  // Cue sheet state
+  const [cueSheet, setCueSheet] = useState<CueSheetResult | null>(null);
+  const [isGeneratingCueSheet, setIsGeneratingCueSheet] = useState(false);
+  const [showCueSheet, setShowCueSheet] = useState(false);
 
   // File input ref for loading
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -627,8 +633,44 @@ const TimelineEditor: React.FC = () => {
         return newMap;
       });
 
-      setPathGenerationStatus('Paths generated successfully!');
-      setTimeout(() => setPathGenerationStatus(null), 2000);
+      setPathGenerationStatus('Paths generated! Generating cue sheet...');
+
+      // Generate cue sheet with Gemini
+      setIsGeneratingCueSheet(true);
+      try {
+        // Convert paths to DancerPath format for cue sheet generator
+        const dancerPaths = paths.map(p => ({
+          dancerId: p.dancerId,
+          path: p.path,
+          startTime: p.path[0]?.t || 0,
+          speed: 1,
+          totalDistance: p.path.reduce((acc, point, i, arr) => {
+            if (i === 0) return 0;
+            const prev = arr[i - 1];
+            return acc + Math.sqrt((point.x - prev.x) ** 2 + (point.y - prev.y) ** 2);
+          }, 0),
+        }));
+
+        const cueSheetResult = await generateCueSheet(dancerPaths, {
+          stageWidth: project.stageWidth,
+          stageHeight: project.stageHeight,
+          totalCounts: currentFormation.duration,
+          language: 'en',
+          includeRelativePositioning: true,
+          includeArtisticNuance: true,
+        });
+
+        setCueSheet(cueSheetResult);
+        setPathGenerationStatus('Paths and cue sheet generated!');
+        setShowCueSheet(true);
+      } catch (cueError) {
+        console.error('Cue sheet generation failed:', cueError);
+        setPathGenerationStatus('Paths generated (cue sheet failed)');
+      } finally {
+        setIsGeneratingCueSheet(false);
+      }
+
+      setTimeout(() => setPathGenerationStatus(null), 3000);
     } catch (error) {
       console.error('Path generation failed:', error);
       setPathGenerationStatus('Path generation failed');
@@ -636,7 +678,7 @@ const TimelineEditor: React.FC = () => {
     } finally {
       setIsGeneratingPaths(false);
     }
-  }, [selectedFormation, selectedFormationId, project.formations, pathAlgorithm, generatePathsForTransition]);
+  }, [selectedFormation, selectedFormationId, project.formations, pathAlgorithm, generatePathsForTransition, project.stageWidth, project.stageHeight]);
 
   // Generate all paths for playback
   const generateAllPaths = useCallback(async () => {
@@ -1324,6 +1366,63 @@ const TimelineEditor: React.FC = () => {
           }}
         />
       </div>
+
+      {/* Cue Sheet Modal */}
+      {showCueSheet && cueSheet && (
+        <div className="cue-sheet-modal-overlay" onClick={() => setShowCueSheet(false)}>
+          <div className="cue-sheet-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="cue-sheet-header">
+              <h2>{cueSheet.title || 'Cue Sheet'}</h2>
+              <div className="cue-sheet-meta">
+                <span>Stage: {cueSheet.stageInfo}</span>
+                <span>Duration: {cueSheet.totalCounts} counts</span>
+              </div>
+              <button className="cue-sheet-close" onClick={() => setShowCueSheet(false)}>×</button>
+            </div>
+
+            {cueSheet.generalNotes && cueSheet.generalNotes.length > 0 && (
+              <div className="cue-sheet-notes">
+                <h4>General Notes</h4>
+                <ul>
+                  {cueSheet.generalNotes.map((note, i) => (
+                    <li key={i}>{note}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="cue-sheet-dancers">
+              {cueSheet.dancers.map((dancer: DancerCueSheet) => (
+                <div key={dancer.dancerId} className="dancer-cue-card">
+                  <div className="dancer-cue-header">
+                    <span className="dancer-label">{dancer.dancerLabel}</span>
+                    <span className="dancer-summary">{dancer.summary}</span>
+                  </div>
+                  <div className="dancer-cues">
+                    {dancer.cues.map((cue, i) => (
+                      <div key={i} className="cue-entry">
+                        <span className="cue-time">{cue.timeRange}</span>
+                        <div className="cue-content">
+                          <p className="cue-instruction">{cue.instruction}</p>
+                          {cue.notes && <p className="cue-notes">{cue.notes}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cue Sheet Loading Indicator */}
+      {isGeneratingCueSheet && (
+        <div className="cue-sheet-loading">
+          <span className="loading-spinner" />
+          <span>Generating cue sheet with Gemini...</span>
+        </div>
+      )}
     </div>
   );
 };
