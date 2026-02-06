@@ -120,10 +120,24 @@ export const Timeline: React.FC<TimelineProps> = ({
     }
   }, [currentCount, zoom]);
 
+  // Handle ruler click to seek
+  const handleRulerClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!onSeek) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickedCount = Math.max(0, Math.min(totalCounts, clickX / zoom));
+    onSeek(clickedCount);
+  };
+
   return (
     <div className="timeline-container" ref={containerRef}>
       {/* Ruler */}
-      <div className="timeline-ruler" style={{ width: totalCounts * zoom }}>
+      <div
+        className="timeline-ruler"
+        style={{ width: totalCounts * zoom, cursor: onSeek ? 'pointer' : 'default' }}
+        onClick={handleRulerClick}
+      >
         {rulerMarks.map(count => (
           <div
             key={count}

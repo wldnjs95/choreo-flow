@@ -3404,6 +3404,117 @@ body {
   cursor: not-allowed;
 }
 
+/* Gemini's Pick badge */
+.gemini-pick-badge {
+  background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 4px rgba(245, 158, 11, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.8);
+  }
+}
+
+/* Gemini ranking status */
+.gemini-ranking-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 6px;
+  font-size: 11px;
+  color: #f59e0b;
+  margin: 8px 0;
+}
+
+/* Gemini scores section */
+.gemini-scores {
+  margin: 8px 0;
+}
+
+.gemini-scores details {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.gemini-scores summary {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: #888;
+  cursor: pointer;
+  user-select: none;
+}
+
+.gemini-scores summary:hover {
+  color: #f59e0b;
+}
+
+.gemini-scores .score-list {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gemini-scores .score-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.gemini-scores .score-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.gemini-scores .score-item.selected {
+  background: rgba(78, 205, 196, 0.15);
+  border: 1px solid rgba(78, 205, 196, 0.3);
+}
+
+.gemini-scores .score-item.pick {
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.gemini-scores .score-item.pick.selected {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.gemini-scores .algo-name {
+  flex: 1;
+  color: #ccc;
+}
+
+.gemini-scores .algo-score {
+  font-weight: 600;
+  color: #4ECDC4;
+  min-width: 24px;
+  text-align: right;
+}
+
+.gemini-scores .pick-star {
+  color: #f59e0b;
+  font-size: 12px;
+}
+
 /* Path generation status */
 .path-generation-status {
   display: flex;
