@@ -822,13 +822,14 @@ const TimelineEditor: React.FC = () => {
     setSelectedFormationId(formation.id);
   };
 
-  // Interpolate dancer positions for playback using generated paths
+  // Interpolate dancer positions based on currentCount (works for both playback and scrubbing)
   const getInterpolatedPositions = useCallback(() => {
-    if (!isPlaying || project.formations.length < 2) {
+    // If no formations or only one, return selected formation positions
+    if (project.formations.length < 2) {
       return selectedFormation?.positions || [];
     }
 
-    // Find current and next formation
+    // Find current and next formation based on currentCount
     let currentFormation: FormationKeyframe | null = null;
     let nextFormation: FormationKeyframe | null = null;
 
@@ -841,7 +842,12 @@ const TimelineEditor: React.FC = () => {
       }
     }
 
+    // If currentCount is past all formations, show last formation
     if (!currentFormation) {
+      const lastFormation = project.formations[project.formations.length - 1];
+      if (currentCount >= lastFormation.startCount + lastFormation.duration) {
+        return lastFormation.positions;
+      }
       return selectedFormation?.positions || [];
     }
 
@@ -924,7 +930,13 @@ const TimelineEditor: React.FC = () => {
     });
   }, [isPlaying, project.formations, currentCount, selectedFormation, generatedPaths]);
 
-  const displayPositions = isPlaying ? getInterpolatedPositions() : (selectedFormation?.positions || []);
+  // Always use interpolated positions when paths exist (for scrubbing/playback)
+  // When editing (currentCount is at formation start and not playing), show the editable positions
+  const isAtFormationStart = selectedFormation &&
+    Math.abs(currentCount - selectedFormation.startCount) < 0.1 && !isPlaying;
+  const displayPositions = isAtFormationStart
+    ? (selectedFormation?.positions || [])
+    : getInterpolatedPositions();
 
   return (
     <div className="timeline-editor">
