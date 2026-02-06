@@ -134,6 +134,15 @@ const TimelineEditor: React.FC = () => {
   const [isGeneratingCueSheet, setIsGeneratingCueSheet] = useState(false);
   const [showCueSheet, setShowCueSheet] = useState(false);
 
+  // Toast notification state
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  // Show toast notification
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info', duration = 5000) => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), duration);
+  }, []);
+
   // File input ref for loading
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -633,44 +642,45 @@ const TimelineEditor: React.FC = () => {
         return newMap;
       });
 
-      setPathGenerationStatus('Paths generated! Generating cue sheet...');
+      setPathGenerationStatus('Paths generated!');
+      setTimeout(() => setPathGenerationStatus(null), 2000);
 
-      // Generate cue sheet with Gemini
+      // Generate cue sheet in BACKGROUND (non-blocking)
       setIsGeneratingCueSheet(true);
-      try {
-        // Convert paths to DancerPath format for cue sheet generator
-        const dancerPaths = paths.map(p => ({
-          dancerId: p.dancerId,
-          path: p.path,
-          startTime: p.path[0]?.t || 0,
-          speed: 1,
-          totalDistance: p.path.reduce((acc, point, i, arr) => {
-            if (i === 0) return 0;
-            const prev = arr[i - 1];
-            return acc + Math.sqrt((point.x - prev.x) ** 2 + (point.y - prev.y) ** 2);
-          }, 0),
-        }));
+      const formationDuration = currentFormation.duration;
 
-        const cueSheetResult = await generateCueSheet(dancerPaths, {
-          stageWidth: project.stageWidth,
-          stageHeight: project.stageHeight,
-          totalCounts: currentFormation.duration,
-          language: 'en',
-          includeRelativePositioning: true,
-          includeArtisticNuance: true,
+      // Convert paths to DancerPath format for cue sheet generator
+      const dancerPaths = paths.map(p => ({
+        dancerId: p.dancerId,
+        path: p.path,
+        startTime: p.path[0]?.t || 0,
+        speed: 1,
+        totalDistance: p.path.reduce((acc, point, i, arr) => {
+          if (i === 0) return 0;
+          const prev = arr[i - 1];
+          return acc + Math.sqrt((point.x - prev.x) ** 2 + (point.y - prev.y) ** 2);
+        }, 0),
+      }));
+
+      // Run in background - don't await
+      generateCueSheet(dancerPaths, {
+        stageWidth: project.stageWidth,
+        stageHeight: project.stageHeight,
+        totalCounts: formationDuration,
+        language: 'en',
+        includeRelativePositioning: true,
+        includeArtisticNuance: true,
+      })
+        .then((cueSheetResult) => {
+          setCueSheet(cueSheetResult);
+          setIsGeneratingCueSheet(false);
+          showToast('✓ Cue sheet ready! Click to view.', 'success', 8000);
+        })
+        .catch((cueError) => {
+          console.error('Cue sheet generation failed:', cueError);
+          setIsGeneratingCueSheet(false);
+          showToast('Cue sheet generation failed', 'error', 5000);
         });
-
-        setCueSheet(cueSheetResult);
-        setPathGenerationStatus('Paths and cue sheet generated!');
-        setShowCueSheet(true);
-      } catch (cueError) {
-        console.error('Cue sheet generation failed:', cueError);
-        setPathGenerationStatus('Paths generated (cue sheet failed)');
-      } finally {
-        setIsGeneratingCueSheet(false);
-      }
-
-      setTimeout(() => setPathGenerationStatus(null), 3000);
     } catch (error) {
       console.error('Path generation failed:', error);
       setPathGenerationStatus('Path generation failed');
@@ -1416,11 +1426,37 @@ const TimelineEditor: React.FC = () => {
         </div>
       )}
 
-      {/* Cue Sheet Loading Indicator */}
+      {/* Cue Sheet Background Indicator */}
       {isGeneratingCueSheet && (
-        <div className="cue-sheet-loading">
-          <span className="loading-spinner" />
-          <span>Generating cue sheet with Gemini...</span>
+        <div className="cue-sheet-background-indicator">
+          <span className="loading-spinner small" />
+          <span>Cue sheet generating...</span>
+        </div>
+      )}
+
+      {/* Cue Sheet Ready Button */}
+      {!isGeneratingCueSheet && cueSheet && !showCueSheet && (
+        <button
+          className="cue-sheet-ready-btn"
+          onClick={() => setShowCueSheet(true)}
+        >
+          📋 View Cue Sheet
+        </button>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={`toast-notification ${toast.type}`}
+          onClick={() => {
+            if (toast.type === 'success' && cueSheet) {
+              setShowCueSheet(true);
+            }
+            setToast(null);
+          }}
+        >
+          <span>{toast.message}</span>
+          <button className="toast-close" onClick={(e) => { e.stopPropagation(); setToast(null); }}>×</button>
         </div>
       )}
     </div>
