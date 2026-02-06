@@ -3952,8 +3952,13 @@ body {
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.03);
-  cursor: pointer;
+  cursor: grab;
   transition: all 0.15s ease;
+  user-select: none;
+}
+
+.preset-preview-card:active {
+  cursor: grabbing;
 }
 
 .preset-preview-card:hover {
@@ -4244,6 +4249,12 @@ body {
   position: relative;
   min-height: 60px;
   cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.timeline-track.drag-over {
+  background: rgba(78, 205, 196, 0.15);
+  box-shadow: inset 0 0 0 2px rgba(78, 205, 196, 0.5);
 }
 
 /* Grid lines */

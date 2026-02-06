@@ -17,6 +17,7 @@ interface TimelineProps {
   onDeleteFormation: (id: string) => void;
   onAddFormation: (afterId: string | null) => void;
   onSeek?: (count: number) => void; // Seek to specific count
+  onDropPreset?: (presetJson: string, atCount: number) => void; // Drop preset to add formation
 }
 
 const GRID_HEIGHT = 60;
@@ -34,10 +35,12 @@ export const Timeline: React.FC<TimelineProps> = ({
   onDeleteFormation,
   onAddFormation,
   onSeek,
+  onDropPreset,
 }) => {
   const timelineRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = React.useState(false);
+  const [isDragOver, setIsDragOver] = React.useState(false);
 
   // Calculate total counts (last formation end or minimum 64 counts)
   const lastFormation = project.formations[project.formations.length - 1];
@@ -130,6 +133,35 @@ export const Timeline: React.FC<TimelineProps> = ({
     onSeek(clickedCount);
   };
 
+  // Drag and drop handlers for preset
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    if (!onDropPreset || !timelineRef.current) return;
+
+    const presetJson = e.dataTransfer.getData('application/json');
+    if (!presetJson) return;
+
+    // Calculate drop position (count)
+    const rect = timelineRef.current.getBoundingClientRect();
+    const dropX = e.clientX - rect.left;
+    const dropCount = Math.max(0, dropX / zoom);
+
+    onDropPreset(presetJson, dropCount);
+  };
+
   return (
     <div className="timeline-container" ref={containerRef}>
       {/* Ruler */}
@@ -153,9 +185,12 @@ export const Timeline: React.FC<TimelineProps> = ({
       {/* Timeline track */}
       <div
         ref={timelineRef}
-        className="timeline-track"
+        className={`timeline-track ${isDragOver ? 'drag-over' : ''}`}
         style={{ width: totalCounts * zoom, height: GRID_HEIGHT }}
         onClick={handleTimelineClick}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
         {/* 8-count grid lines */}
         {rulerMarks.map(count => (

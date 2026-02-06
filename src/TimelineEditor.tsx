@@ -64,19 +64,23 @@ interface FormationPreset {
   label: string;
   dancerCount: number;
   positions: { x: number; y: number }[];
+  stageWidth: number;
+  stageHeight: number;
 }
 
 // Organize presets by dancer count
 const FORMATION_PRESETS: Map<number, FormationPreset[]> = (() => {
   const map = new Map<number, FormationPreset[]>();
 
-  preFormationData.formations.forEach((f: { name: string; dancerCount: number; positions: { x: number; y: number }[] }) => {
+  preFormationData.formations.forEach((f: { name: string; dancerCount: number; positions: { x: number; y: number }[]; stageWidth: number; stageHeight: number }) => {
     const existing = map.get(f.dancerCount) || [];
     existing.push({
       name: f.name,
       label: f.name.replace(/_/g, ' ').replace(/(\d+) /, '$1명 '),
       dancerCount: f.dancerCount,
       positions: f.positions,
+      stageWidth: f.stageWidth || 15,
+      stageHeight: f.stageHeight || 12,
     });
     map.set(f.dancerCount, existing);
   });
@@ -111,13 +115,21 @@ const PresetPreview: React.FC<{
   onClick: () => void;
 }> = ({ preset, isSelected, onClick }) => {
   const previewSize = 60;
-  const previewPadding = 4;
-  // Assume stage is roughly 10x8 for scaling
-  const stageW = 10;
-  const stageH = 8;
-  const scaleX = (previewSize - previewPadding * 2) / stageW;
-  const scaleY = (previewSize - previewPadding * 2) / stageH;
-  const dotRadius = 3;
+  const previewPadding = 6;
+  const dotRadius = 2; // Smaller dots for better visibility
+
+  // Use actual stage dimensions from preset
+  const stageW = preset.stageWidth;
+  const stageH = preset.stageHeight;
+
+  // Calculate scale to fit the preview area while maintaining aspect ratio
+  const availableWidth = previewSize - previewPadding * 2;
+  const availableHeight = previewSize - previewPadding * 2;
+  const scale = Math.min(availableWidth / stageW, availableHeight / stageH);
+
+  // Center the stage visualization within the preview
+  const offsetX = previewPadding + (availableWidth - stageW * scale) / 2;
+  const offsetY = previewPadding + (availableHeight - stageH * scale) / 2;
 
   const colors = [
     '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
@@ -125,11 +137,19 @@ const PresetPreview: React.FC<{
     '#BB8FCE', '#85C1E9', '#F8B500', '#00CED1',
   ];
 
+  // Handle drag start
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData('application/json', JSON.stringify(preset));
+    e.dataTransfer.effectAllowed = 'copy';
+  };
+
   return (
     <div
       className={`preset-preview-card ${isSelected ? 'selected' : ''}`}
       onClick={onClick}
-      title={`${preset.name} (${preset.dancerCount} dancers)`}
+      title={`${preset.name} (${preset.dancerCount} dancers) - Drag to timeline`}
+      draggable
+      onDragStart={handleDragStart}
     >
       <svg width={previewSize} height={previewSize} className="preset-preview-svg">
         <rect
@@ -142,11 +162,21 @@ const PresetPreview: React.FC<{
           strokeWidth={1}
           rx={4}
         />
+        {/* Stage boundary indicator */}
+        <rect
+          x={offsetX}
+          y={offsetY}
+          width={stageW * scale}
+          height={stageH * scale}
+          fill="none"
+          stroke="rgba(255,255,255,0.1)"
+          strokeWidth={0.5}
+        />
         {preset.positions.map((pos, i) => (
           <circle
             key={i}
-            cx={previewPadding + pos.x * scaleX}
-            cy={previewPadding + (stageH - pos.y) * scaleY}
+            cx={offsetX + pos.x * scale}
+            cy={offsetY + (stageH - pos.y) * scale}
             r={dotRadius}
             fill={colors[i % colors.length]}
           />
@@ -158,11 +188,19 @@ const PresetPreview: React.FC<{
   );
 };
 
+// Maximum undo history size
+const MAX_UNDO_HISTORY = 50;
+
 const TimelineEditor: React.FC = () => {
   // Project state
   const [project, setProject] = useState<ChoreographyProject>(() =>
     createNewProject('New Choreography', 8, DEFAULT_STAGE_WIDTH, DEFAULT_STAGE_HEIGHT)
   );
+
+  // Undo history
+  const [undoHistory, setUndoHistory] = useState<ChoreographyProject[]>([]);
+  const [redoHistory, setRedoHistory] = useState<ChoreographyProject[]>([]);
+  const isUndoingRef = useRef(false); // Prevent saving state during undo/redo
 
   // View state
   const [selectedFormationId, setSelectedFormationId] = useState<string | null>(
@@ -224,6 +262,104 @@ const TimelineEditor: React.FC = () => {
     setTimeout(() => setToast(null), duration);
   }, []);
 
+  // Save state to undo history (call before making changes)
+  const saveToHistory = useCallback(() => {
+    if (isUndoingRef.current) return;
+    setUndoHistory(prev => {
+      const newHistory = [...prev, project];
+      // Limit history size
+      if (newHistory.length > MAX_UNDO_HISTORY) {
+        return newHistory.slice(-MAX_UNDO_HISTORY);
+      }
+      return newHistory;
+    });
+    // Clear redo history when new action is performed
+    setRedoHistory([]);
+  }, [project]);
+
+  // Undo function
+  const handleUndo = useCallback(() => {
+    if (undoHistory.length === 0) return;
+
+    isUndoingRef.current = true;
+    const previousState = undoHistory[undoHistory.length - 1];
+
+    // Save current state to redo history
+    setRedoHistory(prev => [...prev, project]);
+
+    // Remove last item from undo history
+    setUndoHistory(prev => prev.slice(0, -1));
+
+    // Restore previous state
+    setProject(previousState);
+
+    // Update selected formation if needed
+    if (previousState.formations.length > 0) {
+      const stillExists = previousState.formations.find(f => f.id === selectedFormationId);
+      if (!stillExists) {
+        setSelectedFormationId(previousState.formations[0].id);
+      }
+    }
+
+    setTimeout(() => {
+      isUndoingRef.current = false;
+    }, 0);
+
+    showToast('Undo', 'info', 1500);
+  }, [undoHistory, project, selectedFormationId, showToast]);
+
+  // Redo function
+  const handleRedo = useCallback(() => {
+    if (redoHistory.length === 0) return;
+
+    isUndoingRef.current = true;
+    const nextState = redoHistory[redoHistory.length - 1];
+
+    // Save current state to undo history
+    setUndoHistory(prev => [...prev, project]);
+
+    // Remove last item from redo history
+    setRedoHistory(prev => prev.slice(0, -1));
+
+    // Restore next state
+    setProject(nextState);
+
+    // Update selected formation if needed
+    if (nextState.formations.length > 0) {
+      const stillExists = nextState.formations.find(f => f.id === selectedFormationId);
+      if (!stillExists) {
+        setSelectedFormationId(nextState.formations[0].id);
+      }
+    }
+
+    setTimeout(() => {
+      isUndoingRef.current = false;
+    }, 0);
+
+    showToast('Redo', 'info', 1500);
+  }, [redoHistory, project, selectedFormationId, showToast]);
+
+  // Keyboard shortcut for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo]);
+
   // File input ref for loading
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -280,6 +416,7 @@ const TimelineEditor: React.FC = () => {
 
   // Update formation
   const updateFormation = useCallback((id: string, updates: Partial<FormationKeyframe>) => {
+    saveToHistory();
     setProject(prev => ({
       ...prev,
       updatedAt: new Date().toISOString(),
@@ -287,10 +424,11 @@ const TimelineEditor: React.FC = () => {
         f.id === id ? { ...f, ...updates } : f
       ),
     }));
-  }, []);
+  }, [saveToHistory]);
 
   // Add new formation
   const addFormation = useCallback((afterId: string | null) => {
+    saveToHistory();
     setProject(prev => {
       const formations = [...prev.formations];
       let insertIndex = formations.length;
@@ -334,10 +472,76 @@ const TimelineEditor: React.FC = () => {
         formations,
       };
     });
-  }, []);
+  }, [saveToHistory]);
+
+  // Add formation from preset (for drag & drop)
+  const addFormationFromPreset = useCallback((preset: FormationPreset, atCount?: number) => {
+    saveToHistory();
+
+    const colors = [
+      '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
+      '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F',
+      '#BB8FCE', '#85C1E9', '#F8B500', '#00CED1',
+    ];
+
+    setProject(prev => {
+      const formations = [...prev.formations];
+      const lastFormation = formations[formations.length - 1];
+      const startCount = atCount !== undefined
+        ? Math.floor(atCount / 8) * 8 // Snap to 8-count grid
+        : (lastFormation ? lastFormation.startCount + lastFormation.duration : 0);
+
+      // Create new formation with preset positions
+      const newFormation = createEmptyFormation(startCount, prev.dancerCount, prev.stageWidth, prev.stageHeight);
+
+      // Apply preset positions to matching dancers
+      newFormation.positions = newFormation.positions.map((pos, i) => {
+        if (i < preset.positions.length) {
+          return {
+            ...pos,
+            position: { x: preset.positions[i].x, y: preset.positions[i].y },
+            color: colors[i % colors.length],
+          };
+        }
+        return pos;
+      });
+
+      newFormation.label = preset.name;
+
+      // Find insert position based on startCount
+      let insertIndex = formations.length;
+      for (let i = 0; i < formations.length; i++) {
+        if (formations[i].startCount >= startCount) {
+          insertIndex = i;
+          break;
+        }
+      }
+
+      formations.splice(insertIndex, 0, newFormation);
+
+      // Adjust subsequent formations
+      for (let i = insertIndex + 1; i < formations.length; i++) {
+        formations[i] = {
+          ...formations[i],
+          startCount: formations[i - 1].startCount + formations[i - 1].duration,
+        };
+      }
+
+      setSelectedFormationId(newFormation.id);
+
+      return {
+        ...prev,
+        updatedAt: new Date().toISOString(),
+        formations,
+      };
+    });
+
+    showToast(`Added formation: ${preset.name}`, 'success', 2000);
+  }, [saveToHistory, showToast]);
 
   // Delete formation
   const deleteFormation = useCallback((id: string) => {
+    saveToHistory();
     setProject(prev => {
       if (prev.formations.length <= 1) return prev; // Keep at least one formation
 
@@ -364,7 +568,7 @@ const TimelineEditor: React.FC = () => {
         formations,
       };
     });
-  }, [selectedFormationId]);
+  }, [selectedFormationId, saveToHistory]);
 
   // Handle stage mouse down for selection box
   const handleStageMouseDown = (e: React.MouseEvent) => {
@@ -560,6 +764,8 @@ const TimelineEditor: React.FC = () => {
   // Change dancer count
   const handleDancerCountChange = (newCount: number) => {
     if (isNaN(newCount) || newCount < 1 || newCount > 24) return;
+
+    saveToHistory();
 
     const colors = [
       '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
@@ -1062,6 +1268,7 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
 
   // Change stage size
   const handleStageSizeChange = (width: number, height: number) => {
+    saveToHistory();
     setProject(prev => ({
       ...prev,
       stageWidth: width,
@@ -1263,6 +1470,7 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
             type="text"
             className="project-name-input"
             value={project.name}
+            onFocus={() => saveToHistory()}
             onChange={(e) => setProject(prev => ({ ...prev, name: e.target.value }))}
           />
         </div>
@@ -1719,6 +1927,14 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
             setCurrentCount(count);
             // Stop playback when seeking
             if (isPlaying) setIsPlaying(false);
+          }}
+          onDropPreset={(presetJson, atCount) => {
+            try {
+              const preset = JSON.parse(presetJson) as FormationPreset;
+              addFormationFromPreset(preset, atCount);
+            } catch (e) {
+              console.error('Failed to parse preset:', e);
+            }
           }}
         />
       </div>
