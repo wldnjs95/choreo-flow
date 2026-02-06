@@ -94,6 +94,70 @@ const snapToGrid = (value: number): number => Math.round(value / SNAP_SIZE) * SN
 // Exit zone size
 const EXIT_ZONE_WIDTH = 1.5; // 1.5m on each side
 
+// Get all presets flattened for the left panel
+const ALL_PRESETS: FormationPreset[] = (() => {
+  const presets: FormationPreset[] = [];
+  for (let count = 4; count <= 12; count++) {
+    const countPresets = FORMATION_PRESETS.get(count) || [];
+    presets.push(...countPresets);
+  }
+  return presets;
+})();
+
+// Preset Preview Component - renders a small SVG preview of the formation
+const PresetPreview: React.FC<{
+  preset: FormationPreset;
+  isSelected?: boolean;
+  onClick: () => void;
+}> = ({ preset, isSelected, onClick }) => {
+  const previewSize = 60;
+  const previewPadding = 4;
+  // Assume stage is roughly 10x8 for scaling
+  const stageW = 10;
+  const stageH = 8;
+  const scaleX = (previewSize - previewPadding * 2) / stageW;
+  const scaleY = (previewSize - previewPadding * 2) / stageH;
+  const dotRadius = 3;
+
+  const colors = [
+    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
+    '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F',
+    '#BB8FCE', '#85C1E9', '#F8B500', '#00CED1',
+  ];
+
+  return (
+    <div
+      className={`preset-preview-card ${isSelected ? 'selected' : ''}`}
+      onClick={onClick}
+      title={`${preset.name} (${preset.dancerCount} dancers)`}
+    >
+      <svg width={previewSize} height={previewSize} className="preset-preview-svg">
+        <rect
+          x={1}
+          y={1}
+          width={previewSize - 2}
+          height={previewSize - 2}
+          fill="rgba(40, 40, 60, 0.8)"
+          stroke="rgba(255,255,255,0.2)"
+          strokeWidth={1}
+          rx={4}
+        />
+        {preset.positions.map((pos, i) => (
+          <circle
+            key={i}
+            cx={previewPadding + pos.x * scaleX}
+            cy={previewPadding + (stageH - pos.y) * scaleY}
+            r={dotRadius}
+            fill={colors[i % colors.length]}
+          />
+        ))}
+      </svg>
+      <span className="preset-preview-label">{preset.name.replace(/^\d+_/, '')}</span>
+      <span className="preset-preview-count">{preset.dancerCount}P</span>
+    </div>
+  );
+};
+
 const TimelineEditor: React.FC = () => {
   // Project state
   const [project, setProject] = useState<ChoreographyProject>(() =>
@@ -140,6 +204,9 @@ const TimelineEditor: React.FC = () => {
   const [cueSheet, setCueSheet] = useState<CueSheetResult | null>(null);
   const [isGeneratingCueSheet, setIsGeneratingCueSheet] = useState(false);
   const [showCueSheet, setShowCueSheet] = useState(false);
+
+  // Preset filter state
+  const [presetFilter, setPresetFilter] = useState<'all' | number>('all');
 
   // Helper: Get paths for current algorithm from allAlgorithmPaths
   const getPathsForAlgorithm = useCallback((pathKey: string, algorithm: PathAlgorithm): GeneratedPath[] | null => {
@@ -1007,33 +1074,29 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
   const handleApplyPreset = (preset: FormationPreset) => {
     if (!selectedFormation) return;
 
-    // Check dancer count
-    if (preset.dancerCount !== project.dancerCount) {
-      if (!confirm(`This preset is for ${preset.dancerCount} dancers. Apply anyway (will adjust dancer count)?`)) {
-        return;
-      }
-      // Adjust dancer count if needed
-      handleDancerCountChange(preset.dancerCount);
-    }
-
     const colors = [
       '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
       '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F',
       '#BB8FCE', '#85C1E9', '#F8B500', '#00CED1',
     ];
 
-    // Apply positions to selected formation
-    const newPositions = preset.positions.map((pos, i) => ({
-      dancerId: i,
-      position: { x: pos.x, y: pos.y },
-      color: colors[i % colors.length],
-    }));
+    // Apply preset to first N dancers, keep rest at current or exit positions
+    const newPositions = selectedFormation.positions.map((currentPos, i) => {
+      if (i < preset.positions.length) {
+        // Apply preset position
+        return {
+          dancerId: i,
+          position: { x: preset.positions[i].x, y: preset.positions[i].y },
+          color: colors[i % colors.length],
+        };
+      } else {
+        // Keep current position (dancers not in preset stay where they are)
+        return currentPos;
+      }
+    });
 
     updateFormation(selectedFormation.id, { positions: newPositions });
   };
-
-  // Get presets for current dancer count
-  const availablePresets = FORMATION_PRESETS.get(project.dancerCount) || [];
 
   // Playback controls
   const handlePlay = async () => {
@@ -1260,7 +1323,39 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
 
       {/* Main content */}
       <div className="timeline-main">
-        {/* Stage view */}
+        {/* Left Panel - Formation Presets */}
+        <div className="presets-panel">
+          <h3>Formation Presets</h3>
+          <div className="preset-filter">
+            <label>Filter:</label>
+            <select
+              value={presetFilter}
+              onChange={(e) => setPresetFilter(e.target.value === 'all' ? 'all' : parseInt(e.target.value, 10))}
+              className="preset-filter-select"
+            >
+              <option value="all">All ({ALL_PRESETS.length})</option>
+              {[4, 5, 6, 7, 8, 9, 10, 11, 12].map(count => {
+                const countPresets = FORMATION_PRESETS.get(count) || [];
+                return (
+                  <option key={count} value={count}>{count}P ({countPresets.length})</option>
+                );
+              })}
+            </select>
+          </div>
+          <div className="preset-grid">
+            {ALL_PRESETS
+              .filter(preset => presetFilter === 'all' || preset.dancerCount === presetFilter)
+              .map((preset) => (
+                <PresetPreview
+                  key={preset.name}
+                  preset={preset}
+                  onClick={() => handleApplyPreset(preset)}
+                />
+              ))}
+          </div>
+        </div>
+
+        {/* Center - Stage view */}
         <div className="stage-panel">
           <div className="stage-header">
             <h3>{selectedFormation?.label || `Formation ${selectedFormation ? project.formations.indexOf(selectedFormation) + 1 : '-'}`}</h3>
@@ -1566,57 +1661,6 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
                 )}
               </div>
 
-              {/* Preset formations section */}
-              <div className="preset-section">
-                <h4>Formation Presets</h4>
-                {availablePresets.length > 0 ? (
-                  <div className="preset-list">
-                    {availablePresets.map((preset) => (
-                      <button
-                        key={preset.name}
-                        className="preset-btn"
-                        onClick={() => handleApplyPreset(preset)}
-                        title={`Apply ${preset.name}`}
-                      >
-                        {preset.name}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="preset-empty">
-                    <p>No presets for {project.dancerCount} dancers</p>
-                    <p className="preset-hint">Presets available: 4-12 dancers</p>
-                  </div>
-                )}
-
-                {/* Show presets from other dancer counts */}
-                <details className="other-presets">
-                  <summary>Other dancer counts</summary>
-                  <div className="other-presets-content">
-                    {[4, 5, 6, 7, 8, 9, 10, 11, 12]
-                      .filter(count => count !== project.dancerCount)
-                      .map(count => {
-                        const presets = FORMATION_PRESETS.get(count) || [];
-                        if (presets.length === 0) return null;
-                        return (
-                          <div key={count} className="preset-group">
-                            <span className="preset-group-label">{count} dancers:</span>
-                            {presets.map((preset) => (
-                              <button
-                                key={preset.name}
-                                className="preset-btn small"
-                                onClick={() => handleApplyPreset(preset)}
-                                title={`Apply ${preset.name} (${count} dancers)`}
-                              >
-                                {preset.name.replace(/^\d+_/, '')}
-                              </button>
-                            ))}
-                          </div>
-                        );
-                      })}
-                  </div>
-                </details>
-              </div>
             </>
           ) : (
             <p className="no-selection">No formation selected</p>
