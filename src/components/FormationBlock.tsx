@@ -8,8 +8,11 @@ import type { FormationKeyframe } from '../types/timeline';
 
 interface FormationBlockProps {
   formation: FormationKeyframe;
+  formationIndex: number; // 0-based index for default naming
   isSelected: boolean;
   zoom: number;
+  stageWidth: number;
+  stageHeight: number;
   onSelect: () => void;
   onDelete: () => void;
   onUpdateDuration: (duration: number) => void;
@@ -18,8 +21,11 @@ interface FormationBlockProps {
 
 export const FormationBlock: React.FC<FormationBlockProps> = ({
   formation,
+  formationIndex,
   isSelected,
   zoom,
+  stageWidth,
+  stageHeight,
   onSelect,
   onDelete,
   onUpdateDuration,
@@ -75,26 +81,32 @@ export const FormationBlock: React.FC<FormationBlockProps> = ({
 
   // Mini preview of dancer positions
   const renderMiniPreview = () => {
-    const previewSize = 40;
-    const scale = previewSize / 800; // Assuming 800px stage width
+    const previewWidth = 50;
+    const previewHeight = 40;
+    const scaleX = previewWidth / stageWidth;
+    const scaleY = previewHeight / stageHeight;
+    const dotSize = 4;
 
     return (
-      <div className="formation-mini-preview">
-        {formation.positions.slice(0, 8).map((dancer) => (
-          <div
+      <svg className="formation-mini-preview" width={previewWidth} height={previewHeight}>
+        <rect
+          x={0}
+          y={0}
+          width={previewWidth}
+          height={previewHeight}
+          fill="rgba(0,0,0,0.3)"
+          rx={2}
+        />
+        {formation.positions.map((dancer) => (
+          <circle
             key={dancer.dancerId}
-            className="mini-dancer"
-            style={{
-              left: dancer.position.x * scale,
-              top: dancer.position.y * scale,
-              backgroundColor: dancer.color,
-            }}
+            cx={dancer.position.x * scaleX}
+            cy={(stageHeight - dancer.position.y) * scaleY}
+            r={dotSize / 2}
+            fill={dancer.color}
           />
         ))}
-        {formation.positions.length > 8 && (
-          <span className="more-dancers">+{formation.positions.length - 8}</span>
-        )}
-      </div>
+      </svg>
     );
   };
 
@@ -128,7 +140,7 @@ export const FormationBlock: React.FC<FormationBlockProps> = ({
           />
         ) : (
           <span className="formation-label">
-            {formation.label || `Formation ${formation.startCount / 8 + 1}`}
+            {formation.label || String(formationIndex + 1)}
           </span>
         )}
 
@@ -137,8 +149,8 @@ export const FormationBlock: React.FC<FormationBlockProps> = ({
           {formation.startCount}-{formation.startCount + formation.duration}
         </span>
 
-        {/* Mini preview */}
-        {width > 60 && renderMiniPreview()}
+        {/* Mini preview - show if block is wide enough */}
+        {width >= 50 && renderMiniPreview()}
       </div>
 
       {/* Delete button (visible when selected) */}

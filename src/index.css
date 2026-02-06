@@ -4247,7 +4247,7 @@ body {
 /* Timeline track */
 .timeline-track {
   position: relative;
-  min-height: 60px;
+  min-height: 90px;
   cursor: pointer;
   transition: background 0.2s ease;
 }
@@ -4341,26 +4341,28 @@ body {
 }
 
 .formation-block-content {
-  padding: 6px 8px;
+  padding: 4px 6px;
   display: flex;
   flex-direction: column;
   gap: 2px;
   height: 100%;
+  overflow: hidden;
 }
 
 .formation-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: #fff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex-shrink: 0;
 }
 
 .formation-label-input {
   width: 100%;
   padding: 2px 4px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid #4ECDC4;
@@ -4370,18 +4372,16 @@ body {
 }
 
 .formation-count-info {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.5);
+  flex-shrink: 0;
 }
 
 /* Mini preview */
 .formation-mini-preview {
-  position: relative;
-  width: 40px;
-  height: 30px;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 3px;
   margin-top: auto;
+  border-radius: 3px;
+  flex-shrink: 0;
 }
 
 .mini-dancer {

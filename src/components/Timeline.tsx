@@ -20,7 +20,7 @@ interface TimelineProps {
   onDropPreset?: (presetJson: string, atCount: number) => void; // Drop preset to add formation
 }
 
-const GRID_HEIGHT = 60;
+const GRID_HEIGHT = 90; // Increased for thumbnails
 const RULER_HEIGHT = 24;
 const MIN_ZOOM = 4;
 const MAX_ZOOM = 20;
@@ -212,12 +212,15 @@ export const Timeline: React.FC<TimelineProps> = ({
         </div>
 
         {/* Formation blocks */}
-        {project.formations.map(formation => (
+        {project.formations.map((formation, index) => (
           <FormationBlock
             key={formation.id}
             formation={formation}
+            formationIndex={index}
             isSelected={formation.id === selectedFormationId}
             zoom={zoom}
+            stageWidth={project.stageWidth}
+            stageHeight={project.stageHeight}
             onSelect={() => onSelectFormation(formation.id)}
             onDelete={() => onDeleteFormation(formation.id)}
             onUpdateDuration={(duration) => onUpdateFormation(formation.id, { duration })}
