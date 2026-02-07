@@ -1900,12 +1900,12 @@ function CandidateComparisonPanel({
 }: CandidateComparisonPanelProps) {
   const getStrategyLabel = (strategy: string) => {
     const labels: Record<string, string> = {
-      'hybrid': 'Hybrid',
-      'hybrid_by_codex': 'Hybrid By Codex',
-      'hybrid_by_cursor': 'Hybrid By Cursor',
-      'hybrid_by_claude_quad': 'Hybrid By Claude (Quad)',
-      'hybrid_by_claude_cubic': 'Hybrid By Claude (Cubic)',
-      'hybrid_by_gemini': 'Hybrid By Gemini',
+      'harmonized_flow': 'Harmonized Flow',
+      'balanced_direct': 'Balanced Direct',
+      'wave_sync': 'Wave Sync',
+      'clean_flow': 'Clean Flow',
+      'natural_curves': 'Natural Curves',
+      'perfect_sync': 'Perfect Sync',
     };
     return labels[strategy] || strategy;
   };

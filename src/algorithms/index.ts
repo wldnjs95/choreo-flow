@@ -63,10 +63,10 @@ export {
   type GeminiPipelineMode,
 } from './pipeline';
 
-// Hybrid Pathfinding Algorithms
-export { computeAllPathsWithHybrid } from './choreographyHybrid';
-export { computeAllPathsWithHybridByCodex } from './hybridByCodex';
-export { computeAllPathsWithHybridByClaude, type SyncMode, type HybridByClaudeConfig } from './hybridByClaude';
-export { computeAllPathsWithHybridByClaudeCubic, type HybridByClaudeCubicConfig } from './hybridByClaudeCubic';
-export { computeAllPathsWithHybridByGemini } from './choreographyHybridByGemini';
-export { computeAllPathsWithHybridByCursor } from './hybridByCursor';
+// Pathfinding Algorithms (feature-based naming)
+export { computeAllPathsWithHybrid as computePathsHarmonizedFlow } from './choreographyHybrid';
+export { computeAllPathsWithHybridByCodex as computePathsBalancedDirect } from './hybridByCodex';
+export { computeAllPathsWithHybridByClaude as computePathsCleanFlow, type SyncMode, type HybridByClaudeConfig as CleanFlowConfig } from './hybridByClaude';
+export { computeAllPathsWithHybridByClaudeCubic as computePathsNaturalCurves, type HybridByClaudeCubicConfig as NaturalCurvesConfig } from './hybridByClaudeCubic';
+export { computeAllPathsWithHybridByGemini as computePathsPerfectSync } from './choreographyHybridByGemini';
+export { computeAllPathsWithHybridByCursor as computePathsWaveSync } from './hybridByCursor';

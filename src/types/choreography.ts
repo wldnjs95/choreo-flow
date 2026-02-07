@@ -16,12 +16,12 @@ export type GeminiPipelineMode =
  * Candidate generation strategy
  */
 export type CandidateStrategy =
-  | 'hybrid'
-  | 'hybrid_by_codex'
-  | 'hybrid_by_claude_quad'
-  | 'hybrid_by_claude_cubic'
-  | 'hybrid_by_cursor'
-  | 'hybrid_by_gemini';
+  | 'harmonized_flow'
+  | 'balanced_direct'
+  | 'clean_flow'
+  | 'natural_curves'
+  | 'wave_sync'
+  | 'perfect_sync';
 
 /**
  * Candidate metrics for comparison

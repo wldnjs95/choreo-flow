@@ -1,15 +1,17 @@
 /**
- * Hybrid Choreography Algorithm v3
+ * Harmonized Flow Algorithm v4
  *
- * PRIORITY: Collision avoidance is #1
+ * PRIORITY: Collision avoidance + Visual harmony
  *
- * Key improvement: Detect head-on swap pairs and assign opposite curves
+ * Key improvement: Radial-based curve direction with global balancing
+ * Works well with asymmetric formations and odd number of dancers
  *
  * Strategy:
- * 1. Detect head-on swap pairs (A→B and B→A)
- * 2. Pre-assign opposite curve directions for swap pairs
- * 3. Process dancers with greedy collision-free search
- * 4. Use Cubic Bezier curves for smooth paths
+ * 1. Radial curve assignment based on movement direction relative to stage center
+ * 2. Global L/R balance adjustment to ensure visual harmony
+ * 3. Shortest-distance dancer gets straight path (for odd counts)
+ * 4. Collision-free path search with reduced curve offsets (0.5-1.5m)
+ * 5. Use Cubic Bezier curves for smooth paths
  */
 
 import type { Position, Assignment } from './hungarian';
@@ -146,43 +148,99 @@ function hasCollisionBetweenPaths(
 }
 
 /**
- * Detect if two assignments are a head-on swap
- * (A goes to B's start, B goes to A's start)
+ * Determine curve direction based on radial position from stage center
+ * Creates natural "flowing outward" visual effect
  */
-function isHeadOnSwap(a1: Assignment, a2: Assignment, threshold: number = 1.5): boolean {
-  // Check if A's end is near B's start AND B's end is near A's start
-  const a1EndNearB1Start = distance(a1.endPosition, a2.startPosition) < threshold;
-  const a2EndNearA1Start = distance(a2.endPosition, a1.startPosition) < threshold;
+function determineRadialCurve(
+  assignment: Assignment,
+  stageWidth: number,
+  stageHeight: number
+): number {
+  const center = { x: stageWidth / 2, y: stageHeight / 2 };
+  const midpoint = {
+    x: (assignment.startPosition.x + assignment.endPosition.x) / 2,
+    y: (assignment.startPosition.y + assignment.endPosition.y) / 2
+  };
 
-  // Also check if they're moving in roughly opposite directions
-  const dir1x = a1.endPosition.x - a1.startPosition.x;
-  const dir1y = a1.endPosition.y - a1.startPosition.y;
-  const dir2x = a2.endPosition.x - a2.startPosition.x;
-  const dir2y = a2.endPosition.y - a2.startPosition.y;
+  // Movement vector
+  const moveVec = {
+    x: assignment.endPosition.x - assignment.startPosition.x,
+    y: assignment.endPosition.y - assignment.startPosition.y
+  };
 
-  const dot = dir1x * dir2x + dir1y * dir2y;
-  const oppositeDirection = dot < 0;
+  // Center → dancer midpoint vector (radial direction)
+  const radialVec = {
+    x: midpoint.x - center.x,
+    y: midpoint.y - center.y
+  };
 
-  return (a1EndNearB1Start && a2EndNearA1Start) || oppositeDirection;
+  // Cross product: determines which side of the radial vector the movement is
+  const cross = moveVec.x * radialVec.y - moveVec.y * radialVec.x;
+
+  // Curve "outward" from center for visual harmony
+  return cross >= 0 ? 1 : -1;
 }
 
 /**
- * Determine which side a dancer should curve to avoid head-on collision
- * Returns positive for "right" (from dancer's perspective), negative for "left"
+ * Determine harmonized curve directions for all dancers
+ * Uses Radial + Balancing approach for visual harmony
  */
-function determineCurveSide(a: Assignment, partner: Assignment): number {
-  // Use cross product to determine relative position
-  const dx = a.endPosition.x - a.startPosition.x;
-  const dy = a.endPosition.y - a.startPosition.y;
+function determineHarmonizedCurves(
+  assignments: Assignment[],
+  stageWidth: number,
+  stageHeight: number
+): Map<number, number> {
+  const curveMap = new Map<number, number>();
 
-  // Vector from A's start to partner's start
-  const px = partner.startPosition.x - a.startPosition.x;
-  const py = partner.startPosition.y - a.startPosition.y;
+  // Step 1: Radial-based initial assignment
+  for (const a of assignments) {
+    // Skip very short movements (< 0.5m) - they get straight paths
+    if (a.distance < 0.5) {
+      curveMap.set(a.dancerId, 0);
+      continue;
+    }
+    const curve = determineRadialCurve(a, stageWidth, stageHeight);
+    curveMap.set(a.dancerId, curve);
+  }
 
-  // Cross product: if positive, partner is on the left, so curve right
-  const cross = dx * py - dy * px;
+  // Step 2: Balance check and adjustment
+  let leftCount = 0, rightCount = 0, straightCount = 0;
+  for (const v of curveMap.values()) {
+    if (v < 0) leftCount++;
+    else if (v > 0) rightCount++;
+    else straightCount++;
+  }
 
-  return cross >= 0 ? 1 : -1;
+  const imbalance = Math.abs(leftCount - rightCount);
+
+  // If imbalance is significant (>2 difference), adjust some dancers
+  if (imbalance > 2) {
+    const targetFlip = Math.floor(imbalance / 2);
+    const overloadedSide = leftCount > rightCount ? -1 : 1;
+
+    // Flip shortest-distance dancers first (minimal visual impact)
+    const candidates = assignments
+      .filter(a => curveMap.get(a.dancerId) === overloadedSide)
+      .sort((a, b) => a.distance - b.distance);
+
+    for (let i = 0; i < targetFlip && i < candidates.length; i++) {
+      curveMap.set(candidates[i].dancerId, -overloadedSide);
+    }
+  }
+
+  // Step 3: For odd counts, make the shortest-distance non-straight dancer go straight
+  const nonStraightCount = assignments.length - straightCount;
+  if (nonStraightCount % 2 === 1) {
+    const shortestNonStraight = assignments
+      .filter(a => curveMap.get(a.dancerId) !== 0)
+      .sort((a, b) => a.distance - b.distance)[0];
+
+    if (shortestNonStraight) {
+      curveMap.set(shortestNonStraight.dancerId, 0);
+    }
+  }
+
+  return curveMap;
 }
 
 interface PathCandidate {
@@ -194,13 +252,14 @@ interface PathCandidate {
 
 /**
  * Generate path candidates with preferred curve direction
+ * Uses reduced curve offsets (0.5-1.5m) for more natural human movement
  */
 function generatePathCandidates(
   start: Position,
   end: Position,
   baseDuration: number,
   config: HybridConfig,
-  preferredCurveSign: number = 0  // 0 = no preference, 1 = positive, -1 = negative
+  preferredCurveSign: number = 0  // 0 = straight preferred, 1 = positive, -1 = negative
 ): PathCandidate[] {
   const candidates: PathCandidate[] = [];
   const { totalCounts, numPoints } = config;
@@ -208,40 +267,33 @@ function generatePathCandidates(
   const startTimes = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6];
   const durationFactors = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5, 1.8, 2.0];
 
-  // Curve offsets - if we have a preferred sign, prioritize those curves
+  // Reduced curve offsets (0.5-1.5m max) for natural human movement
   let curveOffsets: (number | [number, number])[];
 
   if (preferredCurveSign > 0) {
-    // Prefer positive (right) curves first
+    // Prefer positive (right) curves - gentle to moderate
     curveOffsets = [
-      1.5, 2.0, 2.5, 3.0, 1.0, 0.5,  // Positive arcs first
-      [1.5, 1.5], [2.0, 2.0],         // Positive S-curves
-      0,                               // Linear
-      -0.5, -1.0, -1.5, -2.0, -2.5, -3.0,  // Negative arcs last
-      [-1.5, -1.5], [-2.0, -2.0],
+      0.5, 0.7, 1.0, 1.2, 1.5,  // Positive arcs (gentle first)
+      0,                         // Linear as fallback
+      -0.5, -0.7, -1.0, -1.2, -1.5,  // Negative arcs last resort
     ];
   } else if (preferredCurveSign < 0) {
-    // Prefer negative (left) curves first
+    // Prefer negative (left) curves - gentle to moderate
     curveOffsets = [
-      -1.5, -2.0, -2.5, -3.0, -1.0, -0.5,  // Negative arcs first
-      [-1.5, -1.5], [-2.0, -2.0],
-      0,
-      0.5, 1.0, 1.5, 2.0, 2.5, 3.0,
-      [1.5, 1.5], [2.0, 2.0],
+      -0.5, -0.7, -1.0, -1.2, -1.5,  // Negative arcs (gentle first)
+      0,                              // Linear as fallback
+      0.5, 0.7, 1.0, 1.2, 1.5,       // Positive arcs last resort
     ];
   } else {
-    // No preference - try all
+    // No preference (straight) - prefer straight, then minimal curves
     curveOffsets = [
-      0,
+      0,           // Straight line first!
+      0.3, -0.3,   // Very slight curves
       0.5, -0.5,
+      0.7, -0.7,
       1.0, -1.0,
-      1.5, -1.5,
-      2.0, -2.0,
-      2.5, -2.5,
-      3.0, -3.0,
-      [0.8, -0.8], [-0.8, 0.8],
-      [1.2, -1.2], [-1.2, 1.2],
-      [1.5, -1.5], [-1.5, 1.5],
+      1.2, -1.2,
+      1.5, -1.5,   // Max curve for collision avoidance
     ];
   }
 
@@ -270,20 +322,31 @@ function generatePathCandidates(
     }
   }
 
-  // Sort: prefer earlier start, then based on curve preference
+  // Sort: prefer straight paths, then earlier start, then based on curve preference
   candidates.sort((a, b) => {
-    if (a.startTime !== b.startTime) return a.startTime - b.startTime;
+    const curveA = typeof a.curveOffset === 'number' ? Math.abs(a.curveOffset) : Math.abs(a.curveOffset[0]);
+    const curveB = typeof b.curveOffset === 'number' ? Math.abs(b.curveOffset) : Math.abs(b.curveOffset[0]);
 
+    // If no preferred curve direction, strongly prefer straighter paths
+    if (preferredCurveSign === 0) {
+      // Prefer paths with less curvature (straight = 0)
+      if (Math.abs(curveA - curveB) > 0.1) return curveA - curveB;
+    }
+
+    // Then prefer earlier start
+    if (Math.abs(a.startTime - b.startTime) > 0.3) return a.startTime - b.startTime;
+
+    // Then prefer shorter duration
     const durA = a.endTime - a.startTime;
     const durB = b.endTime - b.startTime;
     if (Math.abs(durA - durB) > 0.3) return durA - durB;
 
     // If we have a preferred curve direction, prefer those
     if (preferredCurveSign !== 0) {
-      const curveA = typeof a.curveOffset === 'number' ? a.curveOffset : a.curveOffset[0];
-      const curveB = typeof b.curveOffset === 'number' ? b.curveOffset : b.curveOffset[0];
-      const matchA = Math.sign(curveA) === preferredCurveSign ? 0 : 1;
-      const matchB = Math.sign(curveB) === preferredCurveSign ? 0 : 1;
+      const signA = typeof a.curveOffset === 'number' ? a.curveOffset : a.curveOffset[0];
+      const signB = typeof b.curveOffset === 'number' ? b.curveOffset : b.curveOffset[0];
+      const matchA = Math.sign(signA) === preferredCurveSign ? 0 : 1;
+      const matchB = Math.sign(signB) === preferredCurveSign ? 0 : 1;
       if (matchA !== matchB) return matchA - matchB;
     }
 
@@ -308,55 +371,49 @@ function findCollisionFreePath(
     preferredCurveSign
   );
 
-  console.log(`[Hybrid] Dancer ${assignment.dancerId}: Testing ${candidates.length} candidates (curvePreference=${preferredCurveSign})`);
+  console.log(`[HarmonizedFlow] Dancer ${assignment.dancerId}: Testing ${candidates.length} candidates (curvePreference=${preferredCurveSign})`);
 
   for (const candidate of candidates) {
     if (!hasCollisionWithAny(candidate.path, existingPaths, config.collisionRadius, config.totalCounts)) {
       const curveStr = typeof candidate.curveOffset === 'number'
         ? candidate.curveOffset.toFixed(1)
         : `[${candidate.curveOffset[0]}, ${candidate.curveOffset[1]}]`;
-      console.log(`[Hybrid] Dancer ${assignment.dancerId}: Found path (start=${candidate.startTime.toFixed(1)}, curve=${curveStr})`);
+      console.log(`[HarmonizedFlow] Dancer ${assignment.dancerId}: Found path (start=${candidate.startTime.toFixed(1)}, curve=${curveStr})`);
       return candidate;
     }
   }
 
-  console.warn(`[Hybrid] Dancer ${assignment.dancerId}: No collision-free path found!`);
+  console.warn(`[HarmonizedFlow] Dancer ${assignment.dancerId}: No collision-free path found!`);
   return null;
 }
 
 /**
- * Detect all head-on swap pairs
+ * Log curve assignments for debugging
  */
-function detectHeadOnSwapPairs(assignments: Assignment[]): Map<number, { partner: number; curveSide: number }> {
-  const swapInfo = new Map<number, { partner: number; curveSide: number }>();
+function logCurveAssignments(curveMap: Map<number, number>): void {
+  let leftCount = 0, rightCount = 0, straightCount = 0;
+  const assignments: string[] = [];
 
-  for (let i = 0; i < assignments.length; i++) {
-    for (let j = i + 1; j < assignments.length; j++) {
-      if (isHeadOnSwap(assignments[i], assignments[j])) {
-        const curveSideI = determineCurveSide(assignments[i], assignments[j]);
-        const curveSideJ = -curveSideI;  // Opposite direction
-
-        swapInfo.set(assignments[i].dancerId, {
-          partner: assignments[j].dancerId,
-          curveSide: curveSideI
-        });
-        swapInfo.set(assignments[j].dancerId, {
-          partner: assignments[i].dancerId,
-          curveSide: curveSideJ
-        });
-
-        console.log(`[Hybrid] Detected head-on swap: Dancer ${assignments[i].dancerId} <-> ${assignments[j].dancerId}`);
-        console.log(`[Hybrid]   Dancer ${assignments[i].dancerId} curves ${curveSideI > 0 ? 'RIGHT' : 'LEFT'}`);
-        console.log(`[Hybrid]   Dancer ${assignments[j].dancerId} curves ${curveSideJ > 0 ? 'RIGHT' : 'LEFT'}`);
-      }
+  for (const [dancerId, curve] of curveMap.entries()) {
+    if (curve < 0) {
+      leftCount++;
+      assignments.push(`D${dancerId}:L`);
+    } else if (curve > 0) {
+      rightCount++;
+      assignments.push(`D${dancerId}:R`);
+    } else {
+      straightCount++;
+      assignments.push(`D${dancerId}:S`);
     }
   }
 
-  return swapInfo;
+  console.log(`[HarmonizedFlow] Curve distribution: Left=${leftCount}, Right=${rightCount}, Straight=${straightCount}`);
+  console.log(`[HarmonizedFlow] Assignments: ${assignments.join(', ')}`);
 }
 
 /**
  * Main function: compute all paths with guaranteed collision avoidance
+ * Uses Harmonized Flow approach for visual harmony
  */
 export function computeAllPathsWithHybrid(
   assignments: Assignment[],
@@ -364,14 +421,14 @@ export function computeAllPathsWithHybrid(
 ): DancerPath[] {
   const cfg: HybridConfig = { ...DEFAULT_CONFIG, ...config };
 
-  console.log('[HybridChoreography v3] Starting collision-free path generation');
-  console.log(`[HybridChoreography] Dancers: ${assignments.length}, totalCounts: ${cfg.totalCounts}`);
+  console.log('[HarmonizedFlow v4] Starting collision-free path generation with visual harmony');
+  console.log(`[HarmonizedFlow] Dancers: ${assignments.length}, totalCounts: ${cfg.totalCounts}`);
 
-  // Step 1: Detect head-on swap pairs
-  const swapInfo = detectHeadOnSwapPairs(assignments);
-  console.log(`[HybridChoreography] Found ${swapInfo.size / 2} head-on swap pairs`);
+  // Step 1: Determine harmonized curve directions for all dancers
+  const curveMap = determineHarmonizedCurves(assignments, cfg.stageWidth, cfg.stageHeight);
+  logCurveAssignments(curveMap);
 
-  // Sort by distance (longest first)
+  // Sort by distance (longest first - they need more complex paths)
   const sorted = [...assignments].sort((a, b) => b.distance - a.distance);
 
   const maxDist = Math.max(...assignments.map(a => a.distance), 1);
@@ -384,9 +441,8 @@ export function computeAllPathsWithHybrid(
 
     const baseDuration = Math.max(2, (dist / maxDist) * cfg.totalCounts * 0.7);
 
-    // Get curve preference from swap info
-    const swap = swapInfo.get(dancerId);
-    const preferredCurveSign = swap?.curveSide ?? 0;
+    // Get harmonized curve preference
+    const preferredCurveSign = curveMap.get(dancerId) ?? 0;
 
     // Find collision-free path
     const candidate = findCollisionFreePath(
@@ -406,9 +462,9 @@ export function computeAllPathsWithHybrid(
       startTime = candidate.startTime;
       endTime = candidate.endTime;
     } else {
-      // Fallback with strong curve in preferred direction
-      console.warn(`[Hybrid] Using fallback for dancer ${dancerId}`);
-      const fallbackCurve = preferredCurveSign !== 0 ? preferredCurveSign * 3.0 : 2.0;
+      // Fallback with moderate curve in preferred direction (max 1.5m)
+      console.warn(`[HarmonizedFlow] Using fallback for dancer ${dancerId}`);
+      const fallbackCurve = preferredCurveSign !== 0 ? preferredCurveSign * 1.5 : 1.0;
       finalPath = generateCubicBezierPath(
         startPosition, endPosition,
         cfg.totalCounts * 0.3, cfg.totalCounts,
@@ -440,12 +496,12 @@ export function computeAllPathsWithHybrid(
     for (let j = i + 1; j < results.length; j++) {
       if (hasCollisionBetweenPaths(results[i].path, results[j].path, cfg.collisionRadius, cfg.totalCounts)) {
         collisionCount++;
-        console.error(`[Hybrid] COLLISION DETECTED: Dancer ${results[i].dancerId} <-> ${results[j].dancerId}`);
+        console.error(`[HarmonizedFlow] COLLISION DETECTED: Dancer ${results[i].dancerId} <-> ${results[j].dancerId}`);
       }
     }
   }
 
-  console.log(`[HybridChoreography] Final collision count: ${collisionCount}`);
+  console.log(`[HarmonizedFlow] Final collision count: ${collisionCount}`);
 
   return results.sort((a, b) => a.dancerId - b.dancerId);
 }

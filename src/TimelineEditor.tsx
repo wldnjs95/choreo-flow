@@ -7,6 +7,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { Stage, screenToStage, stageToScreen } from './components/Stage';
 import { DancerCircle } from './components/DancerCircle';
 import { Timeline } from './components/Timeline';
+import { PresetPreview } from './components/PresetPreview';
 import type {
   ChoreographyProject,
   FormationKeyframe,
@@ -22,175 +23,34 @@ import {
   calculateScale,
   PADDING,
 } from './constants/visualization';
-import preFormationData from '../formation_data/pre-formation.json';
 import {
-  computeAllPathsWithHybridByClaude,
-  computeAllPathsWithHybridByClaudeCubic,
-  computeAllPathsWithHybridByCursor,
-  computeAllPathsWithHybridByGemini,
-  computeAllPathsWithHybridByCodex,
-  computeAllPathsWithHybrid,
+  type PathAlgorithm,
+  type GeneratedPath,
+  type FormationPreset,
+  type ScoreBreakdown,
+  type PathEvaluationResult,
+  PATH_ALGORITHM_LABELS,
+  ALGORITHM_PRIORITY,
+  FORMATION_PRESETS,
+  ALL_PRESETS,
+  COUNTS_PER_SECOND,
+  snapToGrid,
+  EXIT_ZONE_WIDTH,
+  MAX_UNDO_HISTORY,
+} from './constants/editor';
+import {
+  computePathsCleanFlow,
+  computePathsNaturalCurves,
+  computePathsWaveSync,
+  computePathsPerfectSync,
+  computePathsBalancedDirect,
+  computePathsHarmonizedFlow,
 } from './algorithms';
 import { generateCueSheet, type CueSheetResult, type DancerCueSheet } from './gemini/cueSheetGenerator';
 import { callGeminiAPIWithImages, type GeminiImageData } from './gemini';
 
-// Path algorithm options
-type PathAlgorithm =
-  | 'hybrid_by_claude'
-  | 'hybrid_by_claude_cubic'
-  | 'hybrid_by_cursor'
-  | 'hybrid_by_gemini'
-  | 'hybrid_by_codex'
-  | 'hybrid';
-
-const PATH_ALGORITHM_LABELS: Record<PathAlgorithm, string> = {
-  'hybrid_by_claude': 'Hybrid by Claude (Quad)',
-  'hybrid_by_claude_cubic': 'Hybrid by Claude (Cubic)',
-  'hybrid_by_cursor': 'Hybrid by Cursor',
-  'hybrid_by_gemini': 'Hybrid by Gemini',
-  'hybrid_by_codex': 'Hybrid by Codex',
-  'hybrid': 'Hybrid (Basic)',
-};
-
-// Generated path structure
-interface GeneratedPath {
-  dancerId: number;
-  path: { x: number; y: number; t: number }[];
-}
-
-// Formation preset interface
-interface FormationPreset {
-  name: string;
-  label: string;
-  dancerCount: number;
-  positions: { x: number; y: number }[];
-  stageWidth: number;
-  stageHeight: number;
-}
-
-// Organize presets by dancer count
-const FORMATION_PRESETS: Map<number, FormationPreset[]> = (() => {
-  const map = new Map<number, FormationPreset[]>();
-
-  preFormationData.formations.forEach((f: { name: string; dancerCount: number; positions: { x: number; y: number }[]; stageWidth: number; stageHeight: number }) => {
-    const existing = map.get(f.dancerCount) || [];
-    existing.push({
-      name: f.name,
-      label: f.name.replace(/_/g, ' ').replace(/(\d+) /, '$1명 '),
-      dancerCount: f.dancerCount,
-      positions: f.positions,
-      stageWidth: f.stageWidth || 15,
-      stageHeight: f.stageHeight || 12,
-    });
-    map.set(f.dancerCount, existing);
-  });
-
-  return map;
-})();
-
-// Playback constants
-const COUNTS_PER_SECOND = 2; // 2 counts per second (120 BPM = 8 counts per 4 beats)
-
-// Snap to grid helper
-const SNAP_SIZE = 0.5; // 0.5m grid
-const snapToGrid = (value: number): number => Math.round(value / SNAP_SIZE) * SNAP_SIZE;
-
-// Exit zone size
-const EXIT_ZONE_WIDTH = 1.5; // 1.5m on each side
-
-// Get all presets flattened for the left panel
-const ALL_PRESETS: FormationPreset[] = (() => {
-  const presets: FormationPreset[] = [];
-  for (let count = 4; count <= 12; count++) {
-    const countPresets = FORMATION_PRESETS.get(count) || [];
-    presets.push(...countPresets);
-  }
-  return presets;
-})();
-
-// Preset Preview Component - renders a small SVG preview of the formation
-const PresetPreview: React.FC<{
-  preset: FormationPreset;
-  isSelected?: boolean;
-  onClick: () => void;
-}> = ({ preset, isSelected, onClick }) => {
-  const previewSize = 60;
-  const previewPadding = 6;
-  const dotRadius = 2; // Smaller dots for better visibility
-
-  // Use actual stage dimensions from preset
-  const stageW = preset.stageWidth;
-  const stageH = preset.stageHeight;
-
-  // Calculate scale to fit the preview area while maintaining aspect ratio
-  const availableWidth = previewSize - previewPadding * 2;
-  const availableHeight = previewSize - previewPadding * 2;
-  const scale = Math.min(availableWidth / stageW, availableHeight / stageH);
-
-  // Center the stage visualization within the preview
-  const offsetX = previewPadding + (availableWidth - stageW * scale) / 2;
-  const offsetY = previewPadding + (availableHeight - stageH * scale) / 2;
-
-  const colors = [
-    '#FF6B6B', '#3498DB', '#2ECC71', '#FFD93D', '#9B59B6', '#FF8C42', '#4ECDC4', '#E056FD',
-    '#1E90FF', '#27AE60', '#F79F1F', '#E74C3C', '#1ABC9C', '#6C5CE7', '#FF69B4', '#BADC58',
-    '#2980B9', '#A8E6CF', '#F9CA24', '#E67E22', '#16A085', '#686DE0', '#E91E63', '#A4DE02',
-    '#22A6B3', '#1E8449', '#F1C40F', '#8E44AD', '#48C9B0', '#BE2EDD', '#96CEB4', '#45B7D1', '#7B68EE', '#00CED1', '#D63384',
-  ];
-
-  // Handle drag start
-  const handleDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.setData('application/json', JSON.stringify(preset));
-    e.dataTransfer.effectAllowed = 'copy';
-  };
-
-  return (
-    <div
-      className={`preset-preview-card ${isSelected ? 'selected' : ''}`}
-      onClick={onClick}
-      title={`${preset.name} (${preset.dancerCount} dancers) - Drag to timeline`}
-      draggable
-      onDragStart={handleDragStart}
-    >
-      <svg width={previewSize} height={previewSize} className="preset-preview-svg">
-        <rect
-          x={1}
-          y={1}
-          width={previewSize - 2}
-          height={previewSize - 2}
-          fill="rgba(40, 40, 60, 0.8)"
-          stroke="rgba(255,255,255,0.2)"
-          strokeWidth={1}
-          rx={4}
-        />
-        {/* Stage boundary indicator */}
-        <rect
-          x={offsetX}
-          y={offsetY}
-          width={stageW * scale}
-          height={stageH * scale}
-          fill="none"
-          stroke="rgba(255,255,255,0.1)"
-          strokeWidth={0.5}
-        />
-        {preset.positions.map((pos, i) => (
-          <circle
-            key={i}
-            cx={offsetX + pos.x * scale}
-            cy={offsetY + (stageH - pos.y) * scale}
-            r={dotRadius}
-            fill={colors[i % colors.length]}
-          />
-        ))}
-      </svg>
-      <span className="preset-preview-label">{preset.name.replace(/^\d+_/, '')}</span>
-      <span className="preset-preview-count">{preset.dancerCount}P</span>
-    </div>
-  );
-};
-
-// Maximum undo history size
-const MAX_UNDO_HISTORY = 50;
+// Keep alias for backwards compatibility
+type GeminiTransitionResult = PathEvaluationResult;
 
 const TimelineEditor: React.FC = () => {
   // Project state
@@ -216,6 +76,37 @@ const TimelineEditor: React.FC = () => {
   const animationRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
 
+  // Metronome state
+  const [metronomeEnabled, setMetronomeEnabled] = useState(true);
+  const lastBeatRef = useRef<number>(-1);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  // Play metronome click sound
+  const playMetronomeClick = useCallback((isDownbeat: boolean = false) => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    }
+    const ctx = audioContextRef.current;
+
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    // Higher pitch for downbeat (every 4 counts), lower for regular beats
+    oscillator.frequency.value = isDownbeat ? 1000 : 800;
+    oscillator.type = 'sine';
+
+    // Quick attack and decay for click sound
+    const now = ctx.currentTime;
+    gainNode.gain.setValueAtTime(0.3, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+
+    oscillator.start(now);
+    oscillator.stop(now + 0.05);
+  }, []);
+
   // Drag state
   const [draggingDancer, setDraggingDancer] = useState<number | null>(null);
   const [selectedDancers, setSelectedDancers] = useState<Set<number>>(new Set());
@@ -230,23 +121,21 @@ const TimelineEditor: React.FC = () => {
   // Key format: "formationId->formationId:algorithm"
   const [allAlgorithmPaths, setAllAlgorithmPaths] = useState<Map<string, Map<PathAlgorithm, GeneratedPath[]>>>(new Map());
   const [showPaths, setShowPaths] = useState(true);
-  const [pathAlgorithm, setPathAlgorithm] = useState<PathAlgorithm>('hybrid_by_claude_cubic'); // Default to Cubic
+  const [pathAlgorithm, setPathAlgorithm] = useState<PathAlgorithm>('natural_curves'); // Default to Cubic
   const [isGeneratingPaths, setIsGeneratingPaths] = useState(false);
   const [pathGenerationStatus, setPathGenerationStatus] = useState<string | null>(null);
 
-  // Gemini ranking state - stored per transition
-  interface GeminiTransitionResult {
-    pick: PathAlgorithm;
-    scores: Map<PathAlgorithm, number>;
-    reasons: Map<PathAlgorithm, string>;
-    pickReason: string;
-  }
+  // Path evaluation state - stored per transition
   const [geminiResults, setGeminiResults] = useState<Map<string, GeminiTransitionResult>>(new Map());
   const [isRankingWithGemini, setIsRankingWithGemini] = useState(false);
   const [rankingTransitionKey, setRankingTransitionKey] = useState<string | null>(null); // Which transition is being ranked
 
+  // User-selected algorithm per transition (pathKey -> algorithm)
+  const [userSelectedAlgorithms, setUserSelectedAlgorithms] = useState<Map<string, PathAlgorithm>>(new Map());
+
   // Cue sheet state
   const [cueSheet, setCueSheet] = useState<CueSheetResult | null>(null);
+  const [cueSheetAlgorithm, setCueSheetAlgorithm] = useState<PathAlgorithm | null>(null);
   const [isGeneratingCueSheet, setIsGeneratingCueSheet] = useState(false);
   const [showCueSheet, setShowCueSheet] = useState(false);
 
@@ -254,14 +143,19 @@ const TimelineEditor: React.FC = () => {
   const [presetFilter, setPresetFilter] = useState<'all' | number>('all');
 
   // POV (Point of View) state
-  // 'choreographer' = 안무가 시점 (General Notes 표시)
-  // number = 특정 댄서 시점 (해당 댄서 하이라이트 + 해당 큐시트만 표시)
+  // 'choreographer' = choreographer view (show General Notes)
+  // number = specific dancer view (highlight that dancer + show only their cue sheet)
   const [povMode, setPovMode] = useState<'choreographer' | number>('choreographer');
 
   // UI Mode state
-  // 'edit' = 편집 모드 (모든 편집 도구 표시, 큐시트 숨김)
-  // 'rehearsal' = 리허설 모드 (재생/큐시트/무대만 표시, 편집 불가)
+  // 'edit' = edit mode (show all editing tools, hide cue sheet)
+  // 'rehearsal' = rehearsal mode (show only playback/cue sheet/stage, no editing)
   const [uiMode, setUiMode] = useState<'edit' | 'rehearsal'>('edit');
+
+  // Audience direction state
+  // true = audience at top of screen (current default behavior)
+  // false = audience at bottom of screen
+  const [audienceAtTop, setAudienceAtTop] = useState(true);
 
   // Helper: Get paths for current algorithm from allAlgorithmPaths
   const getPathsForAlgorithm = useCallback((pathKey: string, algorithm: PathAlgorithm): GeneratedPath[] | null => {
@@ -408,30 +302,50 @@ const TimelineEditor: React.FC = () => {
         cancelAnimationFrame(animationRef.current);
         animationRef.current = null;
       }
+      // Reset metronome beat tracker when stopped
+      lastBeatRef.current = -1;
       return;
     }
 
     const lastFormation = project.formations[project.formations.length - 1];
     const maxCount = lastFormation ? lastFormation.startCount + lastFormation.duration : 0;
 
+    // Track current count for metronome
+    let currentCountValue = currentCount;
+
     const animate = (time: number) => {
       if (!lastTimeRef.current) lastTimeRef.current = time;
       const delta = (time - lastTimeRef.current) / 1000;
       lastTimeRef.current = time;
 
-      setCurrentCount(prev => {
-        const next = prev + delta * COUNTS_PER_SECOND * playbackSpeed;
-        if (next >= maxCount) {
-          setIsPlaying(false);
-          return 0;
+      const next = currentCountValue + delta * COUNTS_PER_SECOND * playbackSpeed;
+
+      // Check for metronome beat crossing
+      if (metronomeEnabled) {
+        const currentBeat = Math.floor(next);
+        if (currentBeat !== lastBeatRef.current && currentBeat >= 0) {
+          lastBeatRef.current = currentBeat;
+          // Downbeat every 4 counts (0, 4, 8, 12...)
+          const isDownbeat = currentBeat % 4 === 0;
+          playMetronomeClick(isDownbeat);
         }
-        return next;
-      });
+      }
+
+      if (next >= maxCount) {
+        setIsPlaying(false);
+        setCurrentCount(0);
+        return;
+      }
+
+      currentCountValue = next;
+      setCurrentCount(next);
 
       animationRef.current = requestAnimationFrame(animate);
     };
 
     lastTimeRef.current = 0;
+    // Initialize beat tracker to current position
+    lastBeatRef.current = Math.floor(currentCount);
     animationRef.current = requestAnimationFrame(animate);
 
     return () => {
@@ -439,7 +353,7 @@ const TimelineEditor: React.FC = () => {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [isPlaying, playbackSpeed, project.formations]);
+  }, [isPlaying, playbackSpeed, project.formations, metronomeEnabled, playMetronomeClick, currentCount]);
 
   // Update formation
   const updateFormation = useCallback((id: string, updates: Partial<FormationKeyframe>) => {
@@ -653,7 +567,7 @@ const TimelineEditor: React.FC = () => {
     // Dancer dragging
     if (draggingDancer === null || !selectedFormation) return;
 
-    const stagePos = screenToStage(e.clientX, e.clientY, rect, scale, project.stageHeight);
+    const stagePos = screenToStage(e.clientX, e.clientY, rect, scale, project.stageHeight, audienceAtTop);
 
     // Clamp to stage bounds
     const clampedX = Math.max(0, Math.min(project.stageWidth, stagePos.x));
@@ -700,7 +614,7 @@ const TimelineEditor: React.FC = () => {
         // Find dancers inside selection box
         const newSelected = new Set<number>();
         selectedFormation.positions.forEach((pos) => {
-          const screenPos = stageToScreen(pos.position, scale, project.stageHeight);
+          const screenPos = stageToScreen(pos.position, scale, project.stageHeight, audienceAtTop);
           if (screenPos.x >= minX && screenPos.x <= maxX && screenPos.y >= minY && screenPos.y <= maxY) {
             newSelected.add(pos.dancerId);
           }
@@ -848,14 +762,14 @@ const TimelineEditor: React.FC = () => {
 
             if (emptySlot) {
               existingPositions.push({
-                dancerId: i,
+                dancerId: i + 1,
                 position: { x: emptySlot.x, y: emptySlot.y },
                 color: colors[i % colors.length],
               });
             } else {
               // Fallback: place at center if no slots available
               existingPositions.push({
-                dancerId: i,
+                dancerId: i + 1,
                 position: { x: prev.stageWidth / 2, y: prev.stageHeight / 2 },
                 color: colors[i % colors.length],
               });
@@ -1005,24 +919,24 @@ const TimelineEditor: React.FC = () => {
     let results: { dancerId: number; path: { x: number; y: number; t: number }[] }[];
 
     switch (algorithm) {
-      case 'hybrid_by_claude':
-        results = computeAllPathsWithHybridByClaude(assignments, config);
+      case 'clean_flow':
+        results = computePathsCleanFlow(assignments, config);
         break;
-      case 'hybrid_by_claude_cubic':
-        results = computeAllPathsWithHybridByClaudeCubic(assignments, config);
+      case 'natural_curves':
+        results = computePathsNaturalCurves(assignments, config);
         break;
-      case 'hybrid_by_cursor':
-        results = computeAllPathsWithHybridByCursor(assignments, config);
+      case 'wave_sync':
+        results = computePathsWaveSync(assignments, config);
         break;
-      case 'hybrid_by_gemini':
-        results = computeAllPathsWithHybridByGemini(assignments, config);
+      case 'perfect_sync':
+        results = computePathsPerfectSync(assignments, config);
         break;
-      case 'hybrid_by_codex':
-        results = computeAllPathsWithHybridByCodex(assignments, config);
+      case 'balanced_direct':
+        results = computePathsBalancedDirect(assignments, config);
         break;
-      case 'hybrid':
+      case 'harmonized_flow':
       default:
-        results = computeAllPathsWithHybrid(assignments, config);
+        results = computePathsHarmonizedFlow(assignments, config);
         break;
     }
 
@@ -1032,36 +946,36 @@ const TimelineEditor: React.FC = () => {
     }));
   }, [calculateOptimalEntryPosition, calculateOptimalExitPosition, project.stageWidth, project.stageHeight]);
 
-  // 경로 안정성 (Path Stability / Deviation Tolerance)
-  // 각 댄서가 계획된 경로에서 얼마나 벗어나도 충돌이 발생하지 않는지 계산
-  // 값이 클수록 실제 공연에서 안전하게 사용할 수 있는 경로
+  // Path Stability / Deviation Tolerance
+  // Calculate how much each dancer can deviate from planned path without collision
+  // Higher value = safer path for actual performance
   const calculatePathStability = useCallback((paths: GeneratedPath[]): {
-    minClearance: number;      // 최소 거리 (m)
-    deviationTolerance: number; // 허용 편차 (m) - 각 댄서가 이만큼 벗어나도 안전
+    minClearance: number;      // Minimum distance (m)
+    deviationTolerance: number; // Allowed deviation (m) - each dancer can deviate this much safely
   } => {
     const COLLISION_THRESHOLD = 0.8; // meters
     let minClearance = Infinity;
 
-    // 모든 시간대에서 모든 댄서 쌍의 거리 계산
+    // Calculate distance between all dancer pairs at all times
     if (paths.length < 2) {
       return { minClearance: Infinity, deviationTolerance: Infinity };
     }
 
-    // 시간 포인트 수집 (모든 댄서의 경로에서)
+    // Collect time points (from all dancer paths)
     const timePoints = new Set<number>();
     paths.forEach(p => p.path.forEach(pt => timePoints.add(pt.t)));
     const sortedTimes = Array.from(timePoints).sort((a, b) => a - b);
 
-    // 각 시간에서 모든 댄서 쌍의 거리 계산
+    // Calculate distance between all dancer pairs at each time
     for (const t of sortedTimes) {
-      // 각 댄서의 해당 시간 위치 계산 (보간)
+      // Calculate each dancer's position at this time (interpolate)
       const positions: { x: number; y: number }[] = paths.map(dancerPath => {
         const path = dancerPath.path;
-        // 정확히 일치하는 시간 찾기
+        // Find exact time match
         const exactPoint = path.find(p => Math.abs(p.t - t) < 0.01);
         if (exactPoint) return { x: exactPoint.x, y: exactPoint.y };
 
-        // 보간 필요
+        // Interpolation needed
         let before = path[0];
         let after = path[path.length - 1];
         for (let i = 0; i < path.length - 1; i++) {
@@ -1081,7 +995,7 @@ const TimelineEditor: React.FC = () => {
         };
       });
 
-      // 모든 쌍의 거리 계산
+      // Calculate distance for all pairs
       for (let i = 0; i < positions.length; i++) {
         for (let j = i + 1; j < positions.length; j++) {
           const dx = positions[i].x - positions[j].x;
@@ -1092,8 +1006,8 @@ const TimelineEditor: React.FC = () => {
       }
     }
 
-    // 허용 편차 계산: (최소 거리 - 충돌 임계값) / 2
-    // 두 댄서가 서로를 향해 벗어날 수 있으므로 2로 나눔
+    // Calculate deviation tolerance: (min distance - collision threshold) / 2
+    // Divided by 2 because two dancers can deviate toward each other
     const deviationTolerance = Math.max(0, (minClearance - COLLISION_THRESHOLD) / 2);
 
     return {
@@ -1101,6 +1015,99 @@ const TimelineEditor: React.FC = () => {
       deviationTolerance: Math.round(deviationTolerance * 100) / 100,
     };
   }, []);
+
+  // Deterministic scoring function - calculates objective score based on metrics
+  const calculateDeterministicScore = useCallback((paths: GeneratedPath[]): {
+    score: number;
+    breakdown: {
+      efficiency: number;      // Distance efficiency (shorter = better)
+      safety: number;          // Collision margin (larger = better)
+      directness: number;      // How direct the paths are (straighter = better)
+      synchronization: number; // Arrival time sync (more sync = better)
+    };
+  } => {
+    if (paths.length === 0) {
+      return { score: 0, breakdown: { efficiency: 0, safety: 0, directness: 0, synchronization: 0 } };
+    }
+
+    // 1. Efficiency: Total distance (normalize by comparing to straight-line distance)
+    let totalActualDistance = 0;
+    let totalStraightDistance = 0;
+    paths.forEach(p => {
+      const start = p.path[0];
+      const end = p.path[p.path.length - 1];
+      const straightDist = Math.sqrt((end.x - start.x) ** 2 + (end.y - start.y) ** 2);
+      totalStraightDistance += straightDist;
+
+      // Calculate actual path distance
+      let actualDist = 0;
+      for (let i = 1; i < p.path.length; i++) {
+        const dx = p.path[i].x - p.path[i - 1].x;
+        const dy = p.path[i].y - p.path[i - 1].y;
+        actualDist += Math.sqrt(dx * dx + dy * dy);
+      }
+      totalActualDistance += actualDist;
+    });
+    // Efficiency ratio: 1.0 = perfect (straight line), lower = more detour
+    const efficiencyRatio = totalStraightDistance > 0 ? totalStraightDistance / totalActualDistance : 1;
+    const efficiency = Math.min(100, Math.max(0, efficiencyRatio * 100));
+
+    // 2. Safety: Minimum clearance between dancers
+    const stability = calculatePathStability(paths);
+    // 0.5m = dangerous (0 points), 2m+ = very safe (100 points)
+    const safetyScore = Math.min(100, Math.max(0, (stability.minClearance - 0.5) / 1.5 * 100));
+
+    // 3. Directness: How much paths curve (less curve = better)
+    let totalCurvature = 0;
+    paths.forEach(p => {
+      for (let i = 1; i < p.path.length - 1; i++) {
+        const prev = p.path[i - 1];
+        const curr = p.path[i];
+        const next = p.path[i + 1];
+        // Calculate angle change
+        const v1x = curr.x - prev.x;
+        const v1y = curr.y - prev.y;
+        const v2x = next.x - curr.x;
+        const v2y = next.y - curr.y;
+        const dot = v1x * v2x + v1y * v2y;
+        const len1 = Math.sqrt(v1x * v1x + v1y * v1y);
+        const len2 = Math.sqrt(v2x * v2x + v2y * v2y);
+        if (len1 > 0.01 && len2 > 0.01) {
+          const cos = Math.max(-1, Math.min(1, dot / (len1 * len2)));
+          const angle = Math.acos(cos);
+          totalCurvature += angle;
+        }
+      }
+    });
+    // Less curvature = higher directness score
+    const avgCurvature = totalCurvature / Math.max(1, paths.length);
+    const directness = Math.min(100, Math.max(0, 100 - avgCurvature * 20));
+
+    // 4. Synchronization: How close arrival times are
+    const endTimes = paths.map(p => p.path[p.path.length - 1]?.t || 0);
+    const avgEndTime = endTimes.reduce((a, b) => a + b, 0) / endTimes.length;
+    const endTimeVariance = endTimes.reduce((acc, t) => acc + (t - avgEndTime) ** 2, 0) / endTimes.length;
+    // Lower variance = better sync
+    const synchronization = Math.min(100, Math.max(0, 100 - endTimeVariance * 10));
+
+    // Weighted total score
+    const score = Math.round(
+      efficiency * 0.25 +      // 25% weight
+      safetyScore * 0.35 +     // 35% weight (most important)
+      directness * 0.25 +      // 25% weight
+      synchronization * 0.15   // 15% weight
+    );
+
+    return {
+      score,
+      breakdown: {
+        efficiency: Math.round(efficiency),
+        safety: Math.round(safetyScore),
+        directness: Math.round(directness),
+        synchronization: Math.round(synchronization),
+      },
+    };
+  }, [calculatePathStability]);
 
   // Helper: Generate path visualization image as base64
   const generatePathVisualization = useCallback((
@@ -1202,6 +1209,68 @@ const TimelineEditor: React.FC = () => {
     return canvas.toDataURL('image/png').split(',')[1]; // Return base64 without prefix
   }, []);
 
+  // Check if two path sets are identical (for skipping unnecessary Gemini calls)
+  // Uses 0.3m tolerance to filter out visually similar paths
+  const arePathsIdentical = useCallback((paths1: GeneratedPath[], paths2: GeneratedPath[]): boolean => {
+    if (paths1.length !== paths2.length) return false;
+
+    // Sort both by dancer ID to ensure consistent comparison
+    const sorted1 = [...paths1].sort((a, b) => a.dancerId - b.dancerId);
+    const sorted2 = [...paths2].sort((a, b) => a.dancerId - b.dancerId);
+
+    for (let i = 0; i < sorted1.length; i++) {
+      // Check if dancer IDs match
+      if (sorted1[i].dancerId !== sorted2[i].dancerId) return false;
+
+      const p1 = sorted1[i].path;
+      const p2 = sorted2[i].path;
+      if (p1.length !== p2.length) return false;
+
+      // Compare all points with 0.3m tolerance
+      for (let j = 0; j < p1.length; j++) {
+        if (Math.abs(p1[j].x - p2[j].x) > 0.3 || Math.abs(p1[j].y - p2[j].y) > 0.3) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }, []);
+
+  // Get unique algorithms for a transition (filter out duplicates, keep highest priority)
+  const getUniqueAlgorithms = useCallback((algorithmPaths: Map<PathAlgorithm, GeneratedPath[]> | undefined): PathAlgorithm[] => {
+    if (!algorithmPaths || algorithmPaths.size === 0) {
+      return ALGORITHM_PRIORITY; // Return all if no paths yet
+    }
+
+    const algorithms = Array.from(algorithmPaths.keys());
+    const uniqueAlgos: PathAlgorithm[] = [];
+    const processedGroups: GeneratedPath[][] = [];
+
+    // Process in priority order
+    for (const algo of ALGORITHM_PRIORITY) {
+      if (!algorithms.includes(algo)) continue;
+
+      const paths = algorithmPaths.get(algo);
+      if (!paths) continue;
+
+      // Check if this path is identical to any already processed
+      let isDuplicate = false;
+      for (const existingPaths of processedGroups) {
+        if (arePathsIdentical(paths, existingPaths)) {
+          isDuplicate = true;
+          break;
+        }
+      }
+
+      if (!isDuplicate) {
+        uniqueAlgos.push(algo);
+        processedGroups.push(paths);
+      }
+    }
+
+    return uniqueAlgos.length > 0 ? uniqueAlgos : ALGORITHM_PRIORITY;
+  }, [arePathsIdentical]);
+
   // Gemini ranking function - hybrid approach with anonymization + coordinates + images
   const rankPathsWithGemini = useCallback(async (
     allPaths: Map<PathAlgorithm, GeneratedPath[]>,
@@ -1214,8 +1283,58 @@ const TimelineEditor: React.FC = () => {
     setRankingTransitionKey(transitionKey);
 
     try {
+      // Sort algorithms in consistent order to avoid LLM position bias
+      const algorithms = Array.from(allPaths.keys()).sort((a, b) => {
+        const priorityA = ALGORITHM_PRIORITY.indexOf(a);
+        const priorityB = ALGORITHM_PRIORITY.indexOf(b);
+        return priorityA - priorityB;
+      });
+      const firstPaths = allPaths.get(algorithms[0])!;
+
+      // Check if all paths are identical - skip Gemini if so
+      let allIdentical = true;
+      for (let i = 1; i < algorithms.length; i++) {
+        const otherPaths = allPaths.get(algorithms[i])!;
+        if (!arePathsIdentical(firstPaths, otherPaths)) {
+          allIdentical = false;
+          break;
+        }
+      }
+
+      // If all paths are identical, use priority-based selection
+      if (allIdentical) {
+        const bestAlgo = ALGORITHM_PRIORITY.find(algo => algorithms.includes(algo)) || algorithms[0];
+        const scores = new Map<PathAlgorithm, number>();
+        const breakdowns = new Map<PathAlgorithm, ScoreBreakdown>();
+        const insights = new Map<PathAlgorithm, string>();
+
+        algorithms.forEach(algo => {
+          scores.set(algo, 85); // Equal score for identical paths
+          breakdowns.set(algo, { efficiency: 85, safety: 85, directness: 85, synchronization: 85 });
+          insights.set(algo, 'Simple transition - all algorithms produce identical paths');
+        });
+
+        const transitionResult: PathEvaluationResult = {
+          pick: bestAlgo,
+          scores,
+          breakdowns,
+          insights,
+          pickReason: 'Paths are identical for this simple transition. Selected based on algorithm reliability.',
+        };
+
+        setGeminiResults(prev => {
+          const newMap = new Map(prev);
+          newMap.set(transitionKey, transitionResult);
+          return newMap;
+        });
+
+        showToast(`Identical paths - using ${PATH_ALGORITHM_LABELS[bestAlgo]}`, 'info', 3000);
+        setIsRankingWithGemini(false);
+        setRankingTransitionKey(null);
+        return;
+      }
+
       // Create anonymized mapping (A, B, C, ...)
-      const algorithms = Array.from(allPaths.keys());
       const anonymousLabels = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
       const algoToAnon = new Map<PathAlgorithm, string>();
       const anonToAlgo = new Map<string, PathAlgorithm>();
@@ -1227,22 +1346,24 @@ const TimelineEditor: React.FC = () => {
       });
 
       // Prepare data for each algorithm
-      // Build option data with coordinates + 경로 안정성 (path stability)
-      // 대규모 대형(10+ dancers)의 경우 경로 포인트를 샘플링하여 API 한계 방지
-      const MAX_PATH_POINTS = 10; // 경로당 최대 포인트 수 (시작, 중간, 끝 포함)
+      // Build option data with coordinates + path stability
+      // For large formations (10+ dancers), sample path points to prevent API limits
+      const MAX_PATH_POINTS = 10; // Max points per path (including start, middle, end)
 
-      const optionData = Array.from(allPaths.entries()).map(([algo, paths]) => {
+      // Use sorted algorithms order for consistent presentation
+      const optionData = algorithms.map((algo) => {
+        const paths = allPaths.get(algo)!;
         const anonLabel = algoToAnon.get(algo)!;
 
-        // 경로 안정성 계산 (Path Stability)
+        // Calculate path stability
         const stability = calculatePathStability(paths);
 
-        // Extract dancer coordinates (샘플링하여 데이터 크기 제한)
+        // Extract dancer coordinates (sampled to limit data size)
         const allDancerPaths = paths.map((dancerPath, dancerIdx) => {
           const fullPath = dancerPath.path;
           let sampledPath = fullPath;
 
-          // 경로가 MAX_PATH_POINTS보다 길면 균등 샘플링
+          // Sample evenly if path is longer than MAX_PATH_POINTS
           if (fullPath.length > MAX_PATH_POINTS) {
             sampledPath = [];
             for (let i = 0; i < MAX_PATH_POINTS; i++) {
@@ -1263,18 +1384,37 @@ const TimelineEditor: React.FC = () => {
 
         return {
           option: anonLabel,
-          // 경로 안정성: 각 댄서가 경로에서 벗어나도 안전한 거리 (m)
+          // Path stability: safe deviation distance for each dancer (m)
           pathStability: {
-            minClearance: stability.minClearance,        // 댄서 간 최소 거리
-            deviationTolerance: stability.deviationTolerance, // 허용 편차
+            minClearance: stability.minClearance,        // Minimum distance between dancers
+            deviationTolerance: stability.deviationTolerance, // Allowed deviation
           },
           dancerPaths: allDancerPaths,
         };
       });
 
-      // Generate visualization images
+      // Calculate deterministic scores for each algorithm
+      const deterministicScores = new Map<PathAlgorithm, { score: number; breakdown: { efficiency: number; safety: number; directness: number; synchronization: number } }>();
+      for (const algo of algorithms) {
+        const paths = allPaths.get(algo)!;
+        const scoreData = calculateDeterministicScore(paths);
+        deterministicScores.set(algo, scoreData);
+      }
+
+      // Find best algorithm based on deterministic score
+      let bestAlgo = algorithms[0];
+      let bestScore = 0;
+      for (const [algo, scoreData] of deterministicScores.entries()) {
+        if (scoreData.score > bestScore) {
+          bestScore = scoreData.score;
+          bestAlgo = algo;
+        }
+      }
+
+      // Generate visualization images (in same sorted order)
       const images: GeminiImageData[] = [];
-      for (const [algo, paths] of allPaths.entries()) {
+      for (const algo of algorithms) {
+        const paths = allPaths.get(algo)!;
         const label = algoToAnon.get(algo)!;
         const base64 = generatePathVisualization(paths, stageWidth, stageHeight, label);
         if (base64) {
@@ -1282,7 +1422,8 @@ const TimelineEditor: React.FC = () => {
         }
       }
 
-      const prompt = `You are a professional choreographer. Analyze the dancer movement paths and select the best option.
+      // Gemini prompt - ask for scores and brief reasons
+      const prompt = `You are a professional choreographer evaluating dancer movement paths.
 
 ## Stage Info
 - Size: ${stageWidth}m x ${stageHeight}m
@@ -1290,90 +1431,124 @@ const TimelineEditor: React.FC = () => {
 - Dancers: ${allPaths.get(algorithms[0])?.length || 0}
 
 ## Path Options (${algorithms.length} total)
-Each option contains:
-- pathStability: How much each dancer can deviate from the planned path without collision
-  - minClearance: Minimum distance between any two dancers (m)
-  - deviationTolerance: Each dancer can deviate this much and still be safe (m)
-- dancerPaths: Full movement coordinates {t: time, x: x-coord, y: y-coord}
-
 ${JSON.stringify(optionData, null, 2)}
 
 ## Attached Images
-Visualization of each path option showing:
-- Filled circle: Start position (number = dancer ID)
-- Ring: End position
-- Line: Movement path
+Visualization of each path option (A, B, C, etc.)
 
-## Evaluation Criteria
-1. **Path Stability**: Higher deviationTolerance = safer for real performance (dancers aren't robots)
-2. **Path Efficiency**: Minimal travel distance without unnecessary detours
-3. **Path Smoothness**: Natural curves without abrupt direction changes
-4. **Visual Balance**: Overall harmony and aesthetics of the paths
+## Evaluation Criteria (in priority order)
+1. **Safety (40%)**: Minimum 0.5m clearance between dancers at all times. Penalize any near-collisions heavily.
+2. **Path Cleanliness (30%)**: Prefer straight lines or gentle curves. Penalize sharp turns, zigzags, or unnecessarily curved paths.
+3. **Efficiency (20%)**: Shorter total travel distance is better. No detours or backtracking.
+4. **Timing (10%)**: Dancers should arrive smoothly, not all bunched at the end.
 
-## Response Guidelines
-- Do NOT mention option labels (A, B, etc.) in the reasons text
-- Do NOT mention specific numbers or distances (e.g., "0.54m", "1.2m", "85%")
-- Use qualitative descriptions only (e.g., "high stability", "low collision risk", "smooth transitions")
-- Keep reasons concise (1-2 sentences each)
+## Scoring Guide
+- 90-100: Excellent - clean straight/gentle paths, safe spacing, efficient
+- 75-89: Good - mostly clean with minor issues
+- 60-74: Acceptable - noticeable curves or timing issues
+- Below 60: Poor - excessive curves, near-collisions, or inefficient
+
+## Task
+Score each option 0-100 based on the weighted criteria above.
 
 ## Response Format (JSON only)
 {
-  "scores": {"A": 85, "B": 92, ...},
-  "reasons": {
-    "A": "Path characteristics - pros/cons without mentioning option label",
-    "B": "Path characteristics - pros/cons without mentioning option label",
-    ...
+  "rankings": {
+    "A": { "score": 85, "reason": "Brief one-line reason" },
+    "B": { "score": 72, "reason": "Brief one-line reason" }
   },
-  "best": "B",
-  "bestReason": "Why this path is best (1-2 sentences)"
+  "best": "A"
 }`;
 
-      const response = await callGeminiAPIWithImages(prompt, images);
+      // Use temperature 0 for consistent scoring
+      const response = await callGeminiAPIWithImages(prompt, images, { temperature: 0 });
 
-      // Parse response
+      // Build breakdowns map from deterministic scores (for display)
+      const breakdowns = new Map<PathAlgorithm, ScoreBreakdown>();
+      for (const [algo, scoreData] of deterministicScores.entries()) {
+        breakdowns.set(algo, scoreData.breakdown);
+      }
+
+      // Parse Gemini response for scores and reasons
+      const scores = new Map<PathAlgorithm, number>();
+      const insights = new Map<PathAlgorithm, string>();
+      let geminiBestAlgo: PathAlgorithm | null = null;
+
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        const result = JSON.parse(jsonMatch[0]);
+        try {
+          const result = JSON.parse(jsonMatch[0]);
 
-        // Build scores map - de-anonymize from A,B,C to actual algorithm names
-        const scores = new Map<PathAlgorithm, number>();
-        for (const [anonLabel, score] of Object.entries(result.scores || {})) {
-          const algo = anonToAlgo.get(anonLabel);
-          if (algo) {
-            scores.set(algo, score as number);
+          // Extract scores and reasons from Gemini response
+          for (const [anonLabel, data] of Object.entries(result.rankings || {})) {
+            const algo = anonToAlgo.get(anonLabel);
+            if (algo && typeof data === 'object' && data !== null) {
+              const rankData = data as { score?: number; reason?: string };
+              if (typeof rankData.score === 'number') {
+                scores.set(algo, Math.round(rankData.score));
+              }
+              if (typeof rankData.reason === 'string') {
+                insights.set(algo, rankData.reason);
+              }
+            }
           }
-        }
 
-        // Build reasons map - de-anonymize
-        const reasons = new Map<PathAlgorithm, string>();
-        for (const [anonLabel, reason] of Object.entries(result.reasons || {})) {
-          const algo = anonToAlgo.get(anonLabel);
-          if (algo) {
-            reasons.set(algo, reason as string);
+          // Get Gemini's best pick
+          if (result.best && anonToAlgo.has(result.best)) {
+            geminiBestAlgo = anonToAlgo.get(result.best)!;
           }
+        } catch {
+          console.warn('Failed to parse Gemini response, using deterministic scores');
         }
+      }
 
-        // Store result for this transition - de-anonymize best pick
-        if (result.best) {
-          const bestAlgo = anonToAlgo.get(result.best);
-          if (bestAlgo) {
-            const transitionResult: GeminiTransitionResult = {
-              pick: bestAlgo,
-              scores,
-              reasons,
-              pickReason: result.bestReason || '',
-            };
+      // Fallback to deterministic scores if Gemini parsing failed
+      if (scores.size === 0) {
+        for (const [algo, scoreData] of deterministicScores.entries()) {
+          scores.set(algo, scoreData.score);
+        }
+      }
 
-            setGeminiResults(prev => {
-              const newMap = new Map(prev);
-              newMap.set(transitionKey, transitionResult);
-              return newMap;
-            });
+      // Fill in missing scores/insights
+      for (const algo of algorithms) {
+        if (!scores.has(algo)) {
+          scores.set(algo, deterministicScores.get(algo)?.score || 70);
+        }
+        if (!insights.has(algo)) {
+          insights.set(algo, 'No additional insights available');
+        }
+      }
 
-            showToast(`🏆 Gemini's Pick: ${PATH_ALGORITHM_LABELS[bestAlgo]}`, 'success', 8000);
+      // Determine best algorithm (prefer Gemini's pick, fallback to highest score)
+      let finalBestAlgo = geminiBestAlgo || bestAlgo;
+      let finalBestScore = scores.get(finalBestAlgo) || bestScore;
+
+      // If Gemini didn't pick, use highest score from Gemini's scores
+      if (!geminiBestAlgo) {
+        for (const [algo, score] of scores.entries()) {
+          if (score > finalBestScore) {
+            finalBestScore = score;
+            finalBestAlgo = algo;
           }
         }
       }
+
+      // Store result with Gemini's pick and scores
+      const transitionResult: PathEvaluationResult = {
+        pick: finalBestAlgo,
+        scores,
+        breakdowns,
+        insights,
+        pickReason: insights.get(finalBestAlgo) || `Score: ${finalBestScore}/100`,
+      };
+
+      setGeminiResults(prev => {
+        const newMap = new Map(prev);
+        newMap.set(transitionKey, transitionResult);
+        return newMap;
+      });
+
+      showToast(`Gemini's Pick: ${PATH_ALGORITHM_LABELS[finalBestAlgo]} (Score: ${finalBestScore})`, 'success', 5000);
     } catch (error) {
       console.error('Gemini ranking failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1388,7 +1563,7 @@ Visualization of each path option showing:
       setIsRankingWithGemini(false);
       setRankingTransitionKey(null);
     }
-  }, [showToast, generatePathVisualization]);
+  }, [showToast, generatePathVisualization, calculateDeterministicScore, calculatePathStability, arePathsIdentical]);
 
   // Generate paths for current formation - ALL ALGORITHMS
   const handleGeneratePaths = useCallback(async () => {
@@ -1407,12 +1582,12 @@ Visualization of each path option showing:
     const pathKey = `${currentFormation.id}->${nextFormation.id}`;
 
     const allAlgorithms: PathAlgorithm[] = [
-      'hybrid_by_claude_cubic',  // Default first
-      'hybrid_by_claude',
-      'hybrid_by_cursor',
-      'hybrid_by_gemini',
-      'hybrid_by_codex',
-      'hybrid',
+      'natural_curves',  // Default first
+      'clean_flow',
+      'wave_sync',
+      'perfect_sync',
+      'balanced_direct',
+      'harmonized_flow',
     ];
 
     try {
@@ -1434,49 +1609,13 @@ Visualization of each path option showing:
       });
 
       // Set default algorithm
-      setPathAlgorithm('hybrid_by_claude_cubic');
+      setPathAlgorithm('natural_curves');
 
-      setPathGenerationStatus('All paths generated!');
-      setTimeout(() => setPathGenerationStatus(null), 2000);
+      setPathGenerationStatus('All paths generated! Select algorithm then generate cue sheet.');
+      setTimeout(() => setPathGenerationStatus(null), 3000);
 
       // Start Gemini ranking in background
       rankPathsWithGemini(algorithmPaths, project.stageWidth, project.stageHeight, currentFormation.duration, pathKey);
-
-      // Generate cue sheet in background using default algorithm
-      const defaultPaths = algorithmPaths.get('hybrid_by_claude_cubic') || [];
-      setIsGeneratingCueSheet(true);
-      const formationDuration = currentFormation.duration;
-
-      const dancerPaths = defaultPaths.map(p => ({
-        dancerId: p.dancerId,
-        path: p.path,
-        startTime: p.path[0]?.t || 0,
-        speed: 1,
-        totalDistance: p.path.reduce((acc, point, i, arr) => {
-          if (i === 0) return 0;
-          const prev = arr[i - 1];
-          return acc + Math.sqrt((point.x - prev.x) ** 2 + (point.y - prev.y) ** 2);
-        }, 0),
-      }));
-
-      generateCueSheet(dancerPaths, {
-        stageWidth: project.stageWidth,
-        stageHeight: project.stageHeight,
-        totalCounts: formationDuration,
-        language: 'en',
-        includeRelativePositioning: true,
-        includeArtisticNuance: true,
-      })
-        .then((cueSheetResult) => {
-          setCueSheet(cueSheetResult);
-          setIsGeneratingCueSheet(false);
-          showToast('✓ Cue sheet ready! Click to view.', 'success', 8000);
-        })
-        .catch((cueError) => {
-          console.error('Cue sheet generation failed:', cueError);
-          setIsGeneratingCueSheet(false);
-          showToast('Cue sheet generation failed', 'error', 5000);
-        });
     } catch (error) {
       console.error('Path generation failed:', error);
       setPathGenerationStatus('Path generation failed');
@@ -1494,12 +1633,12 @@ Visualization of each path option showing:
     setPathGenerationStatus('Generating all movement paths...');
 
     const allAlgorithms: PathAlgorithm[] = [
-      'hybrid_by_claude_cubic',
-      'hybrid_by_claude',
-      'hybrid_by_cursor',
-      'hybrid_by_gemini',
-      'hybrid_by_codex',
-      'hybrid',
+      'natural_curves',
+      'clean_flow',
+      'wave_sync',
+      'perfect_sync',
+      'balanced_direct',
+      'harmonized_flow',
     ];
 
     try {
@@ -1536,6 +1675,216 @@ Visualization of each path option showing:
     }
   }, [project.formations, allAlgorithmPaths, generatePathsForTransition]);
 
+  // Generate all paths and rank with Gemini
+  const generateAllPathsWithRanking = useCallback(async () => {
+    if (project.formations.length < 2) {
+      showToast('Need at least 2 formations to generate paths', 'error');
+      return;
+    }
+
+    setIsGeneratingPaths(true);
+    setPathGenerationStatus('Starting path generation...');
+
+    const allAlgorithms: PathAlgorithm[] = [
+      'natural_curves',
+      'clean_flow',
+      'wave_sync',
+      'perfect_sync',
+      'balanced_direct',
+      'harmonized_flow',
+    ];
+
+    try {
+      const totalTransitions = project.formations.length - 1;
+
+      // Process each transition incrementally (generate paths + rank immediately)
+      for (let i = 0; i < totalTransitions; i++) {
+        const current = project.formations[i];
+        const next = project.formations[i + 1];
+        const pathKey = `${current.id}->${next.id}`;
+
+        // Check if already generated and ranked
+        const existingPaths = allAlgorithmPaths.get(pathKey);
+        const alreadyGenerated = existingPaths && existingPaths.size > 0;
+        const alreadyRanked = geminiResults.has(pathKey);
+
+        if (alreadyGenerated && alreadyRanked) {
+          continue; // Skip this transition entirely
+        }
+
+        // Step 1: Generate paths for this transition (if not already done)
+        let algorithmPaths: Map<PathAlgorithm, GeneratedPath[]>;
+        if (alreadyGenerated) {
+          algorithmPaths = existingPaths;
+        } else {
+          setPathGenerationStatus(`Generating paths (${i + 1}/${totalTransitions})...`);
+
+          algorithmPaths = new Map<PathAlgorithm, GeneratedPath[]>();
+          for (const algo of allAlgorithms) {
+            const paths = await generatePathsForTransition(current, next, algo);
+            algorithmPaths.set(algo, paths);
+          }
+
+          // Update state immediately so UI shows progress
+          setAllAlgorithmPaths(prev => {
+            const updated = new Map(prev);
+            updated.set(pathKey, algorithmPaths);
+            return updated;
+          });
+
+          // Yield to event loop to allow React to re-render
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+
+        // Step 2: Rank with Gemini for this transition (if not already done)
+        if (!alreadyRanked) {
+          setPathGenerationStatus(`Ranking with Gemini (${i + 1}/${totalTransitions})...`);
+          await rankPathsWithGemini(algorithmPaths, project.stageWidth, project.stageHeight, current.duration, pathKey);
+
+          // Yield to event loop to allow React to re-render after Gemini ranking
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+      }
+
+      setPathGenerationStatus(null);
+      showToast('✓ All paths generated!', 'success', 5000);
+
+    } catch (error) {
+      console.error('Generation failed:', error);
+      setPathGenerationStatus('Generation failed');
+      showToast('Generation failed. Check console for details.', 'error');
+      setTimeout(() => setPathGenerationStatus(null), 3000);
+    } finally {
+      setIsGeneratingPaths(false);
+    }
+  }, [project.formations, project.stageWidth, project.stageHeight, allAlgorithmPaths, generatePathsForTransition, showToast, geminiResults, rankPathsWithGemini]);
+
+  // Generate cue sheets based on user-selected paths (or Gemini's pick as fallback)
+  const generateAllCueSheets = useCallback(async () => {
+    if (project.formations.length < 2) {
+      showToast('Need at least 2 formations to generate cue sheets', 'error');
+      return;
+    }
+
+    // Check if paths exist
+    const totalTransitions = project.formations.length - 1;
+    let hasAllPaths = true;
+    for (let i = 0; i < totalTransitions; i++) {
+      const current = project.formations[i];
+      const next = project.formations[i + 1];
+      const pathKey = `${current.id}->${next.id}`;
+      if (!allAlgorithmPaths.has(pathKey) || (allAlgorithmPaths.get(pathKey)?.size || 0) === 0) {
+        hasAllPaths = false;
+        break;
+      }
+    }
+
+    if (!hasAllPaths) {
+      showToast('Please generate paths first', 'error');
+      return;
+    }
+
+    setIsGeneratingCueSheet(true);
+    setPathGenerationStatus('Generating cue sheets...');
+
+    try {
+      // Collect all paths for cue sheet generation
+      const allDancerPaths: Array<{
+        dancerId: number;
+        path: { x: number; y: number; t: number }[];
+        startTime: number;
+        speed: number;
+        totalDistance: number;
+      }> = [];
+
+      for (let i = 0; i < totalTransitions; i++) {
+        const current = project.formations[i];
+        const next = project.formations[i + 1];
+        const pathKey = `${current.id}->${next.id}`;
+        const transitionPaths = allAlgorithmPaths.get(pathKey);
+
+        if (transitionPaths) {
+          // Priority: 1. User-selected algorithm, 2. Gemini's pick, 3. natural_curves
+          const userSelected = userSelectedAlgorithms.get(pathKey);
+          const geminiPick = geminiResults.get(pathKey)?.pick;
+          const selectedAlgo = userSelected || geminiPick || 'natural_curves';
+
+          const selectedPaths = transitionPaths.get(selectedAlgo) ||
+            transitionPaths.get('natural_curves') ||
+            Array.from(transitionPaths.values())[0];
+
+          if (selectedPaths) {
+            const transitionStartCount = current.startCount + current.duration;
+            selectedPaths.forEach((p: GeneratedPath) => {
+              allDancerPaths.push({
+                dancerId: p.dancerId,
+                path: p.path.map((pt: { x: number; y: number; t: number }) => ({
+                  ...pt,
+                  t: pt.t + transitionStartCount,
+                })),
+                startTime: transitionStartCount,
+                speed: 1,
+                totalDistance: p.path.reduce((acc: number, point: { x: number; y: number }, idx: number, arr: { x: number; y: number }[]) => {
+                  if (idx === 0) return 0;
+                  const prev = arr[idx - 1];
+                  return acc + Math.sqrt((point.x - prev.x) ** 2 + (point.y - prev.y) ** 2);
+                }, 0),
+              });
+            });
+          }
+        }
+      }
+
+      // Merge paths by dancer ID
+      const mergedPaths = new Map<number, typeof allDancerPaths[0]>();
+      allDancerPaths.forEach(dp => {
+        const existing = mergedPaths.get(dp.dancerId);
+        if (existing) {
+          existing.path = [...existing.path, ...dp.path];
+          existing.totalDistance += dp.totalDistance;
+        } else {
+          mergedPaths.set(dp.dancerId, { ...dp });
+        }
+      });
+
+      const lastFormation = project.formations[project.formations.length - 1];
+      const totalCounts = lastFormation.startCount + lastFormation.duration;
+
+      const cueSheetResult = await generateCueSheet(
+        Array.from(mergedPaths.values()),
+        {
+          stageWidth: project.stageWidth,
+          stageHeight: project.stageHeight,
+          totalCounts,
+          language: 'en',
+          includeRelativePositioning: true,
+          includeArtisticNuance: true,
+        }
+      );
+
+      setCueSheet(cueSheetResult);
+      // Track which algorithm was used (for single transition, show specific; for multiple, show 'mixed')
+      if (totalTransitions === 1) {
+        const pathKey = `${project.formations[0].id}->${project.formations[1].id}`;
+        const userSelected = userSelectedAlgorithms.get(pathKey);
+        const geminiPick = geminiResults.get(pathKey)?.pick;
+        setCueSheetAlgorithm(userSelected || geminiPick || 'natural_curves');
+      } else {
+        setCueSheetAlgorithm(null); // Mixed algorithms for multiple transitions
+      }
+      setPathGenerationStatus(null);
+      showToast('✓ Cue sheets generated!', 'success', 5000);
+
+    } catch (error) {
+      console.error('Cue sheet generation failed:', error);
+      setPathGenerationStatus('Cue sheet generation failed');
+      showToast('Cue sheet generation failed. Check console for details.', 'error');
+      setTimeout(() => setPathGenerationStatus(null), 3000);
+    } finally {
+      setIsGeneratingCueSheet(false);
+    }
+  }, [project.formations, project.stageWidth, project.stageHeight, allAlgorithmPaths, userSelectedAlgorithms, geminiResults, showToast]);
+
   // Get paths for current formation using selected algorithm
   const getCurrentPaths = useCallback(() => {
     if (!selectedFormation) return null;
@@ -1569,6 +1918,48 @@ Visualization of each path option showing:
 
   // Get Gemini results for current transition
   const currentGeminiResult = currentTransitionInfo ? geminiResults.get(currentTransitionInfo.pathKey) : null;
+  const isCurrentTransitionRanking = Boolean(
+    currentTransitionInfo &&
+    isRankingWithGemini &&
+    rankingTransitionKey === currentTransitionInfo.pathKey
+  );
+
+  // Get unique algorithms for current transition (filter out identical paths)
+  const currentUniqueAlgorithms = useMemo(() => {
+    if (!currentTransitionInfo) return ALGORITHM_PRIORITY;
+    const algorithmPaths = allAlgorithmPaths.get(currentTransitionInfo.pathKey);
+    return getUniqueAlgorithms(algorithmPaths);
+  }, [currentTransitionInfo, allAlgorithmPaths, getUniqueAlgorithms]);
+
+  // Track previous transition to detect when user navigates to different formation
+  const prevTransitionKeyRef = useRef<string | null>(null);
+  const prevGeminiPickRef = useRef<PathAlgorithm | null>(null);
+
+  // Auto-switch to Gemini's pick only when:
+  // 1. Transition changes (user navigates to different formation)
+  // 2. Gemini results first arrive for current transition
+  useEffect(() => {
+    const currentKey = currentTransitionInfo?.pathKey || null;
+    const geminiPick = currentGeminiResult?.pick || null;
+
+    // Detect if transition changed
+    const transitionChanged = currentKey !== prevTransitionKeyRef.current;
+    // Detect if Gemini pick just arrived (was null, now has value)
+    const geminiPickArrived = geminiPick && prevGeminiPickRef.current !== geminiPick;
+
+    if (transitionChanged || geminiPickArrived) {
+      // Auto-select Gemini's pick or first unique algorithm
+      if (geminiPick && currentUniqueAlgorithms.includes(geminiPick)) {
+        setPathAlgorithm(geminiPick);
+      } else if (currentUniqueAlgorithms.length > 0 && !currentUniqueAlgorithms.includes(pathAlgorithm)) {
+        setPathAlgorithm(currentUniqueAlgorithms[0]);
+      }
+    }
+
+    // Update refs
+    prevTransitionKeyRef.current = currentKey;
+    prevGeminiPickRef.current = geminiPick;
+  }, [currentTransitionInfo?.pathKey, currentUniqueAlgorithms, currentGeminiResult?.pick, pathAlgorithm]);
 
   // Check if all paths are generated (for any algorithm)
   const allPathsGenerated = project.formations.length < 2 ||
@@ -1577,6 +1968,26 @@ Visualization of each path option showing:
       const pathKey = `${f.id}->${next.id}`;
       return allAlgorithmPaths.has(pathKey) && (allAlgorithmPaths.get(pathKey)?.size || 0) > 0;
     });
+
+  // Track completion status for each transition (for progress display)
+  const transitionProgress = useMemo(() => {
+    if (project.formations.length < 2) return [];
+
+    return project.formations.slice(0, -1).map((f, i) => {
+      const next = project.formations[i + 1];
+      const pathKey = `${f.id}->${next.id}`;
+      const hasPath = allAlgorithmPaths.has(pathKey) && (allAlgorithmPaths.get(pathKey)?.size || 0) > 0;
+      const hasRanking = geminiResults.has(pathKey);
+      return {
+        index: i,
+        label: `${i + 1}→${i + 2}`,
+        pathKey,
+        hasPath,
+        hasRanking,
+        complete: hasPath && hasRanking,
+      };
+    });
+  }, [project.formations, allAlgorithmPaths, geminiResults]);
 
   // Change stage size - scale dancer positions proportionally
   const handleStageSizeChange = (width: number, height: number) => {
@@ -1623,7 +2034,7 @@ Visualization of each path option showing:
       if (i < preset.positions.length) {
         // Apply preset position
         return {
-          dancerId: i,
+          dancerId: i + 1,
           position: { x: preset.positions[i].x, y: preset.positions[i].y },
           color: colors[i % colors.length],
         };
@@ -1846,8 +2257,62 @@ Visualization of each path option showing:
               <option value="20x15">XLarge (20×15m)</option>
             </select>
           </div>
+          <div className="header-control">
+            <label>Audience:</label>
+            <button
+              className={`audience-toggle-btn ${audienceAtTop ? 'top' : 'bottom'}`}
+              onClick={() => setAudienceAtTop(!audienceAtTop)}
+              title={audienceAtTop ? 'Audience at top of screen' : 'Audience at bottom of screen'}
+            >
+              {audienceAtTop ? '⬆ Top' : '⬇ Bottom'}
+            </button>
+          </div>
         </div>
         <div className="header-right">
+          <button
+            onClick={generateAllPathsWithRanking}
+            className={`header-btn generate-all-btn ${isGeneratingPaths ? 'generating' : ''}`}
+            disabled={isGeneratingPaths || isGeneratingCueSheet || project.formations.length < 2}
+            title="Generate all movement paths"
+          >
+            {isGeneratingPaths ? (
+              <>
+                <span className="loading-spinner small" />
+                Generating...
+              </>
+            ) : (
+              'Generate All Paths'
+            )}
+          </button>
+          <button
+            onClick={generateAllCueSheets}
+            className={`header-btn generate-all-btn ${isGeneratingCueSheet ? 'generating' : ''}`}
+            disabled={isGeneratingPaths || isGeneratingCueSheet || project.formations.length < 2}
+            title="Generate cue sheets for all transitions"
+          >
+            {isGeneratingCueSheet ? (
+              <>
+                <span className="loading-spinner small" />
+                Generating...
+              </>
+            ) : (
+              'Generate Cue Sheet'
+            )}
+          </button>
+          {/* Transition progress indicator */}
+          {transitionProgress.length > 0 && (
+            <div className="transition-progress" title="Transition completion status">
+              {transitionProgress.map((t) => (
+                <span
+                  key={t.pathKey}
+                  className={`progress-dot ${t.complete ? 'complete' : t.hasPath ? 'partial' : 'pending'}`}
+                  title={`${t.label}: ${t.complete ? 'Complete' : t.hasPath ? 'Paths ready' : 'Pending'}`}
+                >
+                  {t.complete ? '✓' : t.hasPath ? '◐' : '○'}
+                </span>
+              ))}
+            </div>
+          )}
           <button onClick={handleNew} className="header-btn">New</button>
           <button onClick={() => fileInputRef.current?.click()} className="header-btn">Load</button>
           <button onClick={handleSave} className="header-btn primary">Save</button>
@@ -1875,6 +2340,13 @@ Visualization of each path option showing:
               onClick={() => setIsPlaying(!isPlaying)}
             >
               {isPlaying ? '⏸️ Pause' : '▶️ Play'}
+            </button>
+            <button
+              className={`metronome-toggle-btn ${metronomeEnabled ? 'active' : ''}`}
+              onClick={() => setMetronomeEnabled(!metronomeEnabled)}
+              title={metronomeEnabled ? 'Metronome ON' : 'Metronome OFF'}
+            >
+              {metronomeEnabled ? '🔔' : '🔕'}
             </button>
             <span className="count-badge">Count: {Math.floor(currentCount)}</span>
             <button
@@ -1912,11 +2384,12 @@ Visualization of each path option showing:
           <div className="preset-grid">
             {ALL_PRESETS
               .filter(preset => presetFilter === 'all' || preset.dancerCount === presetFilter)
-              .map((preset) => (
+              .map((preset, idx) => (
                 <PresetPreview
-                  key={preset.name}
+                  key={`${preset.dancerCount}-${preset.name}-${idx}`}
                   preset={preset}
                   onClick={() => handleApplyPreset(preset)}
+                  audienceAtTop={audienceAtTop}
                 />
               ))}
           </div>
@@ -1944,9 +2417,9 @@ Visualization of each path option showing:
                 className="pov-select"
               >
                 <option value="choreographer">Choreographer</option>
-                {selectedFormation?.positions.map((_, idx) => (
-                  <option key={idx} value={`dancer-${idx}`}>
-                    Dancer {idx + 1}
+                {selectedFormation?.positions.map((pos) => (
+                  <option key={pos.dancerId} value={`dancer-${pos.dancerId}`}>
+                    Dancer {pos.dancerId}
                   </option>
                 ))}
               </select>
@@ -2074,7 +2547,7 @@ Visualization of each path option showing:
               fontSize="10"
               style={{ pointerEvents: 'none', userSelect: 'none' }}
             >
-              FRONT (Audience)
+              {audienceAtTop ? 'FRONT (Audience)' : 'BACK'}
             </text>
             <text
               x={PADDING + (project.stageWidth / 2) * scale}
@@ -2084,7 +2557,7 @@ Visualization of each path option showing:
               fontSize="10"
               style={{ pointerEvents: 'none', userSelect: 'none' }}
             >
-              BACK
+              {audienceAtTop ? 'BACK' : 'FRONT (Audience)'}
             </text>
 
             {/* Movement Paths */}
@@ -2102,7 +2575,7 @@ Visualization of each path option showing:
               const pathStrokeWidth = isPovPath ? 4 : 2;
 
               // Create SVG path from points
-              const pathPoints = path.map(p => stageToScreen({ x: p.x, y: p.y }, scale, project.stageHeight));
+              const pathPoints = path.map(p => stageToScreen({ x: p.x, y: p.y }, scale, project.stageHeight, audienceAtTop));
               const pathD = pathPoints.reduce((acc, p, i) => {
                 if (i === 0) return `M ${p.x} ${p.y}`;
                 return `${acc} L ${p.x} ${p.y}`;
@@ -2160,7 +2633,7 @@ Visualization of each path option showing:
 
             {/* Dancers */}
             {displayPositions.map((dancer) => {
-              const screenPos = stageToScreen(dancer.position, scale, project.stageHeight);
+              const screenPos = stageToScreen(dancer.position, scale, project.stageHeight, audienceAtTop);
               const isPovDancer = typeof povMode === 'number' && povMode === dancer.dancerId;
               const isDimmed = typeof povMode === 'number' && povMode !== dancer.dancerId;
               return (
@@ -2220,7 +2693,7 @@ Visualization of each path option showing:
                   type="text"
                   value={selectedFormation.label || ''}
                   onChange={(e) => updateFormation(selectedFormation.id, { label: e.target.value })}
-                  placeholder="Formation name..."
+                  placeholder={`Formation ${project.formations.findIndex(f => f.id === selectedFormation.id) + 1}`}
                 />
               </div>
               <div className="property-row">
@@ -2229,13 +2702,14 @@ Visualization of each path option showing:
                   value={selectedFormation.duration}
                   onChange={(e) => updateFormation(selectedFormation.id, { duration: parseInt(e.target.value, 10) })}
                 >
+                  <option value={1}>1 count</option>
+                  <option value={2}>2 counts</option>
+                  <option value={3}>3 counts</option>
                   <option value={4}>4 counts</option>
+                  <option value={5}>5 counts</option>
+                  <option value={6}>6 counts</option>
+                  <option value={7}>7 counts</option>
                   <option value={8}>8 counts</option>
-                  <option value={12}>12 counts</option>
-                  <option value={16}>16 counts</option>
-                  <option value={20}>20 counts</option>
-                  <option value={24}>24 counts</option>
-                  <option value={32}>32 counts</option>
                 </select>
               </div>
               <div className="property-row">
@@ -2256,9 +2730,9 @@ Visualization of each path option showing:
                       }),
                     });
                   }}
-                  title="모든 댄서를 가장 가까운 퇴장 구역으로 이동"
+                  title="Move all dancers to nearest exit zone"
                 >
-                  🚪 모두 퇴장
+                  🚪 Exit All
                 </button>
               </div>
 
@@ -2268,50 +2742,82 @@ Visualization of each path option showing:
                 {/* Show current transition context */}
                 {currentTransitionInfo && (
                   <div className="transition-context">
-                    대형 {currentTransitionInfo.currentLabel} → 대형 {currentTransitionInfo.nextLabel}
+                    Formation {currentTransitionInfo.currentLabel} → Formation {currentTransitionInfo.nextLabel}
                   </div>
                 )}
 
-                {/* Algorithm selector */}
-                <div className="algorithm-selector">
-                  <label>Algorithm:</label>
-                  <select
-                    value={pathAlgorithm}
-                    onChange={(e) => setPathAlgorithm(e.target.value as PathAlgorithm)}
-                    disabled={isGeneratingPaths}
-                  >
-                    {Object.entries(PATH_ALGORITHM_LABELS).map(([key, label]) => (
-                      <option key={key} value={key}>
-                        {label}{currentGeminiResult?.pick === key ? ' ★' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  {currentGeminiResult?.pick && pathAlgorithm === currentGeminiResult.pick && (
-                    <span className="gemini-pick-badge">Gemini's Pick</span>
-                  )}
-                </div>
+                {/* Algorithm cards - show all available paths */}
+                {currentUniqueAlgorithms.length > 0 && (
+                  <div className="algorithm-cards">
+                    <div className="algorithm-cards-header">
+                      <span className="paths-ready-label">
+                        {currentUniqueAlgorithms.length} paths ready
+                        {isCurrentTransitionRanking && ' · Gemini evaluating...'}
+                      </span>
+                    </div>
+                    <div className="algorithm-cards-grid">
+                      {currentUniqueAlgorithms.map((algo) => {
+                        const isSelected = pathAlgorithm === algo;
+                        const isGeminiPick = currentGeminiResult?.pick === algo;
+                        const score = currentGeminiResult?.scores?.get(algo);
 
-                {/* Gemini ranking status */}
-                {isRankingWithGemini && rankingTransitionKey === currentTransitionInfo?.pathKey && (
-                  <div className="gemini-ranking-status">
-                    <span className="loading-spinner small" />
-                    <span>Gemini evaluating algorithms...</span>
+                        return (
+                          <div
+                            key={algo}
+                            className={`algorithm-card ${isSelected ? 'selected' : ''} ${isGeminiPick ? 'gemini-pick' : ''}`}
+                            onClick={() => {
+                              if (!isGeneratingPaths) {
+                                setPathAlgorithm(algo);
+                                // Save user selection for this transition
+                                if (currentTransitionInfo) {
+                                  setUserSelectedAlgorithms(prev => {
+                                    const updated = new Map(prev);
+                                    updated.set(currentTransitionInfo.pathKey, algo);
+                                    return updated;
+                                  });
+                                }
+                              }
+                            }}
+                          >
+                            <div className="algorithm-card-name">
+                              {PATH_ALGORITHM_LABELS[algo]}
+                            </div>
+                            {score !== undefined && (
+                              <div className="algorithm-card-score">{score}</div>
+                            )}
+                            {isGeminiPick && (
+                              <div className="algorithm-card-badge">★ Best</div>
+                            )}
+                            {isSelected && !isGeminiPick && (
+                              <div className="algorithm-card-check">✓</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {isCurrentTransitionRanking && (
+                      <div className="gemini-evaluating-hint">
+                        <span className="loading-spinner small" />
+                        <span>Click any card to preview while Gemini evaluates</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Gemini scores display - show for current transition */}
-                {currentGeminiResult && !isRankingWithGemini && (
+                {/* Gemini evaluation display - show for current transition */}
+                {currentGeminiResult && !isCurrentTransitionRanking && (
                   <div className="gemini-scores">
                     <details open>
-                      <summary>Gemini 평가 결과</summary>
+                      <summary>Gemini Evaluation</summary>
                       {/* Best pick reason */}
                       {currentGeminiResult.pickReason && (
                         <div className="gemini-pick-reason">
-                          <strong>🏆 선택 이유:</strong> {currentGeminiResult.pickReason}
+                          <strong>Gemini's Pick:</strong> {PATH_ALGORITHM_LABELS[currentGeminiResult.pick]} - {currentGeminiResult.pickReason}
                         </div>
                       )}
                       <div className="score-list">
                         {Array.from(currentGeminiResult.scores.entries())
+                          .filter(([algo]) => currentUniqueAlgorithms.includes(algo))
                           .sort((a, b) => b[1] - a[1])
                           .map(([algo, score]) => (
                             <div
@@ -2324,8 +2830,9 @@ Visualization of each path option showing:
                                 <span className="algo-score">{score}</span>
                                 {algo === currentGeminiResult.pick && <span className="pick-star">★</span>}
                               </div>
-                              {currentGeminiResult.reasons.get(algo) && (
-                                <div className="algo-reason">{currentGeminiResult.reasons.get(algo)}</div>
+                              {/* Gemini insight */}
+                              {currentGeminiResult.insights?.get(algo) && (
+                                <div className="algo-insight">{currentGeminiResult.insights.get(algo)}</div>
                               )}
                             </div>
                           ))}
@@ -2352,8 +2859,30 @@ Visualization of each path option showing:
                       </div>
                     )}
 
-                    {currentPaths && !isGeneratingPaths && !pathGenerationStatus && (
-                      <span className="path-status">✓ Paths generated ({PATH_ALGORITHM_LABELS[pathAlgorithm]})</span>
+                    {currentPaths && (
+                      <div className="path-status-row">
+                        <span className="path-status">
+                          ✓ Paths generated ({PATH_ALGORITHM_LABELS[pathAlgorithm]})
+                          {isGeneratingPaths ? ' · Generating remaining transitions...' : ''}
+                        </span>
+                        {/* Cue sheet status */}
+                        {cueSheet ? (
+                          <button
+                            className="view-cue-sheet-btn"
+                            onClick={() => setShowCueSheet(true)}
+                          >
+                            View Cue Sheet ({cueSheetAlgorithm ? PATH_ALGORITHM_LABELS[cueSheetAlgorithm] : 'Mixed'})
+                          </button>
+                        ) : (
+                          <button
+                            className="generate-cue-sheet-btn"
+                            onClick={generateAllCueSheets}
+                            disabled={isGeneratingCueSheet}
+                          >
+                            {isGeneratingCueSheet ? 'Generating...' : 'Generate Cue Sheet'}
+                          </button>
+                        )}
+                      </div>
                     )}
 
                     <label className="show-path-toggle">
@@ -2393,6 +2922,13 @@ Visualization of each path option showing:
         {isGeneratingPaths && (
           <span className="playback-status">{pathGenerationStatus || 'Generating paths...'}</span>
         )}
+        <button
+          className={`metronome-toggle-btn ${metronomeEnabled ? 'active' : ''}`}
+          onClick={() => setMetronomeEnabled(!metronomeEnabled)}
+          title={metronomeEnabled ? 'Metronome ON' : 'Metronome OFF'}
+        >
+          {metronomeEnabled ? '🔔' : '🔕'}
+        </button>
         <div className="speed-control">
           <label>Speed:</label>
           <select value={playbackSpeed} onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}>
@@ -2407,10 +2943,11 @@ Visualization of each path option showing:
           <input
             type="range"
             min={4}
-            max={20}
+            max={40}
             value={zoom}
             onChange={(e) => setZoom(parseInt(e.target.value, 10))}
           />
+          <span className="zoom-level">{zoom >= 30 ? '1ct' : zoom >= 20 ? '2ct' : zoom >= 12 ? '4ct' : '8ct'}</span>
         </div>
       </div>
 
@@ -2450,6 +2987,9 @@ Visualization of each path option showing:
               <div className="cue-sheet-meta">
                 <span>Stage: {cueSheet.stageInfo}</span>
                 <span>Duration: {cueSheet.totalCounts} counts</span>
+                <span className="cue-sheet-algorithm">
+                  Algorithm: {cueSheetAlgorithm ? PATH_ALGORITHM_LABELS[cueSheetAlgorithm] : 'User selections'}
+                </span>
               </div>
               <button className="cue-sheet-close" onClick={() => setShowCueSheet(false)}>×</button>
             </div>

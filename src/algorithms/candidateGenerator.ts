@@ -19,15 +19,15 @@ import { computeAllPathsWithHybridByCursor } from './hybridByCursor';
 import { computeAllPathsWithHybridByGemini } from './choreographyHybridByGemini';
 
 /**
- * Candidate generation strategy (Hybrid algorithms only)
+ * Candidate generation strategy (Pathfinding algorithms)
  */
 export type CandidateStrategy =
-  | 'hybrid'                   // Hybrid algorithm (Cubic Bezier + heuristic timing)
-  | 'hybrid_by_codex'          // Hybrid By Codex (linear base + curved detour)
-  | 'hybrid_by_claude_quad'    // Hybrid By Claude Quad (Quadratic Bezier, symmetric curves)
-  | 'hybrid_by_claude_cubic'   // Hybrid By Claude Cubic (Cubic Bezier, asymmetric curves)
-  | 'hybrid_by_cursor'         // Hybrid By Cursor
-  | 'hybrid_by_gemini';        // Hybrid By Gemini (time-sync, iterative collision resolution)
+  | 'harmonized_flow'    // Harmonized flow (radial + balanced curves)
+  | 'balanced_direct'    // Balanced direct paths (load balanced)
+  | 'clean_flow'         // Clean flow (minimizes path crossings)
+  | 'natural_curves'     // Natural curves (asymmetric Cubic Bezier)
+  | 'wave_sync'          // Wave sync (staggered timing)
+  | 'perfect_sync';      // Perfect sync (strict time synchronization)
 
 /**
  * Candidate metrics
@@ -68,12 +68,12 @@ export interface CandidateGeneratorConfig {
 }
 
 const DEFAULT_STRATEGIES: CandidateStrategy[] = [
-  'hybrid_by_gemini',
-  'hybrid_by_cursor',
-  'hybrid_by_claude_cubic',  // Cubic Bezier (비대칭 곡선)
-  'hybrid_by_claude_quad',   // Quadratic Bezier (대칭 곡선)
-  'hybrid_by_codex',
-  'hybrid',
+  'perfect_sync',
+  'wave_sync',
+  'natural_curves',   // Cubic Bezier (asymmetric curves)
+  'clean_flow',       // Quadratic Bezier (symmetric curves)
+  'balanced_direct',
+  'harmonized_flow',  // Radial + balanced curves
 ];
 
 /**
@@ -339,36 +339,34 @@ export function generateCandidate(
   const assignmentMode = config.assignmentMode || 'fixed';
   const assignments = computeAssignment(startPositions, endPositions, assignmentMode, config.lockedDancers);
 
-  // 2. Generate paths with hybrid algorithm
+  // 2. Generate paths with selected algorithm
   let paths: DancerPath[];
-  if (strategy === 'hybrid') {
-    // Use Hybrid algorithm (Cubic Bezier + heuristic timing)
-    // Best for: natural curved paths, human speed limits, back stage positioning
+  if (strategy === 'harmonized_flow') {
+    // Harmonized Flow: radial + balanced curves for visual harmony
     paths = computeAllPathsWithHybrid(assignments, {
       totalCounts: config.totalCounts,
       collisionRadius: config.collisionRadius,
       stageWidth: config.stageWidth,
       stageHeight: config.stageHeight,
       numPoints: 30,
-      maxHumanSpeed: 1.5,  // meters per count
+      maxHumanSpeed: 1.5,
       preferSimultaneousArrival: true,
     });
-  } else if (strategy === 'hybrid_by_codex') {
-    // Hybrid By Codex (linear base + curved detour, collision-free)
+  } else if (strategy === 'balanced_direct') {
+    // Balanced Direct: linear base + curved detour, load balanced
     paths = computeAllPathsWithHybridByCodex(assignments, {
       totalCounts: config.totalCounts,
       collisionRadius: config.collisionRadius,
       stageWidth: config.stageWidth,
       stageHeight: config.stageHeight,
       numPoints: 30,
-      maxHumanSpeed: 1.5,  // meters per count
+      maxHumanSpeed: 1.5,
       maxCurveOffset: 3.0,
       maxDetourRatio: 1.8,
       timeStep: 0.1,
     });
-  } else if (strategy === 'hybrid_by_claude_quad') {
-    // Hybrid By Claude Quad: Quadratic Bezier (대칭 곡선)
-    // syncMode: 'strict' (동기화 우선), 'balanced' (균형), 'relaxed' (기존 방식)
+  } else if (strategy === 'clean_flow') {
+    // Clean Flow: Quadratic Bezier, minimizes path crossings
     paths = computeAllPathsWithHybridByClaude(assignments, {
       totalCounts: config.totalCounts,
       collisionRadius: config.collisionRadius,
@@ -378,9 +376,8 @@ export function generateCandidate(
       maxHumanSpeed: 1.5,
       syncMode: 'balanced',
     });
-  } else if (strategy === 'hybrid_by_claude_cubic') {
-    // Hybrid By Claude Cubic: Cubic Bezier (비대칭 곡선)
-    // syncMode: 'strict' (동기화 우선), 'balanced' (균형), 'relaxed' (기존 방식)
+  } else if (strategy === 'natural_curves') {
+    // Natural Curves: Cubic Bezier, asymmetric curves for organic movement
     paths = computeAllPathsWithHybridByClaudeCubic(assignments, {
       totalCounts: config.totalCounts,
       collisionRadius: config.collisionRadius,
@@ -390,8 +387,8 @@ export function generateCandidate(
       maxHumanSpeed: 1.5,
       syncMode: 'balanced',
     });
-  } else if (strategy === 'hybrid_by_cursor') {
-    // Hybrid By Cursor: Linear base + curved detour, collision-free, time sync, kinematics
+  } else if (strategy === 'wave_sync') {
+    // Wave Sync: staggered timing, back-to-front wave motion
     paths = computeAllPathsWithHybridByCursor(assignments, {
       totalCounts: config.totalCounts,
       collisionRadius: config.collisionRadius,
@@ -404,7 +401,7 @@ export function generateCandidate(
       timeStep: 0.1,
     });
   } else {
-    // Default: Hybrid By Gemini (time-sync, iterative collision resolution)
+    // Default: Perfect Sync (strict time synchronization)
     paths = computeAllPathsWithHybridByGemini(assignments, {
       totalCounts: config.totalCounts,
       collisionRadius: config.collisionRadius,
