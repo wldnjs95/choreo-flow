@@ -85,6 +85,25 @@ export const Timeline: React.FC<TimelineProps> = ({
     setIsDraggingPlayhead(true);
   };
 
+  // Handle mousedown on timeline track - seek and start drag
+  const handleTrackMouseDown = (e: React.MouseEvent) => {
+    if (!onSeek || !timelineRef.current) return;
+
+    // Only handle direct clicks on the track background
+    if (e.target !== timelineRef.current) return;
+
+    e.preventDefault();
+
+    // Calculate clicked position and seek there
+    const rect = timelineRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const count = Math.max(0, Math.min(totalCounts, x / zoom));
+    onSeek(count);
+
+    // Start dragging immediately
+    setIsDraggingPlayhead(true);
+  };
+
   const handlePlayheadMouseMove = React.useCallback((e: MouseEvent) => {
     if (!isDraggingPlayhead || !timelineRef.current || !onSeek) return;
 
@@ -186,8 +205,9 @@ export const Timeline: React.FC<TimelineProps> = ({
       <div
         ref={timelineRef}
         className={`timeline-track ${isDragOver ? 'drag-over' : ''}`}
-        style={{ width: totalCounts * zoom, height: GRID_HEIGHT }}
+        style={{ width: totalCounts * zoom, height: GRID_HEIGHT, cursor: onSeek ? 'pointer' : 'default' }}
         onClick={handleTimelineClick}
+        onMouseDown={handleTrackMouseDown}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}

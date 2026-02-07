@@ -276,10 +276,10 @@ function formatPathDataForGemini(
       ? getStageZoneKorean(endPos.x, endPos.y, config.stageWidth, config.stageHeight)
       : getStageZone(endPos.x, endPos.y, config.stageWidth, config.stageHeight);
 
-    // Find interactions with nearby dancers
+    // Find interactions with nearby dancers (check at integer counts only)
     const interactions: { time: number; nearbyDancers: number[] }[] = [];
     if (config.includeRelativePositioning) {
-      for (let t = 0; t <= config.totalCounts; t += 0.5) {
+      for (let t = 0; t <= config.totalCounts; t += 1) {
         const nearby = findNearbyDancers(paths, dancerPath.dancerId, t);
         if (nearby.length > 0) {
           interactions.push({ time: t, nearbyDancers: nearby });
@@ -292,9 +292,9 @@ function formatPathDataForGemini(
       startPosition: { zone: startZone, x: Math.round(startPos.x * 10) / 10, y: Math.round(startPos.y * 10) / 10 },
       endPosition: { zone: endZone, x: Math.round(endPos.x * 10) / 10, y: Math.round(endPos.y * 10) / 10 },
       timing: {
-        startTime: dancerPath.startTime,
-        endTime: dancerPath.path[dancerPath.path.length - 1]?.t || config.totalCounts,
-        delayBeforeStart: dancerPath.startTime,
+        startTime: Math.floor(dancerPath.startTime),
+        endTime: Math.ceil(dancerPath.path[dancerPath.path.length - 1]?.t || config.totalCounts),
+        delayBeforeStart: Math.floor(dancerPath.startTime),
       },
       movement: {
         totalDistance: Math.round(dancerPath.totalDistance * 10) / 10,
@@ -304,7 +304,7 @@ function formatPathDataForGemini(
         curveIntensity: curve.maxDeviation > 2 ? 'large' : curve.maxDeviation > 1 ? 'medium' : 'small',
       },
       phases: phases.map(p => ({
-        timeRange: `${p.startTime.toFixed(1)}~${p.endTime.toFixed(1)}`,
+        timeRange: `${Math.floor(p.startTime)}~${Math.ceil(p.endTime)}`,
         type: p.type,
         direction: p.direction,
         speed: p.speed,
@@ -398,6 +398,7 @@ ${JSON.stringify(pathData, null, 2)}
 **중요**:
 - 반드시 유효한 JSON 형식으로만 출력
 - 각 댄서별로 시간순 큐 작성
+- **timeRange는 반드시 정수 카운트 사용** (예: "0~2 카운트", "3~5 카운트") - 소수점 금지
 - 존댓말과 격려하는 톤 사용
 - 실제 공연에서 사용 가능한 수준의 구체적 지시`;
   } else {
@@ -464,6 +465,7 @@ Please output in the following JSON format:
 **Important**:
 - Output ONLY valid JSON
 - Write cues chronologically for each dancer
+- **timeRange must use integer counts only** (e.g., "0~2 counts", "3~5 counts") - no decimals
 - Use polite, professional, and encouraging tone
 - Be specific enough for actual performance use`;
   }

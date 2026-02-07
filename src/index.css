@@ -3471,13 +3471,19 @@ body {
 
 .gemini-scores .score-item {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
   border-radius: 4px;
   font-size: 11px;
   cursor: pointer;
   transition: background 0.15s ease;
+}
+
+.gemini-scores .score-item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .gemini-scores .score-item:hover {
@@ -3513,6 +3519,46 @@ body {
 .gemini-scores .pick-star {
   color: #f59e0b;
   font-size: 12px;
+}
+
+.gemini-scores .algo-reason {
+  font-size: 10px;
+  color: #888;
+  line-height: 1.4;
+  padding-left: 2px;
+}
+
+.gemini-scores .score-item.pick .algo-reason {
+  color: #c9a227;
+}
+
+.gemini-pick-reason {
+  padding: 10px 12px;
+  margin: 8px;
+  margin-top: 0;
+  background: rgba(245, 158, 11, 0.1);
+  border-radius: 6px;
+  border-left: 3px solid #f59e0b;
+  font-size: 12px;
+  color: #e0e0e0;
+  line-height: 1.5;
+}
+
+/* Transition context display */
+.transition-context {
+  display: inline-block;
+  padding: 4px 10px;
+  margin-bottom: 10px;
+  background: rgba(78, 205, 196, 0.15);
+  border: 1px solid rgba(78, 205, 196, 0.3);
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #4ECDC4;
+}
+
+.gemini-pick-reason strong {
+  color: #f59e0b;
 }
 
 /* Path generation status */
@@ -3786,6 +3832,344 @@ body {
 .cue-sheet-ready-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 25px rgba(78, 205, 196, 0.4);
+}
+
+/* POV (Point of View) Selector */
+.pov-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.pov-selector label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+}
+
+.pov-select {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pov-select:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 215, 0, 0.5);
+}
+
+.pov-select:focus {
+  outline: none;
+  border-color: #FFD700;
+  box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.2);
+}
+
+.pov-select option {
+  background: #1a1a2e;
+  color: #fff;
+}
+
+/* POV Badge in Cue Sheet */
+.pov-badge {
+  background: rgba(255, 215, 0, 0.2);
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  border-radius: 12px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: #FFD700;
+  font-weight: 500;
+}
+
+/* Prominent General Notes for Choreographer */
+.cue-sheet-notes-prominent {
+  background: rgba(78, 205, 196, 0.15);
+  border: 1px solid rgba(78, 205, 196, 0.3);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.cue-sheet-notes-prominent h4 {
+  color: #4ECDC4;
+  font-size: 16px;
+  margin-bottom: 12px;
+}
+
+/* Single Dancer View */
+.cue-sheet-single-dancer {
+  max-width: 100%;
+}
+
+.cue-sheet-single-dancer .dancer-cue-card-highlight {
+  background: rgba(255, 215, 0, 0.1);
+  border: 2px solid rgba(255, 215, 0, 0.4);
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.15);
+}
+
+.cue-sheet-single-dancer .dancer-cue-card-highlight .dancer-label {
+  color: #FFD700;
+  font-size: 18px;
+}
+
+.cue-sheet-single-dancer .dancer-cue-card-highlight .cue-entry {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.cue-sheet-single-dancer .dancer-cue-card-highlight .cue-time {
+  font-size: 14px;
+  font-weight: 600;
+  color: #FFD700;
+}
+
+.cue-sheet-single-dancer .dancer-cue-card-highlight .cue-instruction {
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* POV Individual Cue Sheet (above stage) */
+.pov-cue-sheet {
+  background: rgba(255, 215, 0, 0.08);
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.pov-cue-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pov-cue-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 215, 0, 0.2);
+}
+
+.pov-dancer-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #FFD700;
+}
+
+.pov-dancer-summary {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.pov-cue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pov-cue-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+
+.pov-cue-time {
+  font-size: 11px;
+  font-weight: 600;
+  color: #FFD700;
+  min-width: 60px;
+  flex-shrink: 0;
+}
+
+.pov-cue-instruction {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.4;
+}
+
+/* Choreographer General Notes (above stage) */
+.pov-general-notes {
+  background: rgba(78, 205, 196, 0.08);
+  border-color: rgba(78, 205, 196, 0.3);
+}
+
+.pov-general-notes .pov-dancer-label {
+  color: #4ECDC4;
+}
+
+.pov-general-notes .pov-cue-header {
+  border-bottom-color: rgba(78, 205, 196, 0.2);
+}
+
+/* Current cue highlight */
+.pov-cue-active {
+  background: rgba(255, 215, 0, 0.2) !important;
+  border-left: 3px solid #FFD700;
+  animation: pulse-cue 1.5s infinite;
+}
+
+@keyframes pulse-cue {
+  0%, 100% { background: rgba(255, 215, 0, 0.2); }
+  50% { background: rgba(255, 215, 0, 0.35); }
+}
+
+.pov-cue-active .pov-cue-time {
+  color: #FFD700 !important;
+}
+
+.pov-cue-active .pov-cue-instruction {
+  color: #fff !important;
+  font-weight: 500;
+}
+
+/* ========================= */
+/* Rehearsal Mode Styles     */
+/* ========================= */
+
+.rehearsal-mode {
+  background: #0a0a12;
+}
+
+.rehearsal-mode .timeline-main {
+  grid-template-columns: 1fr;
+  max-width: 100%;
+}
+
+.rehearsal-mode .stage-panel-fullwidth {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* Rehearsal Header */
+.rehearsal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, rgba(147, 51, 234, 0.15), rgba(78, 205, 196, 0.1));
+  border-bottom: 1px solid rgba(147, 51, 234, 0.3);
+}
+
+.rehearsal-title {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.rehearsal-title h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #fff;
+  margin: 0;
+}
+
+.rehearsal-badge {
+  background: rgba(147, 51, 234, 0.3);
+  border: 1px solid rgba(147, 51, 234, 0.5);
+  border-radius: 16px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: #a78bfa;
+  font-weight: 500;
+}
+
+.rehearsal-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.rehearsal-controls .play-btn {
+  background: linear-gradient(135deg, #9333ea, #7c3aed);
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.rehearsal-controls .play-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 20px rgba(147, 51, 234, 0.4);
+}
+
+.rehearsal-controls .play-btn.playing {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+}
+
+.count-badge {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4ECDC4;
+}
+
+/* Mode Toggle Button */
+.mode-toggle-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mode-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.mode-toggle-btn.rehearsal-btn {
+  background: rgba(147, 51, 234, 0.2);
+  border-color: rgba(147, 51, 234, 0.4);
+  color: #a78bfa;
+}
+
+.mode-toggle-btn.rehearsal-btn:hover {
+  background: rgba(147, 51, 234, 0.3);
+  border-color: rgba(147, 51, 234, 0.6);
+}
+
+/* Rehearsal mode - hide extra UI elements */
+.rehearsal-mode .playback-controls {
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 8px;
+}
+
+.rehearsal-mode .playback-controls .playback-btn {
+  display: none;
+}
+
+.rehearsal-mode .playback-controls .speed-control,
+.rehearsal-mode .playback-controls .zoom-control {
+  display: none;
+}
+
+.rehearsal-mode .formation-quick-nav {
+  display: none;
 }
 
 /* Toast Notification */
@@ -4105,6 +4489,40 @@ body {
 .property-value {
   color: #4ECDC4;
   font-size: 14px;
+}
+
+/* Formation quick actions */
+.formation-actions {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.action-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #ccc;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.action-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+.exit-all-btn:hover {
+  background: rgba(255, 107, 107, 0.2);
+  border-color: #FF6B6B;
+  color: #FF6B6B;
 }
 
 .no-selection {

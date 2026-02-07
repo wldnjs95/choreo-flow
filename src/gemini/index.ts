@@ -9,6 +9,8 @@ export {
   GEMINI_CONFIG,
   isApiKeyConfigured,
   callGeminiAPI,
+  callGeminiAPIWithImages,
+  type GeminiImageData,
 } from './config';
 
 // Parser

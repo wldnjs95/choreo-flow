@@ -16,12 +16,17 @@ export const BASE_DANCER_RADIUS = 0.4; // Dancer radius in meters
 export const GRID_COLOR = '#2a2a3e';
 export const BACKGROUND_COLOR = '#1a1a2e';
 
-// Dancer colors palette
+// Dancer colors palette - 35 unique colors
+// Ordered for maximum distinction: first 8 colors span the full spectrum
 export const DANCER_COLORS = [
-  '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
-  '#FFD93D', '#6C5CE7', '#A8E6CF', '#FF8C42',
-  '#E056FD', '#686DE0', '#BADC58', '#F9CA24',
-  '#30336B', '#22A6B3', '#BE2EDD', '#F79F1F',
+  // Primary (1-8): maximally distinct across spectrum
+  '#FF6B6B', '#3498DB', '#2ECC71', '#FFD93D', '#9B59B6', '#FF8C42', '#4ECDC4', '#E056FD',
+  // Secondary (9-16): filling gaps between primaries
+  '#1E90FF', '#27AE60', '#F79F1F', '#E74C3C', '#1ABC9C', '#6C5CE7', '#FF69B4', '#BADC58',
+  // Tertiary (17-24): more variety
+  '#2980B9', '#A8E6CF', '#F9CA24', '#E67E22', '#16A085', '#686DE0', '#E91E63', '#A4DE02',
+  // Extended (25-35): complete palette
+  '#22A6B3', '#1E8449', '#F1C40F', '#8E44AD', '#48C9B0', '#BE2EDD', '#96CEB4', '#45B7D1', '#7B68EE', '#00CED1', '#D63384',
 ] as const;
 
 // Stage presets

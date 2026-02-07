@@ -530,9 +530,9 @@ function FormationSelector({
             if (isNaN(num) || num < 2) {
               setInputValue('2');
               onDancerCountChange(2);
-            } else if (num > 24) {
-              setInputValue('24');
-              onDancerCountChange(24);
+            } else if (num > 35) {
+              setInputValue('35');
+              onDancerCountChange(35);
             } else {
               // Apply if valid
               setInputValue(num.toString());

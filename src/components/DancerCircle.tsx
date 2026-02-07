@@ -13,6 +13,8 @@ export interface DancerCircleProps {
   radius: number;      // Circle radius in pixels
   color?: string;      // Override default color
   isSelected?: boolean;
+  isPovHighlight?: boolean;  // POV: Highlight this dancer as the user's perspective
+  isDimmed?: boolean;        // POV: Dim other dancers when POV is active
   showLabel?: boolean;
   labelSize?: number;
   onClick?: (e: React.MouseEvent) => void;
@@ -30,6 +32,8 @@ export function DancerCircle({
   radius,
   color,
   isSelected = false,
+  isPovHighlight = false,
+  isDimmed = false,
   showLabel = true,
   labelSize,
   onClick,
@@ -39,22 +43,39 @@ export function DancerCircle({
   const dancerColor = color || getDancerColor(id);
   const fontSize = labelSize || Math.max(12, radius * 0.9);
 
+  // POV highlight: larger radius and glow effect
+  const displayRadius = isPovHighlight ? radius * 1.3 : radius;
+  const opacity = isDimmed ? 0.4 : 1;
+
+  // Determine stroke style
+  let strokeColor = 'rgba(255,255,255,0.3)';
+  let strokeWidth = 2;
+  let filterStyle = 'none';
+
+  if (isPovHighlight) {
+    strokeColor = '#FFD700';  // Gold highlight for POV
+    strokeWidth = 4;
+    filterStyle = 'drop-shadow(0 0 15px rgba(255, 215, 0, 0.8))';
+  } else if (isSelected) {
+    strokeColor = '#fff';
+    strokeWidth = 3;
+    filterStyle = 'drop-shadow(0 0 10px rgba(255,255,255,0.5))';
+  }
+
   return (
     <g
-      style={{ cursor: onMouseDown || onClick ? 'pointer' : 'default', ...style }}
+      style={{ cursor: onMouseDown || onClick ? 'pointer' : 'default', opacity, ...style }}
       onClick={onClick}
       onMouseDown={onMouseDown}
     >
       <circle
         cx={x}
         cy={y}
-        r={radius}
+        r={displayRadius}
         fill={dancerColor}
-        stroke={isSelected ? '#fff' : 'rgba(255,255,255,0.3)'}
-        strokeWidth={isSelected ? 3 : 2}
-        style={{
-          filter: isSelected ? 'drop-shadow(0 0 10px rgba(255,255,255,0.5))' : 'none',
-        }}
+        stroke={strokeColor}
+        strokeWidth={strokeWidth}
+        style={{ filter: filterStyle }}
       />
       {showLabel && (
         <text
@@ -63,7 +84,7 @@ export function DancerCircle({
           textAnchor="middle"
           dominantBaseline="central"
           fill="#fff"
-          fontSize={fontSize}
+          fontSize={isPovHighlight ? fontSize * 1.2 : fontSize}
           fontWeight="bold"
           stroke="#000"
           strokeWidth={0.5}

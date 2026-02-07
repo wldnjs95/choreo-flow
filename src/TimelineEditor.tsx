@@ -3,7 +3,7 @@
  * Main page for timeline-based choreography editing
  */
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Stage, screenToStage, stageToScreen } from './components/Stage';
 import { DancerCircle } from './components/DancerCircle';
 import { Timeline } from './components/Timeline';
@@ -32,7 +32,7 @@ import {
   computeAllPathsWithHybrid,
 } from './algorithms';
 import { generateCueSheet, type CueSheetResult, type DancerCueSheet } from './gemini/cueSheetGenerator';
-import { callGeminiAPI } from './gemini';
+import { callGeminiAPIWithImages, type GeminiImageData } from './gemini';
 
 // Path algorithm options
 type PathAlgorithm =
@@ -132,9 +132,10 @@ const PresetPreview: React.FC<{
   const offsetY = previewPadding + (availableHeight - stageH * scale) / 2;
 
   const colors = [
-    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
-    '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F',
-    '#BB8FCE', '#85C1E9', '#F8B500', '#00CED1',
+    '#FF6B6B', '#3498DB', '#2ECC71', '#FFD93D', '#9B59B6', '#FF8C42', '#4ECDC4', '#E056FD',
+    '#1E90FF', '#27AE60', '#F79F1F', '#E74C3C', '#1ABC9C', '#6C5CE7', '#FF69B4', '#BADC58',
+    '#2980B9', '#A8E6CF', '#F9CA24', '#E67E22', '#16A085', '#686DE0', '#E91E63', '#A4DE02',
+    '#22A6B3', '#1E8449', '#F1C40F', '#8E44AD', '#48C9B0', '#BE2EDD', '#96CEB4', '#45B7D1', '#7B68EE', '#00CED1', '#D63384',
   ];
 
   // Handle drag start
@@ -233,10 +234,16 @@ const TimelineEditor: React.FC = () => {
   const [isGeneratingPaths, setIsGeneratingPaths] = useState(false);
   const [pathGenerationStatus, setPathGenerationStatus] = useState<string | null>(null);
 
-  // Gemini ranking state
-  const [geminiPick, setGeminiPick] = useState<PathAlgorithm | null>(null);
+  // Gemini ranking state - stored per transition
+  interface GeminiTransitionResult {
+    pick: PathAlgorithm;
+    scores: Map<PathAlgorithm, number>;
+    reasons: Map<PathAlgorithm, string>;
+    pickReason: string;
+  }
+  const [geminiResults, setGeminiResults] = useState<Map<string, GeminiTransitionResult>>(new Map());
   const [isRankingWithGemini, setIsRankingWithGemini] = useState(false);
-  const [geminiRankingScores, setGeminiRankingScores] = useState<Map<PathAlgorithm, number>>(new Map());
+  const [rankingTransitionKey, setRankingTransitionKey] = useState<string | null>(null); // Which transition is being ranked
 
   // Cue sheet state
   const [cueSheet, setCueSheet] = useState<CueSheetResult | null>(null);
@@ -245,6 +252,16 @@ const TimelineEditor: React.FC = () => {
 
   // Preset filter state
   const [presetFilter, setPresetFilter] = useState<'all' | number>('all');
+
+  // POV (Point of View) state
+  // 'choreographer' = 안무가 시점 (General Notes 표시)
+  // number = 특정 댄서 시점 (해당 댄서 하이라이트 + 해당 큐시트만 표시)
+  const [povMode, setPovMode] = useState<'choreographer' | number>('choreographer');
+
+  // UI Mode state
+  // 'edit' = 편집 모드 (모든 편집 도구 표시, 큐시트 숨김)
+  // 'rehearsal' = 리허설 모드 (재생/큐시트/무대만 표시, 편집 불가)
+  const [uiMode, setUiMode] = useState<'edit' | 'rehearsal'>('edit');
 
   // Helper: Get paths for current algorithm from allAlgorithmPaths
   const getPathsForAlgorithm = useCallback((pathKey: string, algorithm: PathAlgorithm): GeneratedPath[] | null => {
@@ -342,6 +359,7 @@ const TimelineEditor: React.FC = () => {
   // Keyboard shortcut for undo/redo
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Undo/Redo shortcuts
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault();
         if (e.shiftKey) {
@@ -354,11 +372,20 @@ const TimelineEditor: React.FC = () => {
         e.preventDefault();
         handleRedo();
       }
+      // Space bar: Play/Pause (only when not typing in input)
+      if (e.key === ' ' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
+        e.preventDefault();
+        setIsPlaying(prev => !prev);
+      }
+      // Escape: Switch to edit mode
+      if (e.key === 'Escape' && uiMode === 'rehearsal') {
+        setUiMode('edit');
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo]);
+  }, [handleUndo, handleRedo, uiMode]);
 
   // File input ref for loading
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -479,9 +506,10 @@ const TimelineEditor: React.FC = () => {
     saveToHistory();
 
     const colors = [
-      '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
-      '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F',
-      '#BB8FCE', '#85C1E9', '#F8B500', '#00CED1',
+      '#FF6B6B', '#3498DB', '#2ECC71', '#FFD93D', '#9B59B6', '#FF8C42', '#4ECDC4', '#E056FD',
+      '#1E90FF', '#27AE60', '#F79F1F', '#E74C3C', '#1ABC9C', '#6C5CE7', '#FF69B4', '#BADC58',
+      '#2980B9', '#A8E6CF', '#F9CA24', '#E67E22', '#16A085', '#686DE0', '#E91E63', '#A4DE02',
+      '#22A6B3', '#1E8449', '#F1C40F', '#8E44AD', '#48C9B0', '#BE2EDD', '#96CEB4', '#45B7D1', '#7B68EE', '#00CED1', '#D63384',
     ];
 
     setProject(prev => {
@@ -763,14 +791,15 @@ const TimelineEditor: React.FC = () => {
 
   // Change dancer count
   const handleDancerCountChange = (newCount: number) => {
-    if (isNaN(newCount) || newCount < 1 || newCount > 24) return;
+    if (isNaN(newCount) || newCount < 1 || newCount > 35) return;
 
     saveToHistory();
 
     const colors = [
-      '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
-      '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F',
-      '#BB8FCE', '#85C1E9', '#F8B500', '#00CED1',
+      '#FF6B6B', '#3498DB', '#2ECC71', '#FFD93D', '#9B59B6', '#FF8C42', '#4ECDC4', '#E056FD',
+      '#1E90FF', '#27AE60', '#F79F1F', '#E74C3C', '#1ABC9C', '#6C5CE7', '#FF69B4', '#BADC58',
+      '#2980B9', '#A8E6CF', '#F9CA24', '#E67E22', '#16A085', '#686DE0', '#E91E63', '#A4DE02',
+      '#22A6B3', '#1E8449', '#F1C40F', '#8E44AD', '#48C9B0', '#BE2EDD', '#96CEB4', '#45B7D1', '#7B68EE', '#00CED1', '#D63384',
     ];
 
     const EXIT_ZONE_CENTER = 0.75; // Center of 1.5m exit zone
@@ -1003,96 +1032,363 @@ const TimelineEditor: React.FC = () => {
     }));
   }, [calculateOptimalEntryPosition, calculateOptimalExitPosition, project.stageWidth, project.stageHeight]);
 
-  // Gemini ranking function
+  // 경로 안정성 (Path Stability / Deviation Tolerance)
+  // 각 댄서가 계획된 경로에서 얼마나 벗어나도 충돌이 발생하지 않는지 계산
+  // 값이 클수록 실제 공연에서 안전하게 사용할 수 있는 경로
+  const calculatePathStability = useCallback((paths: GeneratedPath[]): {
+    minClearance: number;      // 최소 거리 (m)
+    deviationTolerance: number; // 허용 편차 (m) - 각 댄서가 이만큼 벗어나도 안전
+  } => {
+    const COLLISION_THRESHOLD = 0.8; // meters
+    let minClearance = Infinity;
+
+    // 모든 시간대에서 모든 댄서 쌍의 거리 계산
+    if (paths.length < 2) {
+      return { minClearance: Infinity, deviationTolerance: Infinity };
+    }
+
+    // 시간 포인트 수집 (모든 댄서의 경로에서)
+    const timePoints = new Set<number>();
+    paths.forEach(p => p.path.forEach(pt => timePoints.add(pt.t)));
+    const sortedTimes = Array.from(timePoints).sort((a, b) => a - b);
+
+    // 각 시간에서 모든 댄서 쌍의 거리 계산
+    for (const t of sortedTimes) {
+      // 각 댄서의 해당 시간 위치 계산 (보간)
+      const positions: { x: number; y: number }[] = paths.map(dancerPath => {
+        const path = dancerPath.path;
+        // 정확히 일치하는 시간 찾기
+        const exactPoint = path.find(p => Math.abs(p.t - t) < 0.01);
+        if (exactPoint) return { x: exactPoint.x, y: exactPoint.y };
+
+        // 보간 필요
+        let before = path[0];
+        let after = path[path.length - 1];
+        for (let i = 0; i < path.length - 1; i++) {
+          if (path[i].t <= t && path[i + 1].t >= t) {
+            before = path[i];
+            after = path[i + 1];
+            break;
+          }
+        }
+
+        if (before.t === after.t) return { x: before.x, y: before.y };
+
+        const ratio = (t - before.t) / (after.t - before.t);
+        return {
+          x: before.x + (after.x - before.x) * ratio,
+          y: before.y + (after.y - before.y) * ratio,
+        };
+      });
+
+      // 모든 쌍의 거리 계산
+      for (let i = 0; i < positions.length; i++) {
+        for (let j = i + 1; j < positions.length; j++) {
+          const dx = positions[i].x - positions[j].x;
+          const dy = positions[i].y - positions[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          minClearance = Math.min(minClearance, dist);
+        }
+      }
+    }
+
+    // 허용 편차 계산: (최소 거리 - 충돌 임계값) / 2
+    // 두 댄서가 서로를 향해 벗어날 수 있으므로 2로 나눔
+    const deviationTolerance = Math.max(0, (minClearance - COLLISION_THRESHOLD) / 2);
+
+    return {
+      minClearance: Math.round(minClearance * 100) / 100,
+      deviationTolerance: Math.round(deviationTolerance * 100) / 100,
+    };
+  }, []);
+
+  // Helper: Generate path visualization image as base64
+  const generatePathVisualization = useCallback((
+    paths: GeneratedPath[],
+    stageWidth: number,
+    stageHeight: number,
+    label: string
+  ): string => {
+    const canvas = document.createElement('canvas');
+    const scale = 40; // pixels per meter
+    const padding = 30;
+    canvas.width = stageWidth * scale + padding * 2;
+    canvas.height = stageHeight * scale + padding * 2;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+
+    // Background
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Stage area
+    ctx.fillStyle = 'rgba(40, 40, 60, 0.5)';
+    ctx.fillRect(padding, padding, stageWidth * scale, stageHeight * scale);
+
+    // Grid lines
+    ctx.strokeStyle = '#2a2a3e';
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= stageWidth; x++) {
+      ctx.beginPath();
+      ctx.moveTo(padding + x * scale, padding);
+      ctx.lineTo(padding + x * scale, padding + stageHeight * scale);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= stageHeight; y++) {
+      ctx.beginPath();
+      ctx.moveTo(padding, padding + y * scale);
+      ctx.lineTo(padding + stageWidth * scale, padding + y * scale);
+      ctx.stroke();
+    }
+
+    // Draw paths for each dancer
+    const colors = [
+      '#FF6B6B', '#3498DB', '#2ECC71', '#FFD93D', '#9B59B6', '#FF8C42', '#4ECDC4', '#E056FD',
+      '#1E90FF', '#27AE60', '#F79F1F', '#E74C3C', '#1ABC9C', '#6C5CE7', '#FF69B4', '#BADC58',
+    ];
+
+    paths.forEach((dancerPath, idx) => {
+      const color = colors[idx % colors.length];
+
+      // Draw path line
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+
+      dancerPath.path.forEach((point, i) => {
+        const x = padding + point.x * scale;
+        const y = padding + (stageHeight - point.y) * scale;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      // Draw start position (filled circle)
+      const start = dancerPath.path[0];
+      if (start) {
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(padding + start.x * scale, padding + (stageHeight - start.y) * scale, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(idx + 1), padding + start.x * scale, padding + (stageHeight - start.y) * scale);
+      }
+
+      // Draw end position (ring)
+      const end = dancerPath.path[dancerPath.path.length - 1];
+      if (end) {
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(padding + end.x * scale, padding + (stageHeight - end.y) * scale, 8, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    });
+
+    // Label
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Option ${label}`, padding, 20);
+
+    return canvas.toDataURL('image/png').split(',')[1]; // Return base64 without prefix
+  }, []);
+
+  // Gemini ranking function - hybrid approach with anonymization + coordinates + images
   const rankPathsWithGemini = useCallback(async (
     allPaths: Map<PathAlgorithm, GeneratedPath[]>,
     stageWidth: number,
     stageHeight: number,
-    totalCounts: number
+    totalCounts: number,
+    transitionKey: string
   ) => {
     setIsRankingWithGemini(true);
-    setGeminiPick(null);
+    setRankingTransitionKey(transitionKey);
 
     try {
-      // Prepare path data for Gemini
-      const pathSummaries = Array.from(allPaths.entries()).map(([algo, paths]) => {
-        // Calculate metrics for each algorithm
-        const totalDistance = paths.reduce((sum, p) => {
-          return sum + p.path.reduce((acc, point, i, arr) => {
-            if (i === 0) return 0;
-            const prev = arr[i - 1];
-            return acc + Math.sqrt((point.x - prev.x) ** 2 + (point.y - prev.y) ** 2);
-          }, 0);
-        }, 0);
+      // Create anonymized mapping (A, B, C, ...)
+      const algorithms = Array.from(allPaths.keys());
+      const anonymousLabels = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const algoToAnon = new Map<PathAlgorithm, string>();
+      const anonToAlgo = new Map<string, PathAlgorithm>();
 
-        // Check for potential collisions (simplified)
-        let collisionRisk = 0;
-        for (let t = 0; t <= totalCounts; t += 0.5) {
-          const positions = paths.map(p => {
-            const point = p.path.find(pt => pt.t >= t) || p.path[p.path.length - 1];
-            return { x: point?.x || 0, y: point?.y || 0 };
-          });
-          for (let i = 0; i < positions.length; i++) {
-            for (let j = i + 1; j < positions.length; j++) {
-              const dist = Math.sqrt((positions[i].x - positions[j].x) ** 2 + (positions[i].y - positions[j].y) ** 2);
-              if (dist < 0.8) collisionRisk++;
+      algorithms.forEach((algo, idx) => {
+        const label = anonymousLabels[idx];
+        algoToAnon.set(algo, label);
+        anonToAlgo.set(label, algo);
+      });
+
+      // Prepare data for each algorithm
+      // Build option data with coordinates + 경로 안정성 (path stability)
+      // 대규모 대형(10+ dancers)의 경우 경로 포인트를 샘플링하여 API 한계 방지
+      const MAX_PATH_POINTS = 10; // 경로당 최대 포인트 수 (시작, 중간, 끝 포함)
+
+      const optionData = Array.from(allPaths.entries()).map(([algo, paths]) => {
+        const anonLabel = algoToAnon.get(algo)!;
+
+        // 경로 안정성 계산 (Path Stability)
+        const stability = calculatePathStability(paths);
+
+        // Extract dancer coordinates (샘플링하여 데이터 크기 제한)
+        const allDancerPaths = paths.map((dancerPath, dancerIdx) => {
+          const fullPath = dancerPath.path;
+          let sampledPath = fullPath;
+
+          // 경로가 MAX_PATH_POINTS보다 길면 균등 샘플링
+          if (fullPath.length > MAX_PATH_POINTS) {
+            sampledPath = [];
+            for (let i = 0; i < MAX_PATH_POINTS; i++) {
+              const idx = Math.floor(i * (fullPath.length - 1) / (MAX_PATH_POINTS - 1));
+              sampledPath.push(fullPath[idx]);
             }
           }
-        }
+
+          return {
+            dancer: dancerIdx + 1,
+            path: sampledPath.map(point => ({
+              t: Math.round(point.t * 10) / 10,
+              x: Math.round(point.x * 10) / 10,
+              y: Math.round(point.y * 10) / 10,
+            })),
+          };
+        });
 
         return {
-          algorithm: algo,
-          label: PATH_ALGORITHM_LABELS[algo],
-          totalDistance: Math.round(totalDistance * 10) / 10,
-          collisionRisk,
-          pathCount: paths.length,
+          option: anonLabel,
+          // 경로 안정성: 각 댄서가 경로에서 벗어나도 안전한 거리 (m)
+          pathStability: {
+            minClearance: stability.minClearance,        // 댄서 간 최소 거리
+            deviationTolerance: stability.deviationTolerance, // 허용 편차
+          },
+          dancerPaths: allDancerPaths,
         };
       });
 
-      const prompt = `You are a professional choreographer evaluating dance movement paths.
+      // Generate visualization images
+      const images: GeminiImageData[] = [];
+      for (const [algo, paths] of allPaths.entries()) {
+        const label = algoToAnon.get(algo)!;
+        const base64 = generatePathVisualization(paths, stageWidth, stageHeight, label);
+        if (base64) {
+          images.push({ base64, mimeType: 'image/png' });
+        }
+      }
 
-Stage: ${stageWidth}m x ${stageHeight}m
-Duration: ${totalCounts} counts
-Dancers: ${allPaths.get('hybrid_by_claude_cubic')?.length || 0}
+      const prompt = `You are a professional choreographer. Analyze the dancer movement paths and select the best option.
 
-Here are paths generated by different algorithms:
-${JSON.stringify(pathSummaries, null, 2)}
+## Stage Info
+- Size: ${stageWidth}m x ${stageHeight}m
+- Duration: ${totalCounts} counts
+- Dancers: ${allPaths.get(algorithms[0])?.length || 0}
 
-Evaluate each algorithm based on:
-1. Collision Safety (lower collisionRisk is better)
-2. Path Efficiency (reasonable totalDistance, not too long)
-3. Aesthetic Flow (balanced movement)
+## Path Options (${algorithms.length} total)
+Each option contains:
+- pathStability: How much each dancer can deviate from the planned path without collision
+  - minClearance: Minimum distance between any two dancers (m)
+  - deviationTolerance: Each dancer can deviate this much and still be safe (m)
+- dancerPaths: Full movement coordinates {t: time, x: x-coord, y: y-coord}
 
-Return ONLY a JSON object with scores (0-100) for each algorithm:
-{"scores": {"hybrid_by_claude": 85, "hybrid_by_claude_cubic": 92, ...}, "best": "algorithm_name", "reason": "brief reason"}`;
+${JSON.stringify(optionData, null, 2)}
 
-      const response = await callGeminiAPI(prompt);
+## Attached Images
+Visualization of each path option showing:
+- Filled circle: Start position (number = dancer ID)
+- Ring: End position
+- Line: Movement path
+
+## Evaluation Criteria
+1. **Path Stability**: Higher deviationTolerance = safer for real performance (dancers aren't robots)
+2. **Path Efficiency**: Minimal travel distance without unnecessary detours
+3. **Path Smoothness**: Natural curves without abrupt direction changes
+4. **Visual Balance**: Overall harmony and aesthetics of the paths
+
+## Response Guidelines
+- Do NOT mention option labels (A, B, etc.) in the reasons text
+- Do NOT mention specific numbers or distances (e.g., "0.54m", "1.2m", "85%")
+- Use qualitative descriptions only (e.g., "high stability", "low collision risk", "smooth transitions")
+- Keep reasons concise (1-2 sentences each)
+
+## Response Format (JSON only)
+{
+  "scores": {"A": 85, "B": 92, ...},
+  "reasons": {
+    "A": "Path characteristics - pros/cons without mentioning option label",
+    "B": "Path characteristics - pros/cons without mentioning option label",
+    ...
+  },
+  "best": "B",
+  "bestReason": "Why this path is best (1-2 sentences)"
+}`;
+
+      const response = await callGeminiAPIWithImages(prompt, images);
 
       // Parse response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const result = JSON.parse(jsonMatch[0]);
 
-        // Update scores
+        // Build scores map - de-anonymize from A,B,C to actual algorithm names
         const scores = new Map<PathAlgorithm, number>();
-        for (const [algo, score] of Object.entries(result.scores || {})) {
-          scores.set(algo as PathAlgorithm, score as number);
+        for (const [anonLabel, score] of Object.entries(result.scores || {})) {
+          const algo = anonToAlgo.get(anonLabel);
+          if (algo) {
+            scores.set(algo, score as number);
+          }
         }
-        setGeminiRankingScores(scores);
 
-        // Set Gemini's pick
+        // Build reasons map - de-anonymize
+        const reasons = new Map<PathAlgorithm, string>();
+        for (const [anonLabel, reason] of Object.entries(result.reasons || {})) {
+          const algo = anonToAlgo.get(anonLabel);
+          if (algo) {
+            reasons.set(algo, reason as string);
+          }
+        }
+
+        // Store result for this transition - de-anonymize best pick
         if (result.best) {
-          setGeminiPick(result.best as PathAlgorithm);
-          showToast(`🏆 Gemini's Pick: ${PATH_ALGORITHM_LABELS[result.best as PathAlgorithm]}`, 'success', 8000);
+          const bestAlgo = anonToAlgo.get(result.best);
+          if (bestAlgo) {
+            const transitionResult: GeminiTransitionResult = {
+              pick: bestAlgo,
+              scores,
+              reasons,
+              pickReason: result.bestReason || '',
+            };
+
+            setGeminiResults(prev => {
+              const newMap = new Map(prev);
+              newMap.set(transitionKey, transitionResult);
+              return newMap;
+            });
+
+            showToast(`🏆 Gemini's Pick: ${PATH_ALGORITHM_LABELS[bestAlgo]}`, 'success', 8000);
+          }
         }
       }
     } catch (error) {
       console.error('Gemini ranking failed:', error);
-      showToast('Gemini ranking failed', 'error', 5000);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
+        showToast('Gemini ranking timeout - try with fewer dancers', 'error', 5000);
+      } else if (errorMessage.includes('413') || errorMessage.includes('too large')) {
+        showToast('Request too large - path data exceeded limit', 'error', 5000);
+      } else {
+        showToast(`Gemini ranking failed: ${errorMessage.slice(0, 50)}`, 'error', 5000);
+      }
     } finally {
       setIsRankingWithGemini(false);
+      setRankingTransitionKey(null);
     }
-  }, [showToast]);
+  }, [showToast, generatePathVisualization]);
 
   // Generate paths for current formation - ALL ALGORITHMS
   const handleGeneratePaths = useCallback(async () => {
@@ -1105,8 +1401,6 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
     }
 
     setIsGeneratingPaths(true);
-    setGeminiPick(null);
-    setGeminiRankingScores(new Map());
 
     const currentFormation = project.formations[currentIndex];
     const nextFormation = project.formations[currentIndex + 1];
@@ -1146,7 +1440,7 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
       setTimeout(() => setPathGenerationStatus(null), 2000);
 
       // Start Gemini ranking in background
-      rankPathsWithGemini(algorithmPaths, project.stageWidth, project.stageHeight, currentFormation.duration);
+      rankPathsWithGemini(algorithmPaths, project.stageWidth, project.stageHeight, currentFormation.duration, pathKey);
 
       // Generate cue sheet in background using default algorithm
       const defaultPaths = algorithmPaths.get('hybrid_by_claude_cubic') || [];
@@ -1258,6 +1552,24 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
   const currentPaths = getCurrentPaths();
   const hasNextFormation = selectedFormation && project.formations.findIndex(f => f.id === selectedFormationId) < project.formations.length - 1;
 
+  // Compute current transition info for UI display
+  const currentTransitionInfo = useMemo(() => {
+    if (!selectedFormation) return null;
+    const currentIndex = project.formations.findIndex(f => f.id === selectedFormationId);
+    if (currentIndex === -1 || currentIndex >= project.formations.length - 1) return null;
+
+    const current = project.formations[currentIndex];
+    const next = project.formations[currentIndex + 1];
+    const pathKey = `${current.id}->${next.id}`;
+    const currentLabel = current.label || String(currentIndex + 1);
+    const nextLabel = next.label || String(currentIndex + 2);
+
+    return { pathKey, currentLabel, nextLabel, currentIndex, nextIndex: currentIndex + 1 };
+  }, [selectedFormation, selectedFormationId, project.formations]);
+
+  // Get Gemini results for current transition
+  const currentGeminiResult = currentTransitionInfo ? geminiResults.get(currentTransitionInfo.pathKey) : null;
+
   // Check if all paths are generated (for any algorithm)
   const allPathsGenerated = project.formations.length < 2 ||
     project.formations.slice(0, -1).every((f, i) => {
@@ -1266,15 +1578,33 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
       return allAlgorithmPaths.has(pathKey) && (allAlgorithmPaths.get(pathKey)?.size || 0) > 0;
     });
 
-  // Change stage size
+  // Change stage size - scale dancer positions proportionally
   const handleStageSizeChange = (width: number, height: number) => {
     saveToHistory();
-    setProject(prev => ({
-      ...prev,
-      stageWidth: width,
-      stageHeight: height,
-      updatedAt: new Date().toISOString(),
-    }));
+    setProject(prev => {
+      const scaleX = width / prev.stageWidth;
+      const scaleY = height / prev.stageHeight;
+
+      // Scale all dancer positions in all formations
+      const scaledFormations = prev.formations.map(formation => ({
+        ...formation,
+        positions: formation.positions.map(pos => ({
+          ...pos,
+          position: {
+            x: Math.max(0.5, Math.min(width - 0.5, pos.position.x * scaleX)),
+            y: Math.max(0.5, Math.min(height - 0.5, pos.position.y * scaleY)),
+          },
+        })),
+      }));
+
+      return {
+        ...prev,
+        stageWidth: width,
+        stageHeight: height,
+        formations: scaledFormations,
+        updatedAt: new Date().toISOString(),
+      };
+    });
   };
 
   // Apply preset formation
@@ -1282,9 +1612,10 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
     if (!selectedFormation) return;
 
     const colors = [
-      '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
-      '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F',
-      '#BB8FCE', '#85C1E9', '#F8B500', '#00CED1',
+      '#FF6B6B', '#3498DB', '#2ECC71', '#FFD93D', '#9B59B6', '#FF8C42', '#4ECDC4', '#E056FD',
+      '#1E90FF', '#27AE60', '#F79F1F', '#E74C3C', '#1ABC9C', '#6C5CE7', '#FF69B4', '#BADC58',
+      '#2980B9', '#A8E6CF', '#F9CA24', '#E67E22', '#16A085', '#686DE0', '#E91E63', '#A4DE02',
+      '#22A6B3', '#1E8449', '#F1C40F', '#8E44AD', '#48C9B0', '#BE2EDD', '#96CEB4', '#45B7D1', '#7B68EE', '#00CED1', '#D63384',
     ];
 
     // Apply preset to first N dancers, keep rest at current or exit positions
@@ -1462,25 +1793,26 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
     : getInterpolatedPositions();
 
   return (
-    <div className="timeline-editor">
-      {/* Header */}
-      <header className="timeline-header">
-        <div className="header-left">
-          <input
-            type="text"
-            className="project-name-input"
-            value={project.name}
-            onFocus={() => saveToHistory()}
-            onChange={(e) => setProject(prev => ({ ...prev, name: e.target.value }))}
-          />
-        </div>
-        <div className="header-center">
+    <div className={`timeline-editor ${uiMode === 'rehearsal' ? 'rehearsal-mode' : 'edit-mode'}`}>
+      {/* Header - Edit mode only */}
+      {uiMode === 'edit' && (
+        <header className="timeline-header">
+          <div className="header-left">
+            <input
+              type="text"
+              className="project-name-input"
+              value={project.name}
+              onFocus={() => saveToHistory()}
+              onChange={(e) => setProject(prev => ({ ...prev, name: e.target.value }))}
+            />
+          </div>
+          <div className="header-center">
           <div className="header-control">
             <label>Dancers:</label>
             <input
               type="number"
               min={1}
-              max={24}
+              max={35}
               value={dancerCountInput}
               onChange={(e) => setDancerCountInput(e.target.value)}
               onKeyDown={(e) => {
@@ -1527,11 +1859,38 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
             onChange={handleLoad}
           />
         </div>
-      </header>
+        </header>
+      )}
+
+      {/* Rehearsal Mode Header */}
+      {uiMode === 'rehearsal' && (
+        <header className="rehearsal-header">
+          <div className="rehearsal-title">
+            <h2>🎭 {project.name}</h2>
+            <span className="rehearsal-badge">Rehearsal Mode</span>
+          </div>
+          <div className="rehearsal-controls">
+            <button
+              className={`play-btn ${isPlaying ? 'playing' : ''}`}
+              onClick={() => setIsPlaying(!isPlaying)}
+            >
+              {isPlaying ? '⏸️ Pause' : '▶️ Play'}
+            </button>
+            <span className="count-badge">Count: {Math.floor(currentCount)}</span>
+            <button
+              className="mode-toggle-btn"
+              onClick={() => setUiMode('edit')}
+            >
+              ✏️ Edit Mode
+            </button>
+          </div>
+        </header>
+      )}
 
       {/* Main content */}
       <div className="timeline-main">
-        {/* Left Panel - Formation Presets */}
+        {/* Left Panel - Formation Presets (Edit mode only) */}
+        {uiMode === 'edit' && (
         <div className="presets-panel">
           <h3>Formation Presets</h3>
           <div className="preset-filter">
@@ -1562,22 +1921,106 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
               ))}
           </div>
         </div>
+        )}
 
         {/* Center - Stage view */}
-        <div className="stage-panel">
+        <div className={`stage-panel ${uiMode === 'rehearsal' ? 'stage-panel-fullwidth' : ''}`}>
           <div className="stage-header">
             <h3>{selectedFormation?.label || `Formation ${selectedFormation ? project.formations.indexOf(selectedFormation) + 1 : '-'}`}</h3>
             <span className="count-display">Count: {Math.floor(currentCount)}</span>
+            {/* POV (Point of View) Selector */}
+            <div className="pov-selector">
+              <label>POV:</label>
+              <select
+                value={typeof povMode === 'number' ? `dancer-${povMode}` : povMode}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === 'choreographer') {
+                    setPovMode('choreographer');
+                  } else if (value.startsWith('dancer-')) {
+                    setPovMode(parseInt(value.replace('dancer-', ''), 10));
+                  }
+                }}
+                className="pov-select"
+              >
+                <option value="choreographer">Choreographer</option>
+                {selectedFormation?.positions.map((_, idx) => (
+                  <option key={idx} value={`dancer-${idx}`}>
+                    Dancer {idx + 1}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {/* Mode Toggle Button */}
+            {uiMode === 'edit' && (
+              <button
+                className="mode-toggle-btn rehearsal-btn"
+                onClick={() => setUiMode('rehearsal')}
+                title="Switch to Rehearsal Mode"
+              >
+                🎭 Rehearsal
+              </button>
+            )}
           </div>
+
+          {/* Choreographer POV: General Notes above stage (Rehearsal mode only) */}
+          {uiMode === 'rehearsal' && povMode === 'choreographer' && cueSheet && cueSheet.generalNotes && cueSheet.generalNotes.length > 0 && (
+            <div className="pov-cue-sheet pov-general-notes">
+              <div className="pov-cue-card">
+                <div className="pov-cue-header">
+                  <span className="pov-dancer-label">👁️ General Notes</span>
+                </div>
+                <div className="pov-cue-list">
+                  {cueSheet.generalNotes.map((note, i) => (
+                    <div key={i} className="pov-cue-item">
+                      <span className="pov-cue-instruction">{note}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Individual Dancer Cue Sheet (POV mode) - Shows above stage (Rehearsal mode only) */}
+          {uiMode === 'rehearsal' && typeof povMode === 'number' && cueSheet && (
+            <div className="pov-cue-sheet">
+              {cueSheet.dancers
+                .filter((dancer: DancerCueSheet) => dancer.dancerId === povMode)
+                .map((dancer: DancerCueSheet) => (
+                  <div key={dancer.dancerId} className="pov-cue-card">
+                    <div className="pov-cue-header">
+                      <span className="pov-dancer-label">🎯 {dancer.dancerLabel}</span>
+                      <span className="pov-dancer-summary">{dancer.summary}</span>
+                    </div>
+                    <div className="pov-cue-list">
+                      {dancer.cues.map((cue, i) => {
+                        // Parse timeRange like "0~4" or "0~4 count" to check if current
+                        const timeMatch = cue.timeRange.match(/(\d+)~(\d+)/);
+                        const isCurrentCue = timeMatch
+                          ? currentCount >= parseInt(timeMatch[1]) && currentCount < parseInt(timeMatch[2])
+                          : false;
+                        return (
+                          <div key={i} className={`pov-cue-item ${isCurrentCue ? 'pov-cue-active' : ''}`}>
+                            <span className="pov-cue-time">{cue.timeRange}</span>
+                            <span className="pov-cue-instruction">{cue.instruction}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+
           <Stage
             stageWidth={project.stageWidth}
             stageHeight={project.stageHeight}
             scale={scale}
             svgRef={svgRef}
-            onMouseDown={handleStageMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
+            onMouseDown={uiMode === 'edit' ? handleStageMouseDown : undefined}
+            onMouseMove={uiMode === 'edit' ? handleMouseMove : undefined}
+            onMouseUp={uiMode === 'edit' ? handleMouseUp : undefined}
+            onMouseLeave={uiMode === 'edit' ? handleMouseUp : undefined}
           >
             {/* Exit zones (1.5m on each side) */}
             <rect
@@ -1652,6 +2095,12 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
 
               if (!path || path.length < 2) return null;
 
+              // POV highlighting for paths
+              const isPovPath = typeof povMode === 'number' && povMode === pathData.dancerId;
+              const isPathDimmed = typeof povMode === 'number' && povMode !== pathData.dancerId;
+              const pathOpacity = isPathDimmed ? 0.2 : (isPovPath ? 1 : 0.6);
+              const pathStrokeWidth = isPovPath ? 4 : 2;
+
               // Create SVG path from points
               const pathPoints = path.map(p => stageToScreen({ x: p.x, y: p.y }, scale, project.stageHeight));
               const pathD = pathPoints.reduce((acc, p, i) => {
@@ -1664,34 +2113,45 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
 
               return (
                 <g key={`path-${pathData.dancerId}`}>
+                  {/* POV glow effect */}
+                  {isPovPath && (
+                    <path
+                      d={pathD}
+                      stroke="#FFD700"
+                      strokeWidth={8}
+                      fill="none"
+                      opacity={0.3}
+                      style={{ pointerEvents: 'none', filter: 'blur(4px)' }}
+                    />
+                  )}
                   {/* Path curve */}
                   <path
                     d={pathD}
-                    stroke={color}
-                    strokeWidth={2}
-                    strokeDasharray="6,3"
+                    stroke={isPovPath ? '#FFD700' : color}
+                    strokeWidth={pathStrokeWidth}
+                    strokeDasharray={isPovPath ? 'none' : '6,3'}
                     fill="none"
-                    opacity={0.6}
+                    opacity={pathOpacity}
                     style={{ pointerEvents: 'none' }}
                   />
                   {/* Arrow head at end */}
                   <circle
                     cx={endScreen.x}
                     cy={endScreen.y}
-                    r={6}
-                    fill={color}
-                    opacity={0.8}
+                    r={isPovPath ? 8 : 6}
+                    fill={isPovPath ? '#FFD700' : color}
+                    opacity={isPathDimmed ? 0.3 : 0.8}
                     style={{ pointerEvents: 'none' }}
                   />
                   {/* Start marker (hollow) */}
                   <circle
                     cx={startScreen.x}
                     cy={startScreen.y}
-                    r={6}
+                    r={isPovPath ? 8 : 6}
                     fill="none"
-                    stroke={color}
-                    strokeWidth={2}
-                    opacity={0.8}
+                    stroke={isPovPath ? '#FFD700' : color}
+                    strokeWidth={isPovPath ? 3 : 2}
+                    opacity={isPathDimmed ? 0.3 : 0.8}
                     style={{ pointerEvents: 'none' }}
                   />
                 </g>
@@ -1701,6 +2161,8 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
             {/* Dancers */}
             {displayPositions.map((dancer) => {
               const screenPos = stageToScreen(dancer.position, scale, project.stageHeight);
+              const isPovDancer = typeof povMode === 'number' && povMode === dancer.dancerId;
+              const isDimmed = typeof povMode === 'number' && povMode !== dancer.dancerId;
               return (
                 <DancerCircle
                   key={dancer.dancerId}
@@ -1709,8 +2171,10 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
                   y={screenPos.y}
                   radius={0.4 * scale}
                   color={dancer.color}
-                  isSelected={selectedDancers.has(dancer.dancerId)}
-                  onMouseDown={(e) => handleDancerMouseDown(dancer.dancerId, e)}
+                  isSelected={uiMode === 'edit' && selectedDancers.has(dancer.dancerId)}
+                  isPovHighlight={isPovDancer}
+                  isDimmed={isDimmed}
+                  onMouseDown={uiMode === 'edit' ? (e) => handleDancerMouseDown(dancer.dancerId, e) : undefined}
                 />
               );
             })}
@@ -1744,7 +2208,8 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
           </div>
         </div>
 
-        {/* Properties panel */}
+        {/* Properties panel (Edit mode only) */}
+        {uiMode === 'edit' && (
         <div className="properties-panel">
           <h3>Formation Properties</h3>
           {selectedFormation ? (
@@ -1778,9 +2243,34 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
                 <span className="property-value">{selectedFormation.startCount}</span>
               </div>
 
+              {/* Quick actions */}
+              <div className="formation-actions">
+                <button
+                  className="action-btn exit-all-btn"
+                  onClick={() => {
+                    saveToHistory();
+                    updateFormation(selectedFormation.id, {
+                      positions: selectedFormation.positions.map(pos => {
+                        const exitPos = calculateOptimalExitPosition(pos.position, project.stageWidth, project.stageHeight);
+                        return { ...pos, position: exitPos };
+                      }),
+                    });
+                  }}
+                  title="모든 댄서를 가장 가까운 퇴장 구역으로 이동"
+                >
+                  🚪 모두 퇴장
+                </button>
+              </div>
+
               {/* Path generation section */}
               <div className="path-section">
                 <h4>Movement Paths</h4>
+                {/* Show current transition context */}
+                {currentTransitionInfo && (
+                  <div className="transition-context">
+                    대형 {currentTransitionInfo.currentLabel} → 대형 {currentTransitionInfo.nextLabel}
+                  </div>
+                )}
 
                 {/* Algorithm selector */}
                 <div className="algorithm-selector">
@@ -1792,40 +2282,51 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
                   >
                     {Object.entries(PATH_ALGORITHM_LABELS).map(([key, label]) => (
                       <option key={key} value={key}>
-                        {label}{geminiPick === key ? ' ★' : ''}
+                        {label}{currentGeminiResult?.pick === key ? ' ★' : ''}
                       </option>
                     ))}
                   </select>
-                  {geminiPick && pathAlgorithm === geminiPick && (
+                  {currentGeminiResult?.pick && pathAlgorithm === currentGeminiResult.pick && (
                     <span className="gemini-pick-badge">Gemini's Pick</span>
                   )}
                 </div>
 
                 {/* Gemini ranking status */}
-                {isRankingWithGemini && (
+                {isRankingWithGemini && rankingTransitionKey === currentTransitionInfo?.pathKey && (
                   <div className="gemini-ranking-status">
                     <span className="loading-spinner small" />
                     <span>Gemini evaluating algorithms...</span>
                   </div>
                 )}
 
-                {/* Gemini scores display */}
-                {geminiRankingScores.size > 0 && !isRankingWithGemini && (
+                {/* Gemini scores display - show for current transition */}
+                {currentGeminiResult && !isRankingWithGemini && (
                   <div className="gemini-scores">
-                    <details>
-                      <summary>View Gemini Scores</summary>
+                    <details open>
+                      <summary>Gemini 평가 결과</summary>
+                      {/* Best pick reason */}
+                      {currentGeminiResult.pickReason && (
+                        <div className="gemini-pick-reason">
+                          <strong>🏆 선택 이유:</strong> {currentGeminiResult.pickReason}
+                        </div>
+                      )}
                       <div className="score-list">
-                        {Array.from(geminiRankingScores.entries())
+                        {Array.from(currentGeminiResult.scores.entries())
                           .sort((a, b) => b[1] - a[1])
                           .map(([algo, score]) => (
                             <div
                               key={algo}
-                              className={`score-item ${algo === geminiPick ? 'pick' : ''} ${algo === pathAlgorithm ? 'selected' : ''}`}
+                              className={`score-item ${algo === currentGeminiResult.pick ? 'pick' : ''} ${algo === pathAlgorithm ? 'selected' : ''}`}
                               onClick={() => setPathAlgorithm(algo)}
                             >
-                              <span className="algo-name">{PATH_ALGORITHM_LABELS[algo]}</span>
-                              <span className="algo-score">{score}</span>
-                              {algo === geminiPick && <span className="pick-star">★</span>}
+                              <div className="score-item-header">
+                                <span className="algo-name">{PATH_ALGORITHM_LABELS[algo]}</span>
+                                <span className="algo-score">{score}</span>
+                                {algo === currentGeminiResult.pick && <span className="pick-star">★</span>}
+                              </div>
+                              {currentGeminiResult.reasons.get(algo) && (
+                                <div className="algo-reason">{currentGeminiResult.reasons.get(algo)}</div>
+                              )}
                             </div>
                           ))}
                       </div>
@@ -1874,6 +2375,7 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
             <p className="no-selection">No formation selected</p>
           )}
         </div>
+        )}
       </div>
 
       {/* Playback controls */}
@@ -1944,7 +2446,7 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
         <div className="cue-sheet-modal-overlay" onClick={() => setShowCueSheet(false)}>
           <div className="cue-sheet-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cue-sheet-header">
-              <h2>{cueSheet.title || 'Cue Sheet'}</h2>
+              <h2>{cueSheet.title || 'All Cue Sheets'}</h2>
               <div className="cue-sheet-meta">
                 <span>Stage: {cueSheet.stageInfo}</span>
                 <span>Duration: {cueSheet.totalCounts} counts</span>
@@ -1952,8 +2454,9 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
               <button className="cue-sheet-close" onClick={() => setShowCueSheet(false)}>×</button>
             </div>
 
+            {/* General Notes */}
             {cueSheet.generalNotes && cueSheet.generalNotes.length > 0 && (
-              <div className="cue-sheet-notes">
+              <div className="cue-sheet-notes cue-sheet-notes-prominent">
                 <h4>General Notes</h4>
                 <ul>
                   {cueSheet.generalNotes.map((note, i) => (
@@ -1963,6 +2466,7 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
               </div>
             )}
 
+            {/* All Dancers */}
             <div className="cue-sheet-dancers">
               {cueSheet.dancers.map((dancer: DancerCueSheet) => (
                 <div key={dancer.dancerId} className="dancer-cue-card">
@@ -2002,7 +2506,7 @@ Return ONLY a JSON object with scores (0-100) for each algorithm:
           className="cue-sheet-ready-btn"
           onClick={() => setShowCueSheet(true)}
         >
-          📋 View Cue Sheet
+          📋 View All Cue Sheets
         </button>
       )}
 

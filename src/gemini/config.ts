@@ -72,3 +72,60 @@ export async function callGeminiAPI(prompt: string, config?: Partial<typeof GEMI
 
   return text;
 }
+
+/**
+ * Image data for Gemini API
+ */
+export interface GeminiImageData {
+  base64: string;  // Base64 encoded image data (without data URL prefix)
+  mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
+}
+
+/**
+ * Call Gemini API with images through server
+ */
+export async function callGeminiAPIWithImages(
+  prompt: string,
+  images: GeminiImageData[],
+  config?: Partial<typeof GEMINI_CONFIG>
+): Promise<string> {
+  // Build parts array: text first, then images
+  const parts: Array<{ text: string } | { inline_data: { mime_type: string; data: string } }> = [
+    { text: prompt },
+  ];
+
+  // Add images
+  for (const img of images) {
+    parts.push({
+      inline_data: {
+        mime_type: img.mimeType,
+        data: img.base64,
+      },
+    });
+  }
+
+  const response = await fetch(GEMINI_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      contents: [{ parts }],
+      generationConfig: { ...GEMINI_CONFIG, ...config },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(`Gemini API error: ${response.status} - ${errorData.error || 'Unknown error'}`);
+  }
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!text) {
+    throw new Error('Gemini API response is empty.');
+  }
+
+  return text;
+}
