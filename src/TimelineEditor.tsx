@@ -172,12 +172,15 @@ const TimelineEditor: React.FC = () => {
   // Dancer swap state (double-click to swap)
   const [swapSourceDancerId, setSwapSourceDancerId] = useState<number | null>(null);
 
-  // Quick swap popup state (long-press to show all dancers)
+  // Quick swap popup state (right-click to show all dancers)
   const [quickSwapPopup, setQuickSwapPopup] = useState<{
     sourceDancerId: number;
     screenX: number;
     screenY: number;
   } | null>(null);
+
+  // Clipboard for copy/paste dancer positions
+  const [copiedPositions, setCopiedPositions] = useState<Map<number, { x: number; y: number }> | null>(null);
 
   // Path state - now stores paths for ALL algorithms per transition
   // Key format: "formationId->formationId:algorithm"
@@ -412,8 +415,8 @@ const TimelineEditor: React.FC = () => {
           showToast('Switched to Edit Mode', 'info', 2000);
         }
       }
-      // C key: Toggle cue sheet collapse (only in rehearsal mode, not typing)
-      if (e.key.toLowerCase() === 'c' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
+      // C key: Toggle cue sheet collapse (only in rehearsal mode, not typing) - but not Ctrl+C
+      if (e.key.toLowerCase() === 'c' && !(e.ctrlKey || e.metaKey) && !['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
         if (uiMode === 'rehearsal') {
           setIsCueSheetCollapsed(prev => !prev);
         }
@@ -432,6 +435,56 @@ const TimelineEditor: React.FC = () => {
 
   // Stage scale
   const scale = calculateScale(project.stageWidth, project.stageHeight);
+
+  // Keyboard shortcut for copy/paste dancer positions
+  useEffect(() => {
+    const handleCopyPaste = (e: KeyboardEvent) => {
+      if (!['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
+        // Ctrl+C: Copy selected dancers' positions
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+          if (uiMode === 'edit' && selectedDancers.size > 0 && selectedFormation) {
+            e.preventDefault();
+            const positions = new Map<number, { x: number; y: number }>();
+            selectedFormation.positions.forEach(p => {
+              if (selectedDancers.has(p.dancerId)) {
+                positions.set(p.dancerId, { x: p.position.x, y: p.position.y });
+              }
+            });
+            setCopiedPositions(positions);
+            showToast(`Copied ${positions.size} dancer positions`, 'success', 1500);
+          }
+        }
+        // Ctrl+V: Paste copied positions to current formation
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+          if (uiMode === 'edit' && copiedPositions && copiedPositions.size > 0 && selectedFormation) {
+            e.preventDefault();
+            saveToHistory();
+            const formationId = selectedFormation.id;
+            setProject(prev => ({
+              ...prev,
+              updatedAt: new Date().toISOString(),
+              formations: prev.formations.map(f => {
+                if (f.id !== formationId) return f;
+                return {
+                  ...f,
+                  positions: f.positions.map(p => {
+                    const copiedPos = copiedPositions.get(p.dancerId);
+                    if (copiedPos) {
+                      return { ...p, position: { x: copiedPos.x, y: copiedPos.y } };
+                    }
+                    return p;
+                  }),
+                };
+              }),
+            }));
+            showToast(`Pasted ${copiedPositions.size} dancer positions`, 'success', 1500);
+          }
+        }
+      }
+    };
+    window.addEventListener('keydown', handleCopyPaste);
+    return () => window.removeEventListener('keydown', handleCopyPaste);
+  }, [uiMode, selectedDancers, selectedFormation, copiedPositions, saveToHistory, showToast]);
 
   // Playback loop
   useEffect(() => {
