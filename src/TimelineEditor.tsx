@@ -3723,21 +3723,18 @@ Score each option 0-100 based on the weighted criteria above.
                           {isCueSheetCollapsed ? '▼' : '▲'}
                         </button>
                       </div>
-                      {!isCueSheetCollapsed && (
-                        <div className="pov-cue-list">
-                          {dancer.cues.map((cue, i) => {
-                            // Parse timeRange like "0~4" or "0~4 count" to check if current
-                            const timeMatch = cue.timeRange.match(/(\d+)~(\d+)/);
-                            const isCurrentCue = timeMatch
-                              ? currentCount >= parseInt(timeMatch[1]) && currentCount < parseInt(timeMatch[2])
-                              : false;
-                            return (
-                              <div key={i} className={`pov-cue-item ${isCurrentCue ? 'pov-cue-active' : ''}`}>
-                                <span className="pov-cue-time">{cue.timeRange}</span>
-                                <span className="pov-cue-instruction">{cue.instruction}</span>
-                              </div>
-                            );
-                          })}
+                      {!isCueSheetCollapsed && currentCueData && (
+                        <div className="pov-cue-current">
+                          <div className="pov-cue-time-badge">{currentCueData.timeRange}</div>
+                          <div className="pov-cue-instruction-main">{currentCueData.instruction}</div>
+                          {currentCueData.notes && (
+                            <div className="pov-cue-notes">{currentCueData.notes}</div>
+                          )}
+                        </div>
+                      )}
+                      {!isCueSheetCollapsed && !currentCueData && (
+                        <div className="pov-cue-current pov-cue-waiting">
+                          <div className="pov-cue-instruction-main">Ready for next cue...</div>
                         </div>
                       )}
                     </div>
