@@ -3660,7 +3660,7 @@ Score each option 0-100 based on the weighted criteria above.
                       { value: 'choreographer', label: 'Choreographer' },
                       ...(selectedFormation?.positions.map((pos) => ({
                         value: `dancer-${pos.dancerId}`,
-                        label: `Dancer ${pos.dancerId}`
+                        label: project.dancerNames?.[pos.dancerId] || `Dancer ${pos.dancerId}`
                       })) || [])
                     ]}
                   />
@@ -3737,7 +3737,7 @@ Score each option 0-100 based on the weighted criteria above.
                   return (
                     <div key={dancer.dancerId} className="pov-cue-card">
                       <div className="pov-cue-header">
-                        <span className="pov-dancer-label">🎯 {dancer.dancerLabel}</span>
+                        <span className="pov-dancer-label">🎯 {project.dancerNames?.[dancer.dancerId] || dancer.dancerLabel}</span>
                         {!isCueSheetCollapsed && <span className="pov-dancer-summary">{dancer.summary}</span>}
                         {isCueSheetCollapsed && currentCueData && (
                           <span className="pov-cue-compact-info">{currentCueData.instruction}</span>
