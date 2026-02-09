@@ -1263,17 +1263,17 @@ function FormationEditor({
                 onClick={undo}
                 disabled={history.length === 0}
                 className="undo-btn"
-                title="Undo (Ctrl+Z)"
+                title={history.length === 0 ? "No actions to undo" : `Undo (${history.length} available) — Ctrl+Z`}
               >
-                ↶
+                ↶{history.length > 0 && <span className="history-badge">{history.length}</span>}
               </button>
               <button
                 onClick={redo}
                 disabled={future.length === 0}
                 className="redo-btn"
-                title="Redo (Ctrl+Shift+Z)"
+                title={future.length === 0 ? "No actions to redo" : `Redo (${future.length} available) — Ctrl+Shift+Z`}
               >
-                ↷
+                ↷{future.length > 0 && <span className="history-badge">{future.length}</span>}
               </button>
             </div>
             <button onClick={onClose} className="close-btn">✕</button>

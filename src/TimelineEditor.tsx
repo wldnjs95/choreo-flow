@@ -8,6 +8,8 @@ import { Stage, screenToStage, stageToScreen } from './components/Stage';
 import { DancerCircle } from './components/DancerCircle';
 import { Timeline } from './components/Timeline';
 import { PresetPreview } from './components/PresetPreview';
+import { SettingsModal } from './components/SettingsModal';
+import { ConfirmDialog } from './components/ConfirmDialog';
 import type {
   ChoreographyProject,
   FormationKeyframe,
@@ -30,6 +32,7 @@ import {
   type ScoreBreakdown,
   type PathEvaluationResult,
   PATH_ALGORITHM_LABELS,
+  PATH_ALGORITHM_DESCRIPTIONS,
   ALGORITHM_PRIORITY,
   FORMATION_PRESETS,
   ALL_PRESETS,
@@ -52,16 +55,63 @@ import { callGeminiAPIWithImages, type GeminiImageData } from './gemini';
 // Keep alias for backwards compatibility
 type GeminiTransitionResult = PathEvaluationResult;
 
+const STORAGE_KEY = 'dance-choreography-autosave';
+const AUTOSAVE_DELAY = 2000; // 2 seconds debounce
+
 const TimelineEditor: React.FC = () => {
-  // Project state
-  const [project, setProject] = useState<ChoreographyProject>(() =>
-    createNewProject('New Choreography', 8, DEFAULT_STAGE_WIDTH, DEFAULT_STAGE_HEIGHT)
-  );
+  // Project state - load from localStorage if available
+  const [project, setProject] = useState<ChoreographyProject>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Validate it has required fields
+        if (parsed.name && parsed.formations && parsed.dancerCount) {
+          return parsed as ChoreographyProject;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load autosave:', e);
+    }
+    return createNewProject('New Choreography', 8, DEFAULT_STAGE_WIDTH, DEFAULT_STAGE_HEIGHT);
+  });
+
+  // Track if we restored from localStorage
+  const [restoredFromStorage] = useState(() => {
+    try {
+      return !!localStorage.getItem(STORAGE_KEY);
+    } catch {
+      return false;
+    }
+  });
 
   // Undo history
   const [undoHistory, setUndoHistory] = useState<ChoreographyProject[]>([]);
   const [redoHistory, setRedoHistory] = useState<ChoreographyProject[]>([]);
   const isUndoingRef = useRef(false); // Prevent saving state during undo/redo
+
+  // Auto-save to localStorage with debounce
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    // Clear previous timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    // Debounced save
+    saveTimeoutRef.current = setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+      } catch (e) {
+        console.warn('Auto-save failed:', e);
+      }
+    }, AUTOSAVE_DELAY);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [project]);
 
   // View state
   const [selectedFormationId, setSelectedFormationId] = useState<string | null>(
@@ -74,7 +124,9 @@ const TimelineEditor: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const animationRef = useRef<number | null>(null);
-  const lastTimeRef = useRef<number>(0);
+  const lastTimeRef = useRef<number | null>(null);
+  const currentCountRef = useRef(0); // For smooth animation without re-renders
+  const frameCountRef = useRef(0); // For throttling state updates
 
   // Metronome state
   const [metronomeEnabled, setMetronomeEnabled] = useState(true);
@@ -114,8 +166,8 @@ const TimelineEditor: React.FC = () => {
   const [isDraggingSelection, setIsDraggingSelection] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  // Dancer count input state
-  const [dancerCountInput, setDancerCountInput] = useState(String(project.dancerCount));
+  // Dancer swap state (double-click to swap)
+  const [swapSourceDancerId, setSwapSourceDancerId] = useState<number | null>(null);
 
   // Path state - now stores paths for ALL algorithms per transition
   // Key format: "formationId->formationId:algorithm"
@@ -124,6 +176,7 @@ const TimelineEditor: React.FC = () => {
   const [pathAlgorithm, setPathAlgorithm] = useState<PathAlgorithm>('natural_curves'); // Default to Cubic
   const [isGeneratingPaths, setIsGeneratingPaths] = useState(false);
   const [pathGenerationStatus, setPathGenerationStatus] = useState<string | null>(null);
+  const [pathGenerationProgress, setPathGenerationProgress] = useState<{ current: number; total: number; algorithm: string } | null>(null);
 
   // Path evaluation state - stored per transition
   const [geminiResults, setGeminiResults] = useState<Map<string, GeminiTransitionResult>>(new Map());
@@ -138,6 +191,11 @@ const TimelineEditor: React.FC = () => {
   const [cueSheetAlgorithm, setCueSheetAlgorithm] = useState<PathAlgorithm | null>(null);
   const [isGeneratingCueSheet, setIsGeneratingCueSheet] = useState(false);
   const [showCueSheet, setShowCueSheet] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showConfirmNew, setShowConfirmNew] = useState(false);
+  // Track which algorithm was used for each transition's cue sheet generation
+  // Key: pathKey (e.g., "formation-1->formation-2"), Value: algorithm used
+  const [cueSheetGeneratedWith, setCueSheetGeneratedWith] = useState<Map<string, PathAlgorithm>>(new Map());
 
   // Preset filter state
   const [presetFilter, setPresetFilter] = useState<'all' | number>('all');
@@ -157,6 +215,20 @@ const TimelineEditor: React.FC = () => {
   // false = audience at bottom of screen
   const [audienceAtTop, setAudienceAtTop] = useState(true);
 
+  // Collapsible sections state (for progressive disclosure)
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const toggleSection = useCallback((section: string) => {
+    setCollapsedSections(prev => {
+      const next = new Set(prev);
+      if (next.has(section)) {
+        next.delete(section);
+      } else {
+        next.add(section);
+      }
+      return next;
+    });
+  }, []);
+
   // Helper: Get paths for current algorithm from allAlgorithmPaths
   const getPathsForAlgorithm = useCallback((pathKey: string, algorithm: PathAlgorithm): GeneratedPath[] | null => {
     const algorithmMap = allAlgorithmPaths.get(pathKey);
@@ -164,13 +236,61 @@ const TimelineEditor: React.FC = () => {
     return algorithmMap.get(algorithm) || null;
   }, [allAlgorithmPaths]);
 
-  // Toast notification state
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  // Toast notification state - Stack based (multiple toasts)
+  interface ToastItem {
+    id: string;
+    message: string;
+    type: 'success' | 'error' | 'info';
+    duration: number;
+    createdAt: number;
+  }
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const toastIdCounter = useRef(0);
+  const MAX_VISIBLE_TOASTS = 4;
 
-  // Show toast notification
+  // Remove a specific toast by ID
+  const removeToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  // Show toast notification - adds to stack
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info', duration = 5000) => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), duration);
+    const id = `toast-${++toastIdCounter.current}-${Date.now()}`;
+    const newToast: ToastItem = { id, message, type, duration, createdAt: Date.now() };
+
+    setToasts(prev => {
+      // Add new toast and limit to max visible
+      const updated = [...prev, newToast];
+      if (updated.length > MAX_VISIBLE_TOASTS) {
+        return updated.slice(-MAX_VISIBLE_TOASTS);
+      }
+      return updated;
+    });
+
+    // Auto-dismiss after duration
+    setTimeout(() => removeToast(id), duration);
+  }, [removeToast]);
+
+  // Show toast on restore from localStorage (only once on mount)
+  useEffect(() => {
+    if (restoredFromStorage) {
+      // Delay slightly to ensure component is fully mounted
+      const timer = setTimeout(() => {
+        showToast('Previous work restored', 'success', 3000);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Onboarding state - check if first time user
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    const hasSeenOnboarding = localStorage.getItem('dance-choreography-onboarding-seen');
+    return !hasSeenOnboarding;
+  });
+
+  const dismissOnboarding = useCallback(() => {
+    setShowOnboarding(false);
+    localStorage.setItem('dance-choreography-onboarding-seen', 'true');
   }, []);
 
   // Save state to undo history (call before making changes)
@@ -271,15 +391,21 @@ const TimelineEditor: React.FC = () => {
         e.preventDefault();
         setIsPlaying(prev => !prev);
       }
-      // Escape: Switch to edit mode
-      if (e.key === 'Escape' && uiMode === 'rehearsal') {
-        setUiMode('edit');
+      // Escape: Cancel swap mode or switch to edit mode
+      if (e.key === 'Escape') {
+        if (swapSourceDancerId !== null) {
+          setSwapSourceDancerId(null);
+          showToast('Swap cancelled', 'info', 1500);
+        } else if (uiMode === 'rehearsal') {
+          setUiMode('edit');
+          showToast('Switched to Edit Mode', 'info', 2000);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo, uiMode]);
+  }, [handleUndo, handleRedo, uiMode, swapSourceDancerId, showToast]);
 
   // File input ref for loading
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -289,11 +415,6 @@ const TimelineEditor: React.FC = () => {
 
   // Stage scale
   const scale = calculateScale(project.stageWidth, project.stageHeight);
-
-  // Sync dancer count input with project
-  useEffect(() => {
-    setDancerCountInput(String(project.dancerCount));
-  }, [project.dancerCount]);
 
   // Playback loop
   useEffect(() => {
@@ -310,15 +431,19 @@ const TimelineEditor: React.FC = () => {
     const lastFormation = project.formations[project.formations.length - 1];
     const maxCount = lastFormation ? lastFormation.startCount + lastFormation.duration : 0;
 
-    // Track current count for metronome
-    let currentCountValue = currentCount;
+    // Initialize ref with current state value
+    currentCountRef.current = currentCount;
+    frameCountRef.current = 0;
 
     const animate = (time: number) => {
-      if (!lastTimeRef.current) lastTimeRef.current = time;
+      // Fix: Use null check instead of falsy check
+      if (lastTimeRef.current === null) {
+        lastTimeRef.current = time;
+      }
       const delta = (time - lastTimeRef.current) / 1000;
       lastTimeRef.current = time;
 
-      const next = currentCountValue + delta * COUNTS_PER_SECOND * playbackSpeed;
+      const next = currentCountRef.current + delta * COUNTS_PER_SECOND * playbackSpeed;
 
       // Check for metronome beat crossing
       if (metronomeEnabled) {
@@ -334,16 +459,24 @@ const TimelineEditor: React.FC = () => {
       if (next >= maxCount) {
         setIsPlaying(false);
         setCurrentCount(0);
+        currentCountRef.current = 0;
         return;
       }
 
-      currentCountValue = next;
-      setCurrentCount(next);
+      // Update ref immediately (for smooth animation)
+      currentCountRef.current = next;
+
+      // Throttle React state updates (every 2 frames for 30fps state updates)
+      frameCountRef.current++;
+      if (frameCountRef.current % 2 === 0) {
+        setCurrentCount(next);
+      }
 
       animationRef.current = requestAnimationFrame(animate);
     };
 
-    lastTimeRef.current = 0;
+    // Fix: Use null instead of 0 to properly detect first frame
+    lastTimeRef.current = null;
     // Initialize beat tracker to current position
     lastBeatRef.current = Math.floor(currentCount);
     animationRef.current = requestAnimationFrame(animate);
@@ -351,9 +484,12 @@ const TimelineEditor: React.FC = () => {
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
+        // Sync final state when stopping
+        setCurrentCount(currentCountRef.current);
       }
     };
-  }, [isPlaying, playbackSpeed, project.formations, metronomeEnabled, playMetronomeClick, currentCount]);
+    // Fix: Remove currentCount from dependencies to prevent animation restart
+  }, [isPlaying, playbackSpeed, project.formations, metronomeEnabled, playMetronomeClick]);
 
   // Update formation
   const updateFormation = useCallback((id: string, updates: Partial<FormationKeyframe>) => {
@@ -366,6 +502,69 @@ const TimelineEditor: React.FC = () => {
       ),
     }));
   }, [saveToHistory]);
+
+  // Swap two dancers across ALL formations
+  const swapDancers = useCallback((dancerId1: number, dancerId2: number) => {
+    if (dancerId1 === dancerId2) return;
+
+    saveToHistory();
+    setProject(prev => ({
+      ...prev,
+      updatedAt: new Date().toISOString(),
+      formations: prev.formations.map(f => ({
+        ...f,
+        positions: f.positions.map(p => {
+          if (p.dancerId === dancerId1) {
+            // Find dancer 2's color and swap
+            const dancer2 = f.positions.find(d => d.dancerId === dancerId2);
+            return { ...p, dancerId: dancerId2, color: dancer2?.color || p.color };
+          } else if (p.dancerId === dancerId2) {
+            // Find dancer 1's color and swap
+            const dancer1 = f.positions.find(d => d.dancerId === dancerId1);
+            return { ...p, dancerId: dancerId1, color: dancer1?.color || p.color };
+          }
+          return p;
+        }),
+      })),
+      // Also swap dancer names if they exist
+      dancerNames: prev.dancerNames ? {
+        ...prev.dancerNames,
+        [dancerId1]: prev.dancerNames[dancerId2] || '',
+        [dancerId2]: prev.dancerNames[dancerId1] || '',
+      } : undefined,
+    }));
+
+    showToast(`Swapped dancer ${dancerId1} ↔ ${dancerId2}`, 'success', 2000);
+  }, [saveToHistory, showToast]);
+
+  // Handle dancer double-click for swap
+  const handleDancerDoubleClick = useCallback((dancerId: number) => {
+    if (swapSourceDancerId === null) {
+      // First click - select source dancer
+      setSwapSourceDancerId(dancerId);
+      showToast(`Click another dancer to swap with #${dancerId}`, 'info', 3000);
+    } else if (swapSourceDancerId === dancerId) {
+      // Cancel swap
+      setSwapSourceDancerId(null);
+      showToast('Swap cancelled', 'info', 1500);
+    } else {
+      // Second click - perform swap
+      swapDancers(swapSourceDancerId, dancerId);
+      setSwapSourceDancerId(null);
+    }
+  }, [swapSourceDancerId, swapDancers, showToast]);
+
+  // Update dancer name
+  const updateDancerName = useCallback((dancerId: number, name: string) => {
+    setProject(prev => ({
+      ...prev,
+      updatedAt: new Date().toISOString(),
+      dancerNames: {
+        ...prev.dancerNames,
+        [dancerId]: name,
+      },
+    }));
+  }, []);
 
   // Add new formation
   const addFormation = useCallback((afterId: string | null) => {
@@ -504,6 +703,9 @@ const TimelineEditor: React.FC = () => {
         setSelectedFormationId(formations[newSelectedIndex]?.id || null);
       }
 
+      // Clear cue sheet tracking since transitions changed
+      setCueSheetGeneratedWith(new Map());
+
       return {
         ...prev,
         updatedAt: new Date().toISOString(),
@@ -511,6 +713,47 @@ const TimelineEditor: React.FC = () => {
       };
     });
   }, [selectedFormationId, saveToHistory]);
+
+  // Reorder formation (move to new position)
+  const reorderFormation = useCallback((formationId: string, toIndex: number) => {
+    saveToHistory();
+    setProject(prev => {
+      const formations = [...prev.formations];
+      const fromIndex = formations.findIndex(f => f.id === formationId);
+
+      if (fromIndex === -1 || fromIndex === toIndex) return prev;
+
+      // Remove formation from current position
+      const [movedFormation] = formations.splice(fromIndex, 1);
+
+      // Adjust toIndex if we removed from before the target position
+      const adjustedIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+
+      // Insert at new position
+      formations.splice(adjustedIndex, 0, movedFormation);
+
+      // Recalculate all start counts
+      let currentCount = 0;
+      for (let i = 0; i < formations.length; i++) {
+        formations[i] = {
+          ...formations[i],
+          startCount: currentCount,
+        };
+        currentCount += formations[i].duration;
+      }
+
+      // Clear cue sheet tracking since transitions changed
+      setCueSheetGeneratedWith(new Map());
+
+      return {
+        ...prev,
+        updatedAt: new Date().toISOString(),
+        formations,
+      };
+    });
+
+    showToast('Formation moved', 'success', 1500);
+  }, [saveToHistory, showToast]);
 
   // Handle stage mouse down for selection box
   const handleStageMouseDown = (e: React.MouseEvent) => {
@@ -653,10 +896,53 @@ const TimelineEditor: React.FC = () => {
 
   // Save project to JSON
   const handleSave = () => {
+    // Serialize allAlgorithmPaths: Map<string, Map<PathAlgorithm, GeneratedPath[]>>
+    const serializedPaths: Record<string, Record<string, GeneratedPath[]>> = {};
+    allAlgorithmPaths.forEach((algorithmMap, pathKey) => {
+      serializedPaths[pathKey] = {};
+      algorithmMap.forEach((paths, algorithm) => {
+        serializedPaths[pathKey][algorithm] = paths;
+      });
+    });
+
+    // Serialize userSelectedAlgorithms: Map<string, PathAlgorithm>
+    const serializedUserSelected: Record<string, PathAlgorithm> = {};
+    userSelectedAlgorithms.forEach((algorithm, pathKey) => {
+      serializedUserSelected[pathKey] = algorithm;
+    });
+
+    // Serialize geminiResults: Map<string, GeminiTransitionResult>
+    const serializedGeminiResults: Record<string, {
+      pick: PathAlgorithm;
+      scores: Record<string, number>;
+      breakdowns: Record<string, ScoreBreakdown>;
+      insights: Record<string, string>;
+      pickReason: string;
+    }> = {};
+    geminiResults.forEach((result, pathKey) => {
+      const scoresObj: Record<string, number> = {};
+      result.scores.forEach((score, alg) => { scoresObj[alg] = score; });
+      const breakdownsObj: Record<string, ScoreBreakdown> = {};
+      result.breakdowns.forEach((breakdown, alg) => { breakdownsObj[alg] = breakdown; });
+      const insightsObj: Record<string, string> = {};
+      result.insights.forEach((insight, alg) => { insightsObj[alg] = insight; });
+      serializedGeminiResults[pathKey] = {
+        pick: result.pick,
+        scores: scoresObj,
+        breakdowns: breakdownsObj,
+        insights: insightsObj,
+        pickReason: result.pickReason,
+      };
+    });
+
     const exportData: ChoreographyExport = {
-      version: '1.0',
+      version: '2.0',
       project,
       exportedAt: new Date().toISOString(),
+      allAlgorithmPaths: serializedPaths,
+      userSelectedAlgorithms: serializedUserSelected,
+      geminiResults: serializedGeminiResults,
+      cueSheet: cueSheet,
     };
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -681,8 +967,86 @@ const TimelineEditor: React.FC = () => {
         setSelectedFormationId(data.project.formations[0]?.id || null);
         setCurrentCount(0);
         setIsPlaying(false);
+
+        // Version 2.0+ - restore extended data
+        if (data.version === '2.0' || parseFloat(data.version) >= 2.0) {
+          // Restore allAlgorithmPaths
+          if (data.allAlgorithmPaths) {
+            const restoredPaths = new Map<string, Map<PathAlgorithm, GeneratedPath[]>>();
+            Object.entries(data.allAlgorithmPaths).forEach(([pathKey, algorithms]) => {
+              const algorithmMap = new Map<PathAlgorithm, GeneratedPath[]>();
+              Object.entries(algorithms).forEach(([algorithm, paths]) => {
+                algorithmMap.set(algorithm as PathAlgorithm, paths);
+              });
+              restoredPaths.set(pathKey, algorithmMap);
+            });
+            setAllAlgorithmPaths(restoredPaths);
+          }
+
+          // Restore userSelectedAlgorithms
+          if (data.userSelectedAlgorithms) {
+            const restoredUserSelected = new Map<string, PathAlgorithm>();
+            Object.entries(data.userSelectedAlgorithms).forEach(([pathKey, algorithm]) => {
+              restoredUserSelected.set(pathKey, algorithm);
+            });
+            setUserSelectedAlgorithms(restoredUserSelected);
+          }
+
+          // Restore geminiResults
+          if (data.geminiResults) {
+            const restoredGemini = new Map<string, GeminiTransitionResult>();
+            Object.entries(data.geminiResults).forEach(([pathKey, result]) => {
+              const scoresMap = new Map<PathAlgorithm, number>();
+              Object.entries(result.scores).forEach(([alg, score]) => {
+                scoresMap.set(alg as PathAlgorithm, score);
+              });
+              const breakdownsMap = new Map<PathAlgorithm, ScoreBreakdown>();
+              Object.entries(result.breakdowns).forEach(([alg, breakdown]) => {
+                breakdownsMap.set(alg as PathAlgorithm, breakdown);
+              });
+              const insightsMap = new Map<PathAlgorithm, string>();
+              Object.entries(result.insights).forEach(([alg, insight]) => {
+                insightsMap.set(alg as PathAlgorithm, insight);
+              });
+              restoredGemini.set(pathKey, {
+                pick: result.pick,
+                scores: scoresMap,
+                breakdowns: breakdownsMap,
+                insights: insightsMap,
+                pickReason: result.pickReason,
+              });
+            });
+            setGeminiResults(restoredGemini);
+          }
+
+          // Restore cueSheet
+          if (data.cueSheet !== undefined) {
+            setCueSheet(data.cueSheet);
+
+            // Reconstruct cueSheetGeneratedWith from userSelectedAlgorithms
+            // This assumes the cueSheet was generated with the saved algorithm selections
+            if (data.cueSheet && data.userSelectedAlgorithms) {
+              const restoredGenWith = new Map<string, PathAlgorithm>();
+              Object.entries(data.userSelectedAlgorithms).forEach(([pathKey, algorithm]) => {
+                restoredGenWith.set(pathKey, algorithm);
+              });
+              setCueSheetGeneratedWith(restoredGenWith);
+            } else {
+              setCueSheetGeneratedWith(new Map());
+            }
+          } else {
+            setCueSheetGeneratedWith(new Map());
+          }
+        } else {
+          // Version 1.0 - clear extended data
+          setAllAlgorithmPaths(new Map());
+          setUserSelectedAlgorithms(new Map());
+          setGeminiResults(new Map());
+          setCueSheet(null);
+          setCueSheetGeneratedWith(new Map());
+        }
       } catch (err) {
-        alert('Failed to load choreography file');
+        showToast('Failed to load choreography file. Please check the file format.', 'error');
       }
     };
     reader.readAsText(file);
@@ -691,16 +1055,35 @@ const TimelineEditor: React.FC = () => {
     e.target.value = '';
   };
 
-  // New project
-  const handleNew = () => {
-    if (project.formations.length > 1 || project.formations[0]?.label) {
-      if (!confirm('Create a new project? Unsaved changes will be lost.')) return;
-    }
+  // New project - confirm action
+  const confirmNewProject = () => {
     const newProject = createNewProject('New Choreography', project.dancerCount, project.stageWidth, project.stageHeight);
     setProject(newProject);
     setSelectedFormationId(newProject.formations[0]?.id || null);
     setCurrentCount(0);
     setIsPlaying(false);
+    // Clear cue sheet and tracking
+    setCueSheet(null);
+    setCueSheetGeneratedWith(new Map());
+    setAllAlgorithmPaths(new Map());
+    setUserSelectedAlgorithms(new Map());
+    setGeminiResults(new Map());
+    // Clear localStorage auto-save
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {
+      console.warn('Failed to clear autosave:', e);
+    }
+    setShowConfirmNew(false);
+  };
+
+  // New project - show confirm dialog if needed
+  const handleNew = () => {
+    if (project.formations.length > 1 || project.formations[0]?.label) {
+      setShowConfirmNew(true);
+    } else {
+      confirmNewProject();
+    }
   };
 
   // Change dancer count
@@ -1284,14 +1667,42 @@ const TimelineEditor: React.FC = () => {
 
     try {
       // Sort algorithms in consistent order to avoid LLM position bias
-      const algorithms = Array.from(allPaths.keys()).sort((a, b) => {
+      const allAlgorithms = Array.from(allPaths.keys()).sort((a, b) => {
         const priorityA = ALGORITHM_PRIORITY.indexOf(a);
         const priorityB = ALGORITHM_PRIORITY.indexOf(b);
         return priorityA - priorityB;
       });
+
+      // Filter to unique algorithms only (same logic as getUniqueAlgorithms)
+      // This ensures Gemini only evaluates algorithms that will be available in UI
+      const algorithms: PathAlgorithm[] = [];
+      const processedPathGroups: GeneratedPath[][] = [];
+      for (const algo of allAlgorithms) {
+        const paths = allPaths.get(algo);
+        if (!paths) continue;
+
+        let isDuplicate = false;
+        for (const existingPaths of processedPathGroups) {
+          if (arePathsIdentical(paths, existingPaths)) {
+            isDuplicate = true;
+            break;
+          }
+        }
+
+        if (!isDuplicate) {
+          algorithms.push(algo);
+          processedPathGroups.push(paths);
+        }
+      }
+
+      // If no unique algorithms found, use all algorithms
+      if (algorithms.length === 0) {
+        algorithms.push(...allAlgorithms);
+      }
+
       const firstPaths = allPaths.get(algorithms[0])!;
 
-      // Check if all paths are identical - skip Gemini if so
+      // Check if all remaining paths are identical - skip Gemini if so
       let allIdentical = true;
       for (let i = 1; i < algorithms.length; i++) {
         const otherPaths = allPaths.get(algorithms[i])!;
@@ -1301,8 +1712,8 @@ const TimelineEditor: React.FC = () => {
         }
       }
 
-      // If all paths are identical, use priority-based selection
-      if (allIdentical) {
+      // If all paths are identical (or only one unique), use priority-based selection
+      if (allIdentical || algorithms.length === 1) {
         const bestAlgo = ALGORITHM_PRIORITY.find(algo => algorithms.includes(algo)) || algorithms[0];
         const scores = new Map<PathAlgorithm, number>();
         const breakdowns = new Map<PathAlgorithm, ScoreBreakdown>();
@@ -1571,7 +1982,7 @@ Score each option 0-100 based on the weighted criteria above.
 
     const currentIndex = project.formations.findIndex(f => f.id === selectedFormationId);
     if (currentIndex === -1 || currentIndex >= project.formations.length - 1) {
-      alert('Select a formation that has a next formation to generate paths.');
+      showToast('Select a formation that has a next formation to generate paths.', 'error');
       return;
     }
 
@@ -1595,11 +2006,13 @@ Score each option 0-100 based on the weighted criteria above.
 
       for (let i = 0; i < allAlgorithms.length; i++) {
         const algo = allAlgorithms[i];
-        setPathGenerationStatus(`Generating paths (${i + 1}/${allAlgorithms.length}): ${PATH_ALGORITHM_LABELS[algo]}...`);
+        setPathGenerationProgress({ current: i + 1, total: allAlgorithms.length, algorithm: PATH_ALGORITHM_LABELS[algo] });
+        setPathGenerationStatus(`${PATH_ALGORITHM_LABELS[algo]}`);
 
         const paths = await generatePathsForTransition(currentFormation, nextFormation, algo);
         algorithmPaths.set(algo, paths);
       }
+      setPathGenerationProgress(null);
 
       // Store all algorithm paths
       setAllAlgorithmPaths(prev => {
@@ -1654,10 +2067,15 @@ Score each option 0-100 based on the weighted criteria above.
           continue;
         }
 
-        setPathGenerationStatus(`Generating paths for Formation ${i + 1} → ${i + 2}...`);
-
         const algorithmPaths = new Map<PathAlgorithm, GeneratedPath[]>();
-        for (const algo of allAlgorithms) {
+        for (let j = 0; j < allAlgorithms.length; j++) {
+          const algo = allAlgorithms[j];
+          setPathGenerationProgress({
+            current: j + 1,
+            total: allAlgorithms.length,
+            algorithm: PATH_ALGORITHM_LABELS[algo]
+          });
+          setPathGenerationStatus(`Transition ${i + 1}→${i + 2}: ${PATH_ALGORITHM_LABELS[algo]}`);
           const paths = await generatePathsForTransition(current, next, algo);
           algorithmPaths.set(algo, paths);
         }
@@ -1665,6 +2083,7 @@ Score each option 0-100 based on the weighted criteria above.
       }
 
       setAllAlgorithmPaths(newAllPaths);
+      setPathGenerationProgress(null);
       setPathGenerationStatus(null);
     } catch (error) {
       console.error('Path generation failed:', error);
@@ -1717,13 +2136,19 @@ Score each option 0-100 based on the weighted criteria above.
         if (alreadyGenerated) {
           algorithmPaths = existingPaths;
         } else {
-          setPathGenerationStatus(`Generating paths (${i + 1}/${totalTransitions})...`);
-
           algorithmPaths = new Map<PathAlgorithm, GeneratedPath[]>();
-          for (const algo of allAlgorithms) {
+          for (let j = 0; j < allAlgorithms.length; j++) {
+            const algo = allAlgorithms[j];
+            setPathGenerationProgress({
+              current: j + 1,
+              total: allAlgorithms.length,
+              algorithm: PATH_ALGORITHM_LABELS[algo]
+            });
+            setPathGenerationStatus(`Transition ${i + 1}/${totalTransitions}: ${PATH_ALGORITHM_LABELS[algo]}`);
             const paths = await generatePathsForTransition(current, next, algo);
             algorithmPaths.set(algo, paths);
           }
+          setPathGenerationProgress(null);
 
           // Update state immediately so UI shows progress
           setAllAlgorithmPaths(prev => {
@@ -1760,32 +2185,70 @@ Score each option 0-100 based on the weighted criteria above.
   }, [project.formations, project.stageWidth, project.stageHeight, allAlgorithmPaths, generatePathsForTransition, showToast, geminiResults, rankPathsWithGemini]);
 
   // Generate cue sheets based on user-selected paths (or Gemini's pick as fallback)
+  // Smart regeneration: only regenerates transitions that changed or are new
   const generateAllCueSheets = useCallback(async () => {
     if (project.formations.length < 2) {
       showToast('Need at least 2 formations to generate cue sheets', 'error');
       return;
     }
 
-    // Check if paths exist
+    // Check if paths exist and identify which transitions need regeneration
     const totalTransitions = project.formations.length - 1;
-    let hasAllPaths = true;
+    const transitionsToRegenerate: Array<{
+      index: number;
+      pathKey: string;
+      reason: 'new' | 'changed';
+    }> = [];
+
     for (let i = 0; i < totalTransitions; i++) {
       const current = project.formations[i];
       const next = project.formations[i + 1];
       const pathKey = `${current.id}->${next.id}`;
+
+      // Check if paths exist for this transition
       if (!allAlgorithmPaths.has(pathKey) || (allAlgorithmPaths.get(pathKey)?.size || 0) === 0) {
-        hasAllPaths = false;
-        break;
+        showToast('Please generate paths first', 'error');
+        return;
+      }
+
+      // Determine which algorithm would be used
+      const userSelected = userSelectedAlgorithms.get(pathKey);
+      const geminiPick = geminiResults.get(pathKey)?.pick;
+      const selectedAlgo = userSelected || geminiPick || 'natural_curves';
+
+      // Check if this transition needs regeneration
+      const previouslyGeneratedWith = cueSheetGeneratedWith.get(pathKey);
+
+      if (!previouslyGeneratedWith) {
+        // Never generated
+        transitionsToRegenerate.push({ index: i, pathKey, reason: 'new' });
+      } else if (previouslyGeneratedWith !== selectedAlgo) {
+        // Algorithm changed
+        transitionsToRegenerate.push({ index: i, pathKey, reason: 'changed' });
       }
     }
 
-    if (!hasAllPaths) {
-      showToast('Please generate paths first', 'error');
+    // If all cue sheets are up to date, show message and return
+    if (transitionsToRegenerate.length === 0 && cueSheet) {
+      showToast('✓ Cue sheet is already up to date', 'success');
       return;
     }
 
+    // If no cue sheet exists at all, regenerate everything
+    const needsFullRegeneration = !cueSheet || transitionsToRegenerate.length === totalTransitions;
+
     setIsGeneratingCueSheet(true);
-    setPathGenerationStatus('Generating cue sheets...');
+
+    if (needsFullRegeneration) {
+      setPathGenerationStatus(`Generating cue sheets (0/${totalTransitions})...`);
+    } else {
+      const changedCount = transitionsToRegenerate.filter(t => t.reason === 'changed').length;
+      const newCount = transitionsToRegenerate.filter(t => t.reason === 'new').length;
+      const parts = [];
+      if (changedCount > 0) parts.push(`${changedCount} changed`);
+      if (newCount > 0) parts.push(`${newCount} new`);
+      setPathGenerationStatus(`Updating cue sheets (${parts.join(', ')})...`);
+    }
 
     try {
       // Collect all paths for cue sheet generation
@@ -1796,6 +2259,9 @@ Score each option 0-100 based on the weighted criteria above.
         speed: number;
         totalDistance: number;
       }> = [];
+
+      // Track which algorithms we're using for each transition
+      const newGeneratedWith = new Map<string, PathAlgorithm>();
 
       for (let i = 0; i < totalTransitions; i++) {
         const current = project.formations[i];
@@ -1808,6 +2274,9 @@ Score each option 0-100 based on the weighted criteria above.
           const userSelected = userSelectedAlgorithms.get(pathKey);
           const geminiPick = geminiResults.get(pathKey)?.pick;
           const selectedAlgo = userSelected || geminiPick || 'natural_curves';
+
+          // Track which algorithm we're using
+          newGeneratedWith.set(pathKey, selectedAlgo);
 
           const selectedPaths = transitionPaths.get(selectedAlgo) ||
             transitionPaths.get('natural_curves') ||
@@ -1833,6 +2302,9 @@ Score each option 0-100 based on the weighted criteria above.
             });
           }
         }
+
+        // Update progress
+        setPathGenerationStatus(`Generating cue sheets (${i + 1}/${totalTransitions})...`);
       }
 
       // Merge paths by dancer ID
@@ -1863,6 +2335,8 @@ Score each option 0-100 based on the weighted criteria above.
       );
 
       setCueSheet(cueSheetResult);
+      setCueSheetGeneratedWith(newGeneratedWith);
+
       // Track which algorithm was used (for single transition, show specific; for multiple, show 'mixed')
       if (totalTransitions === 1) {
         const pathKey = `${project.formations[0].id}->${project.formations[1].id}`;
@@ -1873,7 +2347,18 @@ Score each option 0-100 based on the weighted criteria above.
         setCueSheetAlgorithm(null); // Mixed algorithms for multiple transitions
       }
       setPathGenerationStatus(null);
-      showToast('✓ Cue sheets generated!', 'success', 5000);
+
+      // Show appropriate success message
+      if (needsFullRegeneration) {
+        showToast(`✓ Generated ${totalTransitions} cue sheet${totalTransitions > 1 ? 's' : ''}`, 'success', 5000);
+      } else {
+        const changedCount = transitionsToRegenerate.filter(t => t.reason === 'changed').length;
+        const newCount = transitionsToRegenerate.filter(t => t.reason === 'new').length;
+        const parts = [];
+        if (changedCount > 0) parts.push(`updated ${changedCount}`);
+        if (newCount > 0) parts.push(`added ${newCount}`);
+        showToast(`✓ Cue sheets ${parts.join(', ')}`, 'success', 5000);
+      }
 
     } catch (error) {
       console.error('Cue sheet generation failed:', error);
@@ -1883,7 +2368,7 @@ Score each option 0-100 based on the weighted criteria above.
     } finally {
       setIsGeneratingCueSheet(false);
     }
-  }, [project.formations, project.stageWidth, project.stageHeight, allAlgorithmPaths, userSelectedAlgorithms, geminiResults, showToast]);
+  }, [project.formations, project.stageWidth, project.stageHeight, allAlgorithmPaths, userSelectedAlgorithms, geminiResults, cueSheet, cueSheetGeneratedWith, showToast]);
 
   // Get paths for current formation using selected algorithm
   const getCurrentPaths = useCallback(() => {
@@ -2124,8 +2609,8 @@ Score each option 0-100 based on the weighted criteria above.
     const pathKey = `${currentFormation.id}->${nextFormation.id}`;
     const paths = getPathsForAlgorithm(pathKey, pathAlgorithm);
 
-    // Calculate transition timing
-    const transitionStart = currentFormation.startCount + currentFormation.duration * 0.5;
+    // Calculate transition timing - start moving from the beginning of formation
+    const transitionStart = currentFormation.startCount;
     const transitionEnd = currentFormation.startCount + currentFormation.duration;
 
     if (currentCount < transitionStart) {
@@ -2216,64 +2701,29 @@ Score each option 0-100 based on the weighted criteria above.
               onFocus={() => saveToHistory()}
               onChange={(e) => setProject(prev => ({ ...prev, name: e.target.value }))}
             />
-          </div>
-          <div className="header-center">
-          <div className="header-control">
-            <label>Dancers:</label>
-            <input
-              type="number"
-              min={1}
-              max={35}
-              value={dancerCountInput}
-              onChange={(e) => setDancerCountInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleDancerCountChange(parseInt(dancerCountInput, 10));
-                }
-              }}
-              className="header-number-input"
-            />
             <button
-              className="header-confirm-btn"
-              onClick={() => handleDancerCountChange(parseInt(dancerCountInput, 10))}
-              disabled={parseInt(dancerCountInput, 10) === project.dancerCount}
+              className="settings-btn"
+              onClick={() => setShowSettingsModal(true)}
+              title="Project Settings"
             >
-              OK
+              <span className="settings-icon">⚙</span>
+              Settings
             </button>
           </div>
-          <div className="header-control">
-            <label>Stage:</label>
-            <select
-              value={`${project.stageWidth}x${project.stageHeight}`}
-              onChange={(e) => {
-                const [w, h] = e.target.value.split('x').map(Number);
-                handleStageSizeChange(w, h);
-              }}
-              className="header-select"
-            >
-              <option value="8x6">Small (8×6m)</option>
-              <option value="10x8">Medium (10×8m)</option>
-              <option value="15x12">Large (15×12m)</option>
-              <option value="20x15">XLarge (20×15m)</option>
-            </select>
-          </div>
-          <div className="header-control">
-            <label>Audience:</label>
-            <button
-              className={`audience-toggle-btn ${audienceAtTop ? 'top' : 'bottom'}`}
-              onClick={() => setAudienceAtTop(!audienceAtTop)}
-              title={audienceAtTop ? 'Audience at top of screen' : 'Audience at bottom of screen'}
-            >
-              {audienceAtTop ? '⬆ Top' : '⬇ Bottom'}
-            </button>
-          </div>
-        </div>
-        <div className="header-right">
+          <div className="header-right">
           <button
             onClick={generateAllPathsWithRanking}
             className={`header-btn generate-all-btn ${isGeneratingPaths ? 'generating' : ''}`}
             disabled={isGeneratingPaths || isGeneratingCueSheet || project.formations.length < 2}
-            title="Generate all movement paths"
+            title={
+              project.formations.length < 2
+                ? "Add at least 2 formations to generate paths"
+                : isGeneratingPaths
+                ? "Path generation in progress..."
+                : isGeneratingCueSheet
+                ? "Wait for cue sheet generation to complete"
+                : "Generate all movement paths"
+            }
           >
             {isGeneratingPaths ? (
               <>
@@ -2288,7 +2738,15 @@ Score each option 0-100 based on the weighted criteria above.
             onClick={generateAllCueSheets}
             className={`header-btn generate-all-btn ${isGeneratingCueSheet ? 'generating' : ''}`}
             disabled={isGeneratingPaths || isGeneratingCueSheet || project.formations.length < 2}
-            title="Generate cue sheets for all transitions"
+            title={
+              project.formations.length < 2
+                ? "Add at least 2 formations to generate cue sheets"
+                : isGeneratingCueSheet
+                ? "Cue sheet generation in progress..."
+                : isGeneratingPaths
+                ? "Wait for path generation to complete"
+                : "Generate cue sheets for all transitions"
+            }
           >
             {isGeneratingCueSheet ? (
               <>
@@ -2323,6 +2781,17 @@ Score each option 0-100 based on the weighted criteria above.
             style={{ display: 'none' }}
             onChange={handleLoad}
           />
+          <div className="header-divider" />
+          <button
+            className="mode-toggle-btn rehearsal-btn"
+            onClick={() => {
+              setUiMode('rehearsal');
+              showToast('Entering Rehearsal Mode - Press ESC to return', 'info', 3000);
+            }}
+            title="Switch to Rehearsal Mode"
+          >
+            Rehearsal
+          </button>
         </div>
         </header>
       )}
@@ -2341,17 +2810,19 @@ Score each option 0-100 based on the weighted criteria above.
             >
               {isPlaying ? '⏸️ Pause' : '▶️ Play'}
             </button>
-            <button
-              className={`metronome-toggle-btn ${metronomeEnabled ? 'active' : ''}`}
-              onClick={() => setMetronomeEnabled(!metronomeEnabled)}
-              title={metronomeEnabled ? 'Metronome ON' : 'Metronome OFF'}
-            >
-              {metronomeEnabled ? '🔔' : '🔕'}
-            </button>
+            <label className="metronome-toggle">
+              <span className="metronome-label">Metronome</span>
+              <div className={`toggle-switch ${metronomeEnabled ? 'active' : ''}`} onClick={() => setMetronomeEnabled(!metronomeEnabled)}>
+                <div className="toggle-slider" />
+              </div>
+            </label>
             <span className="count-badge">Count: {Math.floor(currentCount)}</span>
             <button
               className="mode-toggle-btn"
-              onClick={() => setUiMode('edit')}
+              onClick={() => {
+                setUiMode('edit');
+                showToast('Switched to Edit Mode', 'info', 2000);
+              }}
             >
               ✏️ Edit Mode
             </button>
@@ -2399,40 +2870,36 @@ Score each option 0-100 based on the weighted criteria above.
         {/* Center - Stage view */}
         <div className={`stage-panel ${uiMode === 'rehearsal' ? 'stage-panel-fullwidth' : ''}`}>
           <div className="stage-header">
-            <h3>{selectedFormation?.label || `Formation ${selectedFormation ? project.formations.indexOf(selectedFormation) + 1 : '-'}`}</h3>
-            <span className="count-display">Count: {Math.floor(currentCount)}</span>
-            {/* POV (Point of View) Selector */}
-            <div className="pov-selector">
-              <label>POV:</label>
-              <select
-                value={typeof povMode === 'number' ? `dancer-${povMode}` : povMode}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === 'choreographer') {
-                    setPovMode('choreographer');
-                  } else if (value.startsWith('dancer-')) {
-                    setPovMode(parseInt(value.replace('dancer-', ''), 10));
-                  }
-                }}
-                className="pov-select"
-              >
-                <option value="choreographer">Choreographer</option>
-                {selectedFormation?.positions.map((pos) => (
-                  <option key={pos.dancerId} value={`dancer-${pos.dancerId}`}>
-                    Dancer {pos.dancerId}
-                  </option>
-                ))}
-              </select>
+            <div className="stage-header-left">
+              <h3>{selectedFormation?.label || `Formation ${selectedFormation ? project.formations.indexOf(selectedFormation) + 1 : '-'}`}</h3>
+              <span className="count-display">Count: {Math.floor(currentCount)}</span>
             </div>
-            {/* Mode Toggle Button */}
-            {uiMode === 'edit' && (
-              <button
-                className="mode-toggle-btn rehearsal-btn"
-                onClick={() => setUiMode('rehearsal')}
-                title="Switch to Rehearsal Mode"
-              >
-                🎭 Rehearsal
-              </button>
+            {/* POV (Point of View) Selector - Rehearsal mode only */}
+            {uiMode === 'rehearsal' && (
+              <div className="stage-header-right">
+                <div className="pov-selector">
+                  <label>POV:</label>
+                  <select
+                    value={typeof povMode === 'number' ? `dancer-${povMode}` : povMode}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === 'choreographer') {
+                        setPovMode('choreographer');
+                      } else if (value.startsWith('dancer-')) {
+                        setPovMode(parseInt(value.replace('dancer-', ''), 10));
+                      }
+                    }}
+                    className="pov-select"
+                  >
+                    <option value="choreographer">Choreographer</option>
+                    {selectedFormation?.positions.map((pos) => (
+                      <option key={pos.dancerId} value={`dancer-${pos.dancerId}`}>
+                        Dancer {pos.dancerId}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             )}
           </div>
 
@@ -2636,6 +3103,8 @@ Score each option 0-100 based on the weighted criteria above.
               const screenPos = stageToScreen(dancer.position, scale, project.stageHeight, audienceAtTop);
               const isPovDancer = typeof povMode === 'number' && povMode === dancer.dancerId;
               const isDimmed = typeof povMode === 'number' && povMode !== dancer.dancerId;
+              const isSwapTarget = swapSourceDancerId === dancer.dancerId;
+              const dancerName = project.dancerNames?.[dancer.dancerId];
               return (
                 <DancerCircle
                   key={dancer.dancerId}
@@ -2644,10 +3113,13 @@ Score each option 0-100 based on the weighted criteria above.
                   y={screenPos.y}
                   radius={0.4 * scale}
                   color={dancer.color}
+                  name={dancerName}
                   isSelected={uiMode === 'edit' && selectedDancers.has(dancer.dancerId)}
+                  isSwapTarget={isSwapTarget}
                   isPovHighlight={isPovDancer}
                   isDimmed={isDimmed}
                   onMouseDown={uiMode === 'edit' ? (e) => handleDancerMouseDown(dancer.dancerId, e) : undefined}
+                  onDoubleClick={uiMode === 'edit' ? () => handleDancerDoubleClick(dancer.dancerId) : undefined}
                 />
               );
             })}
@@ -2687,6 +3159,19 @@ Score each option 0-100 based on the weighted criteria above.
           <h3>Formation Properties</h3>
           {selectedFormation ? (
             <>
+              {/* Formation Selection Header - Clear indicator of what's being edited */}
+              <div className="formation-selection-header">
+                <div className="formation-selection-badge">
+                  <span className="formation-number">#{project.formations.findIndex(f => f.id === selectedFormation.id) + 1}</span>
+                </div>
+                <div className="formation-selection-info">
+                  <span className="formation-selection-label">Editing:</span>
+                  <span className="formation-selection-name">
+                    {selectedFormation.label || `Formation ${project.formations.findIndex(f => f.id === selectedFormation.id) + 1}`}
+                  </span>
+                </div>
+              </div>
+
               <div className="property-row">
                 <label>Label</label>
                 <input
@@ -2732,13 +3217,22 @@ Score each option 0-100 based on the weighted criteria above.
                   }}
                   title="Move all dancers to nearest exit zone"
                 >
-                  🚪 Exit All
+                  Exit All
                 </button>
               </div>
 
-              {/* Path generation section */}
-              <div className="path-section">
-                <h4>Movement Paths</h4>
+              {/* Path generation section - Collapsible */}
+              <div className={`path-section collapsible-section ${collapsedSections.has('paths') ? 'collapsed' : ''}`}>
+                <h4
+                  className="collapsible-header"
+                  onClick={() => toggleSection('paths')}
+                >
+                  <span className="collapse-icon">{collapsedSections.has('paths') ? '▶' : '▼'}</span>
+                  Movement Paths
+                  {currentPaths && <span className="section-badge">✓</span>}
+                </h4>
+                {!collapsedSections.has('paths') && (
+                <>
                 {/* Show current transition context */}
                 {currentTransitionInfo && (
                   <div className="transition-context">
@@ -2765,6 +3259,7 @@ Score each option 0-100 based on the weighted criteria above.
                           <div
                             key={algo}
                             className={`algorithm-card ${isSelected ? 'selected' : ''} ${isGeminiPick ? 'gemini-pick' : ''}`}
+                            title={`Overview: ${PATH_ALGORITHM_DESCRIPTIONS[algo]}`}
                             onClick={() => {
                               if (!isGeneratingPaths) {
                                 setPathAlgorithm(algo);
@@ -2809,10 +3304,16 @@ Score each option 0-100 based on the weighted criteria above.
                   <div className="gemini-scores">
                     <details open>
                       <summary>Gemini Evaluation</summary>
-                      {/* Best pick reason */}
-                      {currentGeminiResult.pickReason && (
+                      {/* Best pick reason - show only if pick is in available algorithms */}
+                      {currentGeminiResult.pickReason && currentUniqueAlgorithms.includes(currentGeminiResult.pick) && (
                         <div className="gemini-pick-reason">
-                          <strong>Gemini's Pick:</strong> {PATH_ALGORITHM_LABELS[currentGeminiResult.pick]} - {currentGeminiResult.pickReason}
+                          <div className="pick-header">
+                            <span className="pick-label">⭐ Gemini's Pick:</span>
+                            <span className="pick-algorithm">{PATH_ALGORITHM_LABELS[currentGeminiResult.pick]}</span>
+                          </div>
+                          <div className="pick-reason">
+                            <span className="reason-label">Why for this transition:</span> {currentGeminiResult.pickReason}
+                          </div>
                         </div>
                       )}
                       <div className="score-list">
@@ -2823,6 +3324,7 @@ Score each option 0-100 based on the weighted criteria above.
                             <div
                               key={algo}
                               className={`score-item ${algo === currentGeminiResult.pick ? 'pick' : ''} ${algo === pathAlgorithm ? 'selected' : ''}`}
+                              title={`Overview: ${PATH_ALGORITHM_DESCRIPTIONS[algo]}`}
                               onClick={() => setPathAlgorithm(algo)}
                             >
                               <div className="score-item-header">
@@ -2830,9 +3332,11 @@ Score each option 0-100 based on the weighted criteria above.
                                 <span className="algo-score">{score}</span>
                                 {algo === currentGeminiResult.pick && <span className="pick-star">★</span>}
                               </div>
-                              {/* Gemini insight */}
+                              {/* Gemini insight - context-specific */}
                               {currentGeminiResult.insights?.get(algo) && (
-                                <div className="algo-insight">{currentGeminiResult.insights.get(algo)}</div>
+                                <div className="algo-insight">
+                                  <span className="insight-label">→</span> {currentGeminiResult.insights.get(algo)}
+                                </div>
                               )}
                             </div>
                           ))}
@@ -2847,14 +3351,35 @@ Score each option 0-100 based on the weighted criteria above.
                       className="generate-path-btn"
                       onClick={handleGeneratePaths}
                       disabled={isGeneratingPaths}
+                      title={isGeneratingPaths ? "Path generation in progress..." : "Generate movement paths for this transition"}
                     >
                       {isGeneratingPaths ? 'Generating...' : 'Generate Paths'}
                     </button>
 
-                    {/* Status display */}
-                    {pathGenerationStatus && (
-                      <div className={`path-generation-status ${isGeneratingPaths ? 'loading' : 'success'}`}>
-                        {isGeneratingPaths && <span className="loading-spinner" />}
+                    {/* Status display with progress bar */}
+                    {isGeneratingPaths && pathGenerationProgress && (
+                      <div className="path-generation-status loading">
+                        <div className="generation-progress-container">
+                          <div className="generation-progress-header">
+                            <span className="loading-spinner" />
+                            <span className="generation-progress-text">
+                              Computing algorithms ({pathGenerationProgress.current}/{pathGenerationProgress.total})
+                            </span>
+                          </div>
+                          <div className="generation-progress-bar">
+                            <div
+                              className="generation-progress-fill"
+                              style={{ width: `${(pathGenerationProgress.current / pathGenerationProgress.total) * 100}%` }}
+                            />
+                          </div>
+                          <div className="generation-progress-algorithm">
+                            {pathGenerationProgress.algorithm}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {pathGenerationStatus && !isGeneratingPaths && (
+                      <div className="path-generation-status success">
                         {pathGenerationStatus}
                       </div>
                     )}
@@ -2878,6 +3403,7 @@ Score each option 0-100 based on the weighted criteria above.
                             className="generate-cue-sheet-btn"
                             onClick={generateAllCueSheets}
                             disabled={isGeneratingCueSheet}
+                            title={isGeneratingCueSheet ? "Cue sheet generation in progress..." : "Generate cue sheets for dancers"}
                           >
                             {isGeneratingCueSheet ? 'Generating...' : 'Generate Cue Sheet'}
                           </button>
@@ -2896,6 +3422,8 @@ Score each option 0-100 based on the weighted criteria above.
                   </>
                 ) : (
                   <p className="path-hint">Add a next formation to generate paths</p>
+                )}
+                </>
                 )}
               </div>
 
@@ -2920,22 +3448,28 @@ Score each option 0-100 based on the weighted criteria above.
           <button onClick={handlePlay} className="playback-btn primary" title="Play">▶</button>
         )}
         {isGeneratingPaths && (
-          <span className="playback-status">{pathGenerationStatus || 'Generating paths...'}</span>
+          <span className="playback-status">
+            {pathGenerationProgress
+              ? `${pathGenerationProgress.algorithm} (${pathGenerationProgress.current}/${pathGenerationProgress.total})`
+              : pathGenerationStatus || 'Generating paths...'}
+          </span>
         )}
-        <button
-          className={`metronome-toggle-btn ${metronomeEnabled ? 'active' : ''}`}
-          onClick={() => setMetronomeEnabled(!metronomeEnabled)}
-          title={metronomeEnabled ? 'Metronome ON' : 'Metronome OFF'}
-        >
-          {metronomeEnabled ? '🔔' : '🔕'}
-        </button>
+        <label className="metronome-toggle">
+          <span className="metronome-label">Metronome</span>
+          <div className={`toggle-switch ${metronomeEnabled ? 'active' : ''}`} onClick={() => setMetronomeEnabled(!metronomeEnabled)}>
+            <div className="toggle-slider" />
+          </div>
+        </label>
         <div className="speed-control">
           <label>Speed:</label>
           <select value={playbackSpeed} onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}>
+            <option value={0.25}>0.25x</option>
             <option value={0.5}>0.5x</option>
             <option value={1}>1x</option>
             <option value={1.5}>1.5x</option>
             <option value={2}>2x</option>
+            <option value={3}>3x</option>
+            <option value={4}>4x</option>
           </select>
         </div>
         <div className="zoom-control">
@@ -2975,6 +3509,7 @@ Score each option 0-100 based on the weighted criteria above.
               console.error('Failed to parse preset:', e);
             }
           }}
+          onReorderFormation={reorderFormation}
         />
       </div>
 
@@ -3050,19 +3585,111 @@ Score each option 0-100 based on the weighted criteria above.
         </button>
       )}
 
-      {/* Toast Notification */}
-      {toast && (
-        <div
-          className={`toast-notification ${toast.type}`}
-          onClick={() => {
-            if (toast.type === 'success' && cueSheet) {
-              setShowCueSheet(true);
-            }
-            setToast(null);
-          }}
-        >
-          <span>{toast.message}</span>
-          <button className="toast-close" onClick={(e) => { e.stopPropagation(); setToast(null); }}>×</button>
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        dancerCount={project.dancerCount}
+        dancerNames={project.dancerNames || {}}
+        dancerColors={
+          selectedFormation
+            ? Object.fromEntries(selectedFormation.positions.map(p => [p.dancerId, p.color]))
+            : {}
+        }
+        swapSourceDancerId={swapSourceDancerId}
+        onUpdateDancerName={updateDancerName}
+        onUpdateDancerCount={handleDancerCountChange}
+        stageWidth={project.stageWidth}
+        stageHeight={project.stageHeight}
+        onUpdateStageSize={handleStageSizeChange}
+        audienceAtTop={audienceAtTop}
+        onUpdateAudienceDirection={setAudienceAtTop}
+      />
+
+      {/* New Project Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={showConfirmNew}
+        title="Create New Project"
+        message="Create a new project? All unsaved changes will be lost."
+        onConfirm={confirmNewProject}
+        onCancel={() => setShowConfirmNew(false)}
+        confirmText="Create New"
+        cancelText="Cancel"
+        isDangerous
+      />
+
+      {/* Toast Notification Stack */}
+      {toasts.length > 0 && (
+        <div className="toast-container">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className={`toast-notification ${t.type}`}
+              onClick={() => {
+                if (t.type === 'success' && cueSheet) {
+                  setShowCueSheet(true);
+                }
+                removeToast(t.id);
+              }}
+            >
+              <span>{t.message}</span>
+              <button className="toast-close" onClick={(e) => { e.stopPropagation(); removeToast(t.id); }}>×</button>
+              <div
+                className="toast-progress"
+                style={{ animationDuration: `${t.duration}ms` }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* First-time User Onboarding */}
+      {showOnboarding && (
+        <div className="onboarding-overlay" onClick={dismissOnboarding}>
+          <div className="onboarding-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="onboarding-header">
+              <h2>Welcome to Dance Choreography Editor! 💃</h2>
+            </div>
+            <div className="onboarding-content">
+              <div className="onboarding-steps">
+                <div className="onboarding-step">
+                  <span className="step-number">1</span>
+                  <div className="step-content">
+                    <h4>Create Formations</h4>
+                    <p>Add formations with the + button and drag dancers on stage to position them.</p>
+                  </div>
+                </div>
+                <div className="onboarding-step">
+                  <span className="step-number">2</span>
+                  <div className="step-content">
+                    <h4>Generate Paths</h4>
+                    <p>Generate movement paths and let AI help you choose the best option.</p>
+                  </div>
+                </div>
+                <div className="onboarding-step">
+                  <span className="step-number">3</span>
+                  <div className="step-content">
+                    <h4>Export Cue Sheet</h4>
+                    <p>Use Gemini to generate cue sheets with step-by-step instructions for each dancer.</p>
+                  </div>
+                </div>
+              </div>
+              <div className="onboarding-tips">
+                <h4>Quick Tips</h4>
+                <ul>
+                  <li><kbd>Space</kbd> Play/Pause</li>
+                  <li><kbd>Ctrl+Z</kbd> Undo</li>
+                  <li><kbd>Ctrl+S</kbd> Save project</li>
+                  <li>Double-click dancers to swap positions</li>
+                </ul>
+              </div>
+            </div>
+            <div className="onboarding-footer">
+              <button className="onboarding-dismiss" onClick={dismissOnboarding}>
+                Get Started
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

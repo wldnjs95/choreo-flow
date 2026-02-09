@@ -12,13 +12,16 @@ export interface DancerCircleProps {
   y: number;           // Screen Y coordinate
   radius: number;      // Circle radius in pixels
   color?: string;      // Override default color
+  name?: string;       // Optional dancer name to display
   isSelected?: boolean;
+  isSwapTarget?: boolean;    // Highlight as swap target
   isPovHighlight?: boolean;  // POV: Highlight this dancer as the user's perspective
   isDimmed?: boolean;        // POV: Dim other dancers when POV is active
   showLabel?: boolean;
   labelSize?: number;
   onClick?: (e: React.MouseEvent) => void;
   onMouseDown?: (e: React.MouseEvent) => void;
+  onDoubleClick?: (e: React.MouseEvent) => void;
   style?: React.CSSProperties;
 }
 
@@ -31,20 +34,23 @@ export function DancerCircle({
   y,
   radius,
   color,
+  name,
   isSelected = false,
+  isSwapTarget = false,
   isPovHighlight = false,
   isDimmed = false,
   showLabel = true,
   labelSize,
   onClick,
   onMouseDown,
+  onDoubleClick,
   style,
 }: DancerCircleProps) {
   const dancerColor = color || getDancerColor(id);
   const fontSize = labelSize || Math.max(12, radius * 0.9);
 
   // POV highlight: larger radius and glow effect
-  const displayRadius = isPovHighlight ? radius * 1.3 : radius;
+  const displayRadius = isPovHighlight ? radius * 1.3 : isSwapTarget ? radius * 1.15 : radius;
   const opacity = isDimmed ? 0.4 : 1;
 
   // Determine stroke style
@@ -52,7 +58,11 @@ export function DancerCircle({
   let strokeWidth = 2;
   let filterStyle = 'none';
 
-  if (isPovHighlight) {
+  if (isSwapTarget) {
+    strokeColor = '#f59e0b';  // Orange highlight for swap target
+    strokeWidth = 4;
+    filterStyle = 'drop-shadow(0 0 12px rgba(245, 158, 11, 0.8))';
+  } else if (isPovHighlight) {
     strokeColor = '#FFD700';  // Gold highlight for POV
     strokeWidth = 4;
     filterStyle = 'drop-shadow(0 0 15px rgba(255, 215, 0, 0.8))';
@@ -62,11 +72,16 @@ export function DancerCircle({
     filterStyle = 'drop-shadow(0 0 10px rgba(255,255,255,0.5))';
   }
 
+  // Display text: name if available, otherwise ID
+  const displayText = name || String(id);
+  const displayFontSize = name && name.length > 2 ? fontSize * 0.7 : fontSize;
+
   return (
     <g
-      style={{ cursor: onMouseDown || onClick ? 'pointer' : 'default', opacity, ...style }}
+      style={{ cursor: onMouseDown || onClick || onDoubleClick ? 'pointer' : 'default', opacity, ...style }}
       onClick={onClick}
       onMouseDown={onMouseDown}
+      onDoubleClick={onDoubleClick}
     >
       <circle
         cx={x}
@@ -84,13 +99,13 @@ export function DancerCircle({
           textAnchor="middle"
           dominantBaseline="central"
           fill="#fff"
-          fontSize={isPovHighlight ? fontSize * 1.2 : fontSize}
+          fontSize={isPovHighlight ? displayFontSize * 1.2 : displayFontSize}
           fontWeight="bold"
           stroke="#000"
           strokeWidth={0.5}
           style={{ pointerEvents: 'none', userSelect: 'none' }}
         >
-          {id}
+          {displayText}
         </text>
       )}
     </g>

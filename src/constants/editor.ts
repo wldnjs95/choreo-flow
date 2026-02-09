@@ -23,6 +23,16 @@ export const PATH_ALGORITHM_LABELS: Record<PathAlgorithm, string> = {
   'harmonized_flow': 'Harmonized Flow',
 };
 
+// Algorithm descriptions for tooltips
+export const PATH_ALGORITHM_DESCRIPTIONS: Record<PathAlgorithm, string> = {
+  'natural_curves': 'Smooth S-curve paths for elegant, flowing transitions. Best for lyrical or contemporary dance.',
+  'clean_flow': 'Minimizes path crossings with simplified movements. Best for clean, precise formations.',
+  'wave_sync': 'Staggered back-to-front wave timing. Creates visual ripple effects across the stage.',
+  'perfect_sync': 'All dancers arrive simultaneously. Best for synchronized group moments.',
+  'balanced_direct': 'Distributes travel distances evenly. Ensures no dancer moves too far.',
+  'harmonized_flow': 'Radial-based curves with visual harmony. Creates balanced aesthetic patterns.',
+};
+
 // Algorithm priority for identical path selection (higher = preferred)
 export const ALGORITHM_PRIORITY: PathAlgorithm[] = [
   'natural_curves',    // Most sophisticated curves

@@ -5,6 +5,8 @@
 
 import type { Position } from './geometry';
 import type { CandidateStrategy } from './choreography';
+import type { PathAlgorithm, GeneratedPath, ScoreBreakdown } from '../constants/editor';
+import type { CueSheetResult } from '../gemini/cueSheetGenerator';
 
 /**
  * Transition type between formations
@@ -18,6 +20,7 @@ export interface DancerPosition {
   dancerId: number;
   position: Position;
   color: string;
+  name?: string; // Optional dancer name (e.g., "Alice", "Bob")
 }
 
 /**
@@ -45,6 +48,7 @@ export interface ChoreographyProject {
   stageWidth: number;
   stageHeight: number;
   formations: FormationKeyframe[];
+  dancerNames?: Record<number, string>; // Global dancer names: { 1: "Alice", 2: "Bob", ... }
   bpm?: number;            // Optional BPM for audio sync
   audioFile?: string;      // Optional audio file reference
 }
@@ -71,12 +75,46 @@ export interface PlaybackState {
 }
 
 /**
+ * Serializable version of Gemini evaluation result (Maps converted to Records)
+ */
+export interface SerializedPathEvaluationResult {
+  pick: PathAlgorithm;
+  scores: Record<string, number>;
+  breakdowns: Record<string, ScoreBreakdown>;
+  insights: Record<string, string>;
+  pickReason: string;
+}
+
+/**
+ * Serializable format for algorithm paths
+ * Key: "fromId->toId", Value: { algorithmName: GeneratedPath[] }
+ */
+export type SerializedAlgorithmPaths = Record<string, Record<string, GeneratedPath[]>>;
+
+/**
+ * Serializable format for user-selected algorithms
+ */
+export type SerializedUserSelectedAlgorithms = Record<string, PathAlgorithm>;
+
+/**
+ * Serializable format for Gemini results
+ */
+export type SerializedGeminiResults = Record<string, SerializedPathEvaluationResult>;
+
+/**
  * Export format for JSON save/load
+ * Version 1.0: Basic project data
+ * Version 2.0: Extended with paths, algorithms, Gemini results, cue sheet
  */
 export interface ChoreographyExport {
   version: string;
   project: ChoreographyProject;
   exportedAt: string;
+  // Version 2.0+ fields (optional for backwards compatibility)
+  allAlgorithmPaths?: SerializedAlgorithmPaths;
+  userSelectedAlgorithms?: SerializedUserSelectedAlgorithms;
+  geminiResults?: SerializedGeminiResults;
+  cueSheet?: CueSheetResult | null;
 }
 
 /**

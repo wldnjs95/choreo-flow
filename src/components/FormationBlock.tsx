@@ -17,6 +17,8 @@ interface FormationBlockProps {
   onDelete: () => void;
   onUpdateDuration: (duration: number) => void;
   onUpdateLabel: (label: string) => void;
+  onDragStart?: (formationId: string) => void;
+  onDragEnd?: () => void;
 }
 
 export const FormationBlock: React.FC<FormationBlockProps> = ({
@@ -30,13 +32,32 @@ export const FormationBlock: React.FC<FormationBlockProps> = ({
   onDelete,
   onUpdateDuration,
   onUpdateLabel,
+  onDragStart,
+  onDragEnd,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editLabel, setEditLabel] = useState(formation.label || '');
   const [isResizing, setIsResizing] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const blockRef = useRef<HTMLDivElement>(null);
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
+
+  // Handle drag start for reordering
+  const handleDragStart = (e: React.DragEvent) => {
+    e.stopPropagation();
+    setIsDragging(true);
+    // Use a different MIME type to distinguish from preset drops
+    e.dataTransfer.setData('application/x-formation-id', formation.id);
+    e.dataTransfer.effectAllowed = 'move';
+    onDragStart?.(formation.id);
+  };
+
+  // Handle drag end
+  const handleDragEnd = () => {
+    setIsDragging(false);
+    onDragEnd?.();
+  };
 
   const width = formation.duration * zoom;
   const left = formation.startCount * zoom;
@@ -113,8 +134,11 @@ export const FormationBlock: React.FC<FormationBlockProps> = ({
   return (
     <div
       ref={blockRef}
-      className={`formation-block ${isSelected ? 'selected' : ''} ${isResizing ? 'resizing' : ''}`}
+      className={`formation-block ${isSelected ? 'selected' : ''} ${isResizing ? 'resizing' : ''} ${isDragging ? 'dragging' : ''}`}
       style={{ left, width }}
+      draggable={!isEditing && !isResizing}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       onClick={(e) => {
         e.stopPropagation();
         onSelect();

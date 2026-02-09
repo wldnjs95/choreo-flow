@@ -53,6 +53,36 @@ function FormationCreator() {
   const [history, setHistory] = useState<Position[][]>([]);
   const [future, setFuture] = useState<Position[][]>([]);
 
+  // Toast notification - Stack based (multiple toasts)
+  interface ToastItem {
+    id: string;
+    message: string;
+    type: 'success' | 'error' | 'info';
+    duration: number;
+  }
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const toastIdCounter = useRef(0);
+  const MAX_VISIBLE_TOASTS = 4;
+
+  const removeToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info', duration = 4000) => {
+    const id = `toast-${++toastIdCounter.current}-${Date.now()}`;
+    const newToast: ToastItem = { id, message, type, duration };
+
+    setToasts(prev => {
+      const updated = [...prev, newToast];
+      if (updated.length > MAX_VISIBLE_TOASTS) {
+        return updated.slice(-MAX_VISIBLE_TOASTS);
+      }
+      return updated;
+    });
+
+    setTimeout(() => removeToast(id), duration);
+  }, [removeToast]);
+
   const svgRef = useRef<SVGSVGElement>(null);
 
   // Calculate scale based on stage size
@@ -283,7 +313,7 @@ function FormationCreator() {
   // Save current formation
   const saveFormation = useCallback(() => {
     if (!formationName.trim()) {
-      alert('Please enter a formation name');
+      showToast('Please enter a formation name', 'error');
       return;
     }
 
@@ -302,7 +332,7 @@ function FormationCreator() {
     saveToLocalStorage(updated);
     setFormationName('');
     setFormationDescription('');
-    alert(`Formation "${newFormation.name}" saved!`);
+    showToast(`Formation "${newFormation.name}" saved!`, 'success');
   }, [formationName, formationDescription, dancerCount, positions, stageWidth, stageHeight, savedFormations, saveToLocalStorage]);
 
   // Load a saved formation
@@ -341,7 +371,7 @@ function FormationCreator() {
   // Export current formation only
   const exportCurrentFormation = useCallback(() => {
     if (!formationName.trim()) {
-      alert('Please enter a formation name first');
+      showToast('Please enter a formation name first', 'error');
       return;
     }
     const formation: SavedFormation = {
@@ -379,10 +409,10 @@ function FormationCreator() {
           const updated = [...savedFormations, ...data.formations];
           setSavedFormations(updated);
           saveToLocalStorage(updated);
-          alert(`Imported ${data.formations.length} formation(s)`);
+          showToast(`Imported ${data.formations.length} formation(s)`, 'success');
         }
       } catch (err) {
-        alert('Failed to import file: Invalid JSON format');
+        showToast('Failed to import file: Invalid JSON format', 'error');
       }
     };
     reader.readAsText(file);
@@ -533,6 +563,7 @@ function FormationCreator() {
               <button
                 onClick={() => handleDancerCountChange(dancerCount - 1)}
                 disabled={dancerCount <= 1}
+                title={dancerCount <= 1 ? "Minimum 1 dancer required" : "Remove a dancer"}
                 style={{
                   padding: '6px 12px',
                   background: 'rgba(255,255,255,0.1)',
@@ -548,6 +579,7 @@ function FormationCreator() {
               <button
                 onClick={() => handleDancerCountChange(dancerCount + 1)}
                 disabled={dancerCount >= 16}
+                title={dancerCount >= 16 ? "Maximum 16 dancers allowed" : "Add a dancer"}
                 style={{
                   padding: '6px 12px',
                   background: 'rgba(255,255,255,0.1)',
@@ -608,6 +640,7 @@ function FormationCreator() {
               <button
                 onClick={undo}
                 disabled={history.length === 0}
+                title={history.length === 0 ? "No actions to undo" : `Undo (${history.length} available)`}
                 style={{
                   flex: 1,
                   padding: '8px',
@@ -623,6 +656,7 @@ function FormationCreator() {
               <button
                 onClick={redo}
                 disabled={future.length === 0}
+                title={future.length === 0 ? "No actions to redo" : `Redo (${future.length} available)`}
                 style={{
                   flex: 1,
                   padding: '8px',
@@ -922,6 +956,26 @@ function FormationCreator() {
           </div>
         </div>
       </div>
+
+      {/* Toast Notification Stack */}
+      {toasts.length > 0 && (
+        <div className="toast-container">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className={`toast-notification ${t.type}`}
+              onClick={() => removeToast(t.id)}
+            >
+              <span>{t.message}</span>
+              <button className="toast-close" onClick={(e) => { e.stopPropagation(); removeToast(t.id); }}>×</button>
+              <div
+                className="toast-progress"
+                style={{ animationDuration: `${t.duration}ms` }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

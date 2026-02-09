@@ -18,6 +18,7 @@ interface TimelineProps {
   onAddFormation: (afterId: string | null) => void;
   onSeek?: (count: number) => void; // Seek to specific count
   onDropPreset?: (presetJson: string, atCount: number) => void; // Drop preset to add formation
+  onReorderFormation?: (formationId: string, toIndex: number) => void; // Reorder formation
 }
 
 const GRID_HEIGHT = 90; // Increased for thumbnails
@@ -36,11 +37,15 @@ export const Timeline: React.FC<TimelineProps> = ({
   onAddFormation,
   onSeek,
   onDropPreset,
+  onReorderFormation,
 }) => {
   const timelineRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = React.useState(false);
   const [isDragOver, setIsDragOver] = React.useState(false);
+  const [dropIndicatorX, setDropIndicatorX] = React.useState<number | null>(null);
+  const [dragType, setDragType] = React.useState<'preset' | 'formation' | null>(null);
+  const [, setDraggingFormationId] = React.useState<string | null>(null);
 
   // Calculate total counts (last formation end or minimum 64 counts)
   const lastFormation = project.formations[project.formations.length - 1];
@@ -161,33 +166,82 @@ export const Timeline: React.FC<TimelineProps> = ({
     onSeek(clickedCount);
   };
 
-  // Drag and drop handlers for preset
+  // Drag and drop handlers for preset and formation reordering
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
+
+    // Check if it's a formation drag or preset drag
+    const formationId = e.dataTransfer.types.includes('application/x-formation-id');
+    const isPreset = e.dataTransfer.types.includes('application/json');
+
+    if (formationId) {
+      e.dataTransfer.dropEffect = 'move';
+      setDragType('formation');
+    } else if (isPreset) {
+      e.dataTransfer.dropEffect = 'copy';
+      setDragType('preset');
+    }
+
     setIsDragOver(true);
+
+    // Calculate and show drop indicator position
+    if (timelineRef.current) {
+      const rect = timelineRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      setDropIndicatorX(x);
+    }
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
+    setDropIndicatorX(null);
+    setDragType(null);
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
+    setDropIndicatorX(null);
+    setDragType(null);
 
-    if (!onDropPreset || !timelineRef.current) return;
+    if (!timelineRef.current) return;
 
-    const presetJson = e.dataTransfer.getData('application/json');
-    if (!presetJson) return;
-
-    // Calculate drop position (count)
     const rect = timelineRef.current.getBoundingClientRect();
     const dropX = e.clientX - rect.left;
     const dropCount = Math.max(0, dropX / zoom);
 
-    onDropPreset(presetJson, dropCount);
+    // Check for formation reorder first
+    const formationId = e.dataTransfer.getData('application/x-formation-id');
+    if (formationId && onReorderFormation) {
+      // Calculate target index based on drop position
+      let targetIndex = 0;
+      for (let i = 0; i < project.formations.length; i++) {
+        const f = project.formations[i];
+        const fMidpoint = f.startCount + f.duration / 2;
+        if (dropCount > fMidpoint) {
+          targetIndex = i + 1;
+        }
+      }
+      onReorderFormation(formationId, targetIndex);
+      setDraggingFormationId(null);
+      return;
+    }
+
+    // Handle preset drop
+    const presetJson = e.dataTransfer.getData('application/json');
+    if (presetJson && onDropPreset) {
+      onDropPreset(presetJson, dropCount);
+    }
+  };
+
+  // Formation drag handlers
+  const handleFormationDragStart = (formationId: string) => {
+    setDraggingFormationId(formationId);
+  };
+
+  const handleFormationDragEnd = () => {
+    setDraggingFormationId(null);
   };
 
   return (
@@ -247,6 +301,19 @@ export const Timeline: React.FC<TimelineProps> = ({
           <div className="playhead-line" />
         </div>
 
+        {/* Drop position indicator */}
+        {isDragOver && dropIndicatorX !== null && (
+          <div
+            className={`drop-indicator ${dragType === 'formation' ? 'move' : 'copy'}`}
+            style={{ left: dropIndicatorX }}
+          >
+            <div className="drop-indicator-line" />
+            <div className="drop-indicator-label">
+              {Math.round(dropIndicatorX / zoom)}
+            </div>
+          </div>
+        )}
+
         {/* Formation blocks */}
         {project.formations.map((formation, index) => (
           <FormationBlock
@@ -261,6 +328,8 @@ export const Timeline: React.FC<TimelineProps> = ({
             onDelete={() => onDeleteFormation(formation.id)}
             onUpdateDuration={(duration) => onUpdateFormation(formation.id, { duration })}
             onUpdateLabel={(label) => onUpdateFormation(formation.id, { label })}
+            onDragStart={handleFormationDragStart}
+            onDragEnd={handleFormationDragEnd}
           />
         ))}
 

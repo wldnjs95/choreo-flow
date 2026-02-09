@@ -3,7 +3,7 @@
  * Renders a small SVG preview of a formation preset
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import type { FormationPreset } from '../constants/editor';
 
 // Dancer colors palette
@@ -42,18 +42,26 @@ export const PresetPreview: React.FC<PresetPreviewProps> = ({
   const offsetX = previewPadding + (availableWidth - stageW * scale) / 2;
   const offsetY = previewPadding + (availableHeight - stageH * scale) / 2;
 
+  const [isDragging, setIsDragging] = useState(false);
+
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData('application/json', JSON.stringify(preset));
     e.dataTransfer.effectAllowed = 'copy';
+    setIsDragging(true);
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
   };
 
   return (
     <div
-      className={`preset-preview-card ${isSelected ? 'selected' : ''}`}
+      className={`preset-preview-card ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''}`}
       onClick={onClick}
       title={`${preset.name} (${preset.dancerCount} dancers) - Drag to timeline`}
       draggable
       onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
     >
       <svg width={previewSize} height={previewSize} className="preset-preview-svg">
         <rect

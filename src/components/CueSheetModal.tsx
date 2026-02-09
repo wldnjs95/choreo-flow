@@ -4,7 +4,7 @@
  * Displays generated cue sheets for dancers in a modal dialog
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { CueSheetResult, DancerCueSheet } from '../gemini/cueSheetGenerator';
 
 interface CueSheetModalProps {
@@ -30,6 +30,18 @@ export function CueSheetModal({
 }: CueSheetModalProps) {
   const [selectedDancer, setSelectedDancer] = useState<number | 'all'>('all');
   const [expandedDancers, setExpandedDancers] = useState<Set<number>>(new Set());
+
+  // ESC key handler
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
