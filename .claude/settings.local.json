@@ -19,7 +19,17 @@
       "Bash(git checkout:*)",
       "Bash(cat:*)",
       "Bash(python3:*)",
-      "Bash(git fetch:*)"
+      "Bash(git fetch:*)",
+      "Bash(ls:*)",
+      "Bash(xargs:*)",
+      "Bash(/Users/jiwonpark/Desktop/Project/hacka/dance-choreography/src/algorithms/rvo.ts )",
+      "Bash(/Users/jiwonpark/Desktop/Project/hacka/dance-choreography/src/algorithms/potentialField.ts )",
+      "Bash(/Users/jiwonpark/Desktop/Project/hacka/dance-choreography/src/algorithms/jps.ts )",
+      "Bash(/Users/jiwonpark/Desktop/Project/hacka/dance-choreography/src/algorithms/cbs.ts )",
+      "Bash(/Users/jiwonpark/Desktop/Project/hacka/dance-choreography/src/algorithms/astar.ts )",
+      "Bash(/Users/jiwonpark/Desktop/Project/hacka/dance-choreography/src/algorithms/HybridAlgorithmBase.ts)",
+      "Bash(/Users/jiwonpark/Desktop/Project/hacka/dance-choreography/src/TestingPage.tsx )",
+      "Bash(/Users/jiwonpark/Desktop/Project/hacka/dance-choreography/src/SimulationPage.tsx)"
     ]
   }
 }

@@ -5,7 +5,15 @@
  */
 
 import { callGeminiAPI } from './config';
-import type { PathResult } from '../algorithms/astar';
+
+/**
+ * Path result for a single dancer
+ */
+interface PathResult {
+  dancerId: number;
+  path: Array<{ t: number; x: number; y: number }>;
+  totalDistance: number;
+}
 
 /**
  * Aesthetic evaluation result
