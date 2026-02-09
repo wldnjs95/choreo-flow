@@ -5010,6 +5010,119 @@ textarea:focus {
   display: none;
 }
 
+/* Quick Swap Popup */
+.quick-swap-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 700;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.quick-swap-popup {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  margin-top: -10px;
+  background: rgba(30, 30, 45, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  min-width: 180px;
+  max-width: 250px;
+  max-height: 300px;
+  overflow: hidden;
+  animation: quickSwapFadeIn 0.15s ease;
+}
+
+@keyframes quickSwapFadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -100%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -100%) scale(1);
+  }
+}
+
+.quick-swap-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 13px;
+  color: #aaa;
+}
+
+.quick-swap-close {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: #888;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.quick-swap-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.quick-swap-list {
+  padding: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.quick-swap-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #fff;
+  font-size: 13px;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.quick-swap-item:hover {
+  background: rgba(78, 205, 196, 0.15);
+}
+
+.quick-swap-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.quick-swap-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Toast Container - Stacked toasts */
 .toast-container {
   position: fixed;
@@ -5594,6 +5707,48 @@ textarea:focus {
   border-radius: 8px;
   border: 1px solid rgba(78, 205, 196, 0.15);
   font-variant-numeric: tabular-nums;
+}
+
+/* Selection actions (rotation controls) */
+.selection-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(78, 205, 196, 0.1);
+  border: 1px solid rgba(78, 205, 196, 0.2);
+  border-radius: 8px;
+}
+
+.selection-count {
+  font-size: 12px;
+  color: #4ECDC4;
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+.rotate-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(78, 205, 196, 0.15);
+  color: #4ECDC4;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.rotate-btn:hover {
+  background: rgba(78, 205, 196, 0.3);
+  transform: scale(1.05);
+}
+
+.rotate-btn:active {
+  transform: scale(0.95);
 }
 
 /* Formation quick nav */
@@ -6267,29 +6422,51 @@ textarea:focus {
   color: rgba(255, 255, 255, 0.5);
 }
 
-/* Delete button */
-.formation-delete-btn {
+/* Action buttons container */
+.formation-action-buttons {
   position: absolute;
   top: 2px;
   right: 2px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: none;
-  background: #ff6b6b;
-  color: #fff;
-  font-size: 12px;
-  line-height: 1;
-  cursor: pointer;
+  display: flex;
+  gap: 2px;
   opacity: 0;
   transition: opacity 0.2s;
 }
 
-.formation-block.selected .formation-delete-btn {
+.formation-block.selected .formation-action-buttons {
   opacity: 1;
 }
 
-.formation-delete-btn:hover {
+/* Action button base style */
+.formation-action-btn {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.formation-action-btn.duplicate {
+  background: #4ecdc4;
+}
+
+.formation-action-btn.duplicate:hover {
+  background: #45b7d1;
+}
+
+.formation-action-btn.delete {
+  background: #ff6b6b;
+  font-size: 12px;
+}
+
+.formation-action-btn.delete:hover {
   background: #ff5252;
 }
 
@@ -6487,6 +6664,75 @@ textarea:focus {
   max-height: 300px;
   overflow-y: auto;
   padding: 4px;
+}
+
+/* Dancer delete button in settings */
+.dancer-delete-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 107, 107, 0.2);
+  color: #ff6b6b;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.dancer-delete-btn:hover:not(:disabled) {
+  background: rgba(255, 107, 107, 0.4);
+  color: #fff;
+}
+
+.dancer-delete-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.dancer-delete-btn.restore {
+  background: rgba(78, 205, 196, 0.2);
+  color: #4ecdc4;
+}
+
+.dancer-delete-btn.restore:hover {
+  background: rgba(78, 205, 196, 0.4);
+  color: #fff;
+}
+
+/* Marked for deletion style */
+.dancer-name-row.marked-for-deletion {
+  opacity: 0.5;
+  background: rgba(255, 107, 107, 0.1);
+  border-radius: 4px;
+  padding: 2px;
+  margin: -2px;
+}
+
+.dancer-name-row.marked-for-deletion .dancer-name-input {
+  text-decoration: line-through;
+  color: #888;
+}
+
+/* Delete hint in section header */
+.delete-hint {
+  font-size: 11px;
+  color: #ff6b6b;
+  font-weight: 400;
+}
+
+/* Warning message */
+.settings-warning {
+  font-size: 12px;
+  color: #ff6b6b;
+  margin: 0 0 8px 0;
+  padding: 8px;
+  background: rgba(255, 107, 107, 0.1);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 107, 107, 0.2);
 }
 
 .settings-tip {

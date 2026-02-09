@@ -18,6 +18,7 @@ interface SettingsModalProps {
   swapSourceDancerId: number | null;
   onUpdateDancerName: (dancerId: number, name: string) => void;
   onUpdateDancerCount: (count: number) => void;
+  onDeleteSpecificDancer?: (dancerId: number) => void;
   // Stage settings
   stageWidth: number;
   stageHeight: number;
@@ -44,6 +45,7 @@ export function SettingsModal({
   swapSourceDancerId,
   onUpdateDancerName,
   onUpdateDancerCount,
+  onDeleteSpecificDancer,
   stageWidth,
   stageHeight,
   onUpdateStageSize,
@@ -57,6 +59,7 @@ export function SettingsModal({
   const [localStageHeight, setLocalStageHeight] = useState(stageHeight);
   const [localAudienceAtTop, setLocalAudienceAtTop] = useState(audienceAtTop);
   const [isCustomSize, setIsCustomSize] = useState(false);
+  const [dancersToDelete, setDancersToDelete] = useState<Set<number>>(new Set());
 
   // Parse the string to number for comparison/calculation
   const localDancerCountNum = parseInt(localDancerCountStr, 10);
@@ -75,6 +78,7 @@ export function SettingsModal({
       setLocalStageWidth(stageWidth);
       setLocalStageHeight(stageHeight);
       setLocalAudienceAtTop(audienceAtTop);
+      setDancersToDelete(new Set());
       const matching = getMatchingPreset(stageWidth, stageHeight);
       setIsCustomSize(!matching || matching.label === 'Custom');
     }
@@ -120,6 +124,7 @@ export function SettingsModal({
     if (localDancerCountNum !== dancerCount) return true;
     if (localStageWidth !== stageWidth || localStageHeight !== stageHeight) return true;
     if (localAudienceAtTop !== audienceAtTop) return true;
+    if (dancersToDelete.size > 0) return true;
     // Check dancer names
     for (let i = 1; i <= dancerCount; i++) {
       if ((localDancerNames[i] || '') !== (dancerNames[i] || '')) return true;
@@ -127,10 +132,35 @@ export function SettingsModal({
     return false;
   };
 
+  // Mark a specific dancer for deletion
+  const handleMarkForDeletion = (dancerId: number) => {
+    setDancersToDelete(prev => {
+      const next = new Set(prev);
+      if (next.has(dancerId)) {
+        next.delete(dancerId);
+      } else {
+        next.add(dancerId);
+      }
+      return next;
+    });
+  };
+
+  // Get effective dancer list (excluding marked for deletion)
+  const effectiveDancerCount = (isValidCount ? localDancerCountNum : dancerCount) - dancersToDelete.size;
+
   // Save all changes
   const handleSave = () => {
-    // Apply dancer count change
-    if (isValidCount && localDancerCountNum !== dancerCount) {
+    // Delete specific dancers first (before count changes)
+    if (dancersToDelete.size > 0 && onDeleteSpecificDancer) {
+      // Delete in reverse order to maintain correct indices
+      const sortedDeletions = Array.from(dancersToDelete).sort((a, b) => b - a);
+      for (const dancerId of sortedDeletions) {
+        onDeleteSpecificDancer(dancerId);
+      }
+    }
+
+    // Apply dancer count change (only if no specific deletions)
+    if (dancersToDelete.size === 0 && isValidCount && localDancerCountNum !== dancerCount) {
       onUpdateDancerCount(localDancerCountNum);
     }
 
@@ -146,9 +176,10 @@ export function SettingsModal({
       onUpdateAudienceDirection(localAudienceAtTop);
     }
 
-    // Apply dancer name changes
+    // Apply dancer name changes (skip deleted dancers)
     const countToUse = isValidCount ? localDancerCountNum : dancerCount;
     for (let i = 1; i <= countToUse; i++) {
+      if (dancersToDelete.has(i)) continue;
       const localName = localDancerNames[i] || '';
       const currentName = dancerNames[i] || '';
       if (localName !== currentName) {
@@ -269,31 +300,51 @@ export function SettingsModal({
           <div className="settings-section">
             <h3>
               Dancer Names
+              {dancersToDelete.size > 0 && (
+                <span className="delete-hint"> ({dancersToDelete.size} to delete)</span>
+              )}
               {swapSourceDancerId && (
                 <span className="swap-hint"> (Swap mode: #{swapSourceDancerId})</span>
               )}
             </h3>
+            {effectiveDancerCount < 1 && (
+              <p className="settings-warning">At least 1 dancer required</p>
+            )}
             <div className="settings-dancer-names-grid">
-              {Array.from({ length: isValidCount ? localDancerCountNum : dancerCount }, (_, i) => i + 1).map(dancerId => (
-                <div
-                  key={dancerId}
-                  className={`dancer-name-row ${swapSourceDancerId === dancerId ? 'swap-source' : ''}`}
-                >
-                  <span
-                    className="dancer-id-badge"
-                    style={{ backgroundColor: dancerColors[dancerId] || '#888' }}
+              {Array.from({ length: isValidCount ? localDancerCountNum : dancerCount }, (_, i) => i + 1).map(dancerId => {
+                const isMarkedForDeletion = dancersToDelete.has(dancerId);
+                return (
+                  <div
+                    key={dancerId}
+                    className={`dancer-name-row ${swapSourceDancerId === dancerId ? 'swap-source' : ''} ${isMarkedForDeletion ? 'marked-for-deletion' : ''}`}
                   >
-                    {dancerId}
-                  </span>
-                  <input
-                    type="text"
-                    className="dancer-name-input"
-                    placeholder={`Dancer ${dancerId}`}
-                    value={localDancerNames[dancerId] || ''}
-                    onChange={(e) => handleLocalDancerNameChange(dancerId, e.target.value)}
-                  />
-                </div>
-              ))}
+                    <span
+                      className="dancer-id-badge"
+                      style={{ backgroundColor: isMarkedForDeletion ? '#666' : (dancerColors[dancerId] || '#888') }}
+                    >
+                      {dancerId}
+                    </span>
+                    <input
+                      type="text"
+                      className="dancer-name-input"
+                      placeholder={`Dancer ${dancerId}`}
+                      value={localDancerNames[dancerId] || ''}
+                      onChange={(e) => handleLocalDancerNameChange(dancerId, e.target.value)}
+                      disabled={isMarkedForDeletion}
+                    />
+                    {onDeleteSpecificDancer && (
+                      <button
+                        className={`dancer-delete-btn ${isMarkedForDeletion ? 'restore' : ''}`}
+                        onClick={() => handleMarkForDeletion(dancerId)}
+                        disabled={!isMarkedForDeletion && effectiveDancerCount <= 1}
+                        title={isMarkedForDeletion ? 'Restore dancer' : 'Delete dancer'}
+                      >
+                        {isMarkedForDeletion ? '↩' : '×'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             <p className="settings-tip">
               Double-click dancers on stage to swap positions

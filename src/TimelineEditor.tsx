@@ -19,6 +19,7 @@ import type {
 import {
   createNewProject,
   createEmptyFormation,
+  generateFormationId,
 } from './types/timeline';
 import {
   DEFAULT_STAGE_WIDTH,
@@ -169,6 +170,13 @@ const TimelineEditor: React.FC = () => {
 
   // Dancer swap state (double-click to swap)
   const [swapSourceDancerId, setSwapSourceDancerId] = useState<number | null>(null);
+
+  // Quick swap popup state (long-press to show all dancers)
+  const [quickSwapPopup, setQuickSwapPopup] = useState<{
+    sourceDancerId: number;
+    screenX: number;
+    screenY: number;
+  } | null>(null);
 
   // Path state - now stores paths for ALL algorithms per transition
   // Key format: "formationId->formationId:algorithm"
@@ -511,15 +519,22 @@ const TimelineEditor: React.FC = () => {
     }));
   }, [saveToHistory]);
 
-  // Swap two dancers' positions across ALL formations (keep colors and names)
+  // Swap two dancers' positions in CURRENT formation only (keep colors and names)
   const swapDancers = useCallback((dancerId1: number, dancerId2: number) => {
     if (dancerId1 === dancerId2) return;
+    if (!selectedFormationId) {
+      showToast('Select a formation first', 'info', 2000);
+      return;
+    }
 
     saveToHistory();
     setProject(prev => ({
       ...prev,
       updatedAt: new Date().toISOString(),
       formations: prev.formations.map(f => {
+        // Only swap in the currently selected formation
+        if (f.id !== selectedFormationId) return f;
+
         // Find both dancers
         const dancer1 = f.positions.find(d => d.dancerId === dancerId1);
         const dancer2 = f.positions.find(d => d.dancerId === dancerId2);
@@ -543,7 +558,7 @@ const TimelineEditor: React.FC = () => {
     }));
 
     showToast(`Swapped positions: ${dancerId1} ↔ ${dancerId2}`, 'success', 2000);
-  }, [saveToHistory, showToast]);
+  }, [saveToHistory, showToast, selectedFormationId]);
 
   // Handle dancer double-click for swap
   const handleDancerDoubleClick = useCallback((dancerId: number) => {
@@ -561,6 +576,106 @@ const TimelineEditor: React.FC = () => {
       setSwapSourceDancerId(null);
     }
   }, [swapSourceDancerId, swapDancers, showToast]);
+
+  // Handle long press on dancer to show quick swap menu
+  const handleDancerLongPress = useCallback((dancerId: number, screenX: number, screenY: number) => {
+    setQuickSwapPopup({
+      sourceDancerId: dancerId,
+      screenX,
+      screenY,
+    });
+  }, []);
+
+  // Handle quick swap selection from popup
+  const handleQuickSwapSelect = useCallback((targetDancerId: number) => {
+    if (quickSwapPopup) {
+      swapDancers(quickSwapPopup.sourceDancerId, targetDancerId);
+      setQuickSwapPopup(null);
+    }
+  }, [quickSwapPopup, swapDancers]);
+
+  // Close quick swap popup
+  const closeQuickSwapPopup = useCallback(() => {
+    setQuickSwapPopup(null);
+  }, []);
+
+  // Rotate positions of selected dancers (shift positions CW or CCW)
+  // Dancers are sorted by angle from centroid to form a circular order
+  const rotateSelectedPositions = useCallback((direction: 'cw' | 'ccw') => {
+    if (selectedDancers.size < 2) {
+      showToast('Select at least 2 dancers to rotate', 'info', 2000);
+      return;
+    }
+    if (!selectedFormationId) {
+      showToast('Select a formation first', 'info', 2000);
+      return;
+    }
+
+    saveToHistory();
+    setProject(prev => {
+      const formation = prev.formations.find(f => f.id === selectedFormationId);
+      if (!formation) return prev;
+
+      // Get selected dancers with their positions
+      const selectedDancerData = Array.from(selectedDancers)
+        .map(id => {
+          const dancer = formation.positions.find(d => d.dancerId === id);
+          return dancer ? { id, position: { ...dancer.position } } : null;
+        })
+        .filter((d): d is { id: number; position: { x: number; y: number } } => d !== null);
+
+      if (selectedDancerData.length < 2) return prev;
+
+      // Calculate centroid of selected dancers
+      const centroid = {
+        x: selectedDancerData.reduce((sum, d) => sum + d.position.x, 0) / selectedDancerData.length,
+        y: selectedDancerData.reduce((sum, d) => sum + d.position.y, 0) / selectedDancerData.length,
+      };
+
+      // Sort dancers by angle from centroid (counter-clockwise from positive X axis)
+      // This creates a circular order around the centroid
+      const sortedDancers = [...selectedDancerData].sort((a, b) => {
+        const angleA = Math.atan2(a.position.y - centroid.y, a.position.x - centroid.x);
+        const angleB = Math.atan2(b.position.y - centroid.y, b.position.x - centroid.x);
+        return angleA - angleB;
+      });
+
+      // Get positions in circular order
+      const positions = sortedDancers.map(d => d.position);
+      const dancerIds = sortedDancers.map(d => d.id);
+
+      // Rotate positions: CW = each dancer takes next position in circle
+      // CCW = each dancer takes previous position in circle
+      const rotatedPositions = direction === 'cw'
+        ? [positions[positions.length - 1], ...positions.slice(0, -1)]
+        : [...positions.slice(1), positions[0]];
+
+      // Create mapping: dancerId -> new position
+      const positionMap = new Map<number, { x: number; y: number }>();
+      dancerIds.forEach((id, idx) => {
+        positionMap.set(id, rotatedPositions[idx]);
+      });
+
+      return {
+        ...prev,
+        updatedAt: new Date().toISOString(),
+        formations: prev.formations.map(f => {
+          if (f.id !== selectedFormationId) return f;
+          return {
+            ...f,
+            positions: f.positions.map(p => {
+              const newPos = positionMap.get(p.dancerId);
+              if (!newPos) return p;
+              return { ...p, position: newPos };
+            }),
+          };
+        }),
+      };
+    });
+
+    const dirLabel = direction === 'cw' ? '↻' : '↺';
+    showToast(`Rotated ${selectedDancers.size} positions ${dirLabel}`, 'success', 1500);
+  }, [selectedDancers, selectedFormationId, saveToHistory, showToast]);
 
   // Update dancer name
   const updateDancerName = useCallback((dancerId: number, name: string) => {
@@ -738,6 +853,68 @@ const TimelineEditor: React.FC = () => {
       };
     });
   }, [selectedFormationId, saveToHistory]);
+
+  // Duplicate formation
+  const duplicateFormation = useCallback((formationId: string) => {
+    saveToHistory();
+    setProject(prev => {
+      const sourceIndex = prev.formations.findIndex(f => f.id === formationId);
+      if (sourceIndex === -1) return prev;
+
+      const source = prev.formations[sourceIndex];
+      const nextNumber = getNextFormationNumber(prev.formations);
+
+      const duplicate: FormationKeyframe = {
+        id: generateFormationId(),
+        startCount: source.startCount + source.duration,
+        duration: source.duration,
+        label: String(nextNumber),
+        transitionType: source.transitionType,
+        positions: source.positions.map(p => ({
+          ...p,
+          position: { ...p.position }
+        }))
+      };
+
+      const formations = [...prev.formations];
+      formations.splice(sourceIndex + 1, 0, duplicate);
+
+      // Recalculate startCounts for subsequent formations
+      for (let i = sourceIndex + 2; i < formations.length; i++) {
+        formations[i] = {
+          ...formations[i],
+          startCount: formations[i - 1].startCount + formations[i - 1].duration
+        };
+      }
+
+      // Clear cue sheet and path caches
+      setCueSheetGeneratedWith(new Map());
+
+      setSelectedFormationId(duplicate.id);
+
+      return {
+        ...prev,
+        updatedAt: new Date().toISOString(),
+        formations
+      };
+    });
+
+    showToast('Formation duplicated', 'success', 1500);
+  }, [saveToHistory, getNextFormationNumber, showToast]);
+
+  // Keyboard shortcut for duplicate formation (Ctrl/Cmd + D)
+  useEffect(() => {
+    const handleDuplicateKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
+        e.preventDefault();
+        if (selectedFormationId) {
+          duplicateFormation(selectedFormationId);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleDuplicateKeyDown);
+    return () => window.removeEventListener('keydown', handleDuplicateKeyDown);
+  }, [selectedFormationId, duplicateFormation]);
 
   // Reorder formation (move to new position)
   const reorderFormation = useCallback((formationId: string, toIndex: number) => {
@@ -1201,6 +1378,44 @@ const TimelineEditor: React.FC = () => {
       }),
     }));
   };
+
+  // Delete a specific dancer by ID (removes from all formations and renumbers)
+  const deleteSpecificDancer = useCallback((dancerId: number) => {
+    saveToHistory();
+    setProject(prev => {
+      // Remove dancer from all formations and renumber
+      const newFormations = prev.formations.map(f => ({
+        ...f,
+        positions: f.positions
+          .filter(p => p.dancerId !== dancerId)
+          .map(p => ({
+            ...p,
+            // Renumber: dancers after the deleted one shift down by 1
+            dancerId: p.dancerId > dancerId ? p.dancerId - 1 : p.dancerId,
+          })),
+      }));
+
+      // Update dancer names (shift all names after the deleted dancer)
+      const newDancerNames: Record<number, string> = {};
+      for (let i = 1; i <= prev.dancerCount; i++) {
+        if (i < dancerId) {
+          if (prev.dancerNames?.[i]) newDancerNames[i] = prev.dancerNames[i];
+        } else if (i > dancerId) {
+          if (prev.dancerNames?.[i]) newDancerNames[i - 1] = prev.dancerNames[i];
+        }
+      }
+
+      return {
+        ...prev,
+        dancerCount: prev.dancerCount - 1,
+        formations: newFormations,
+        dancerNames: newDancerNames,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    showToast(`Dancer ${dancerId} deleted`, 'success', 2000);
+  }, [saveToHistory, showToast]);
 
   // Calculate optimal entry position for a new dancer entering from exit zone
   const calculateOptimalEntryPosition = useCallback((
@@ -2967,6 +3182,26 @@ Score each option 0-100 based on the weighted criteria above.
               <h3>{selectedFormation?.label || `Formation ${selectedFormation ? project.formations.indexOf(selectedFormation) + 1 : '-'}`}</h3>
               <span className="count-display">Count: {Math.floor(currentCount)}</span>
             </div>
+            {/* Selection Actions - Edit mode only, show when dancers selected */}
+            {uiMode === 'edit' && selectedDancers.size >= 2 && (
+              <div className="selection-actions">
+                <span className="selection-count">{selectedDancers.size} selected</span>
+                <button
+                  className="rotate-btn"
+                  onClick={() => rotateSelectedPositions('ccw')}
+                  title="Rotate positions counter-clockwise"
+                >
+                  ↺
+                </button>
+                <button
+                  className="rotate-btn"
+                  onClick={() => rotateSelectedPositions('cw')}
+                  title="Rotate positions clockwise"
+                >
+                  ↻
+                </button>
+              </div>
+            )}
             {/* POV (Point of View) Selector - Rehearsal mode only */}
             {uiMode === 'rehearsal' && (
               <div className="stage-header-right">
@@ -3243,6 +3478,7 @@ Score each option 0-100 based on the weighted criteria above.
                   isDimmed={isDimmed}
                   onMouseDown={uiMode === 'edit' ? (e) => handleDancerMouseDown(dancer.dancerId, e) : undefined}
                   onDoubleClick={uiMode === 'edit' ? () => handleDancerDoubleClick(dancer.dancerId) : undefined}
+                  onLongPress={uiMode === 'edit' ? (_e, screenX, screenY) => handleDancerLongPress(dancer.dancerId, screenX, screenY) : undefined}
                 />
               );
             })}
@@ -3624,6 +3860,7 @@ Score each option 0-100 based on the weighted criteria above.
           onSelectFormation={handleSelectFormation}
           onUpdateFormation={updateFormation}
           onDeleteFormation={deleteFormation}
+          onDuplicateFormation={duplicateFormation}
           onAddFormation={addFormation}
           onSeek={(count) => {
             setCurrentCount(count);
@@ -3728,6 +3965,7 @@ Score each option 0-100 based on the weighted criteria above.
         swapSourceDancerId={swapSourceDancerId}
         onUpdateDancerName={updateDancerName}
         onUpdateDancerCount={handleDancerCountChange}
+        onDeleteSpecificDancer={deleteSpecificDancer}
         stageWidth={project.stageWidth}
         stageHeight={project.stageHeight}
         onUpdateStageSize={handleStageSizeChange}
@@ -3746,6 +3984,49 @@ Score each option 0-100 based on the weighted criteria above.
         cancelText="Cancel"
         isDangerous
       />
+
+      {/* Quick Swap Popup */}
+      {quickSwapPopup && selectedFormation && (
+        <div
+          className="quick-swap-overlay"
+          onClick={closeQuickSwapPopup}
+        >
+          <div
+            className="quick-swap-popup"
+            style={{
+              left: quickSwapPopup.screenX,
+              top: quickSwapPopup.screenY,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="quick-swap-header">
+              <span>Swap #{quickSwapPopup.sourceDancerId} with:</span>
+              <button className="quick-swap-close" onClick={closeQuickSwapPopup}>×</button>
+            </div>
+            <div className="quick-swap-list">
+              {selectedFormation.positions
+                .filter(p => p.dancerId !== quickSwapPopup.sourceDancerId)
+                .map(p => (
+                  <button
+                    key={p.dancerId}
+                    className="quick-swap-item"
+                    onClick={() => handleQuickSwapSelect(p.dancerId)}
+                  >
+                    <span
+                      className="quick-swap-badge"
+                      style={{ backgroundColor: p.color }}
+                    >
+                      {p.dancerId}
+                    </span>
+                    <span className="quick-swap-name">
+                      {project.dancerNames?.[p.dancerId] || `Dancer ${p.dancerId}`}
+                    </span>
+                  </button>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast Notification Stack */}
       {toasts.length > 0 && (

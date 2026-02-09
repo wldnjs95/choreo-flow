@@ -15,6 +15,7 @@ interface TimelineProps {
   onSelectFormation: (id: string) => void;
   onUpdateFormation: (id: string, updates: Partial<FormationKeyframe>) => void;
   onDeleteFormation: (id: string) => void;
+  onDuplicateFormation?: (id: string) => void;
   onAddFormation: (afterId: string | null) => void;
   onSeek?: (count: number) => void; // Seek to specific count
   onDropPreset?: (presetJson: string, atCount: number) => void; // Drop preset to add formation
@@ -34,6 +35,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   onSelectFormation,
   onUpdateFormation,
   onDeleteFormation,
+  onDuplicateFormation,
   onAddFormation,
   onSeek,
   onDropPreset,
@@ -341,6 +343,7 @@ export const Timeline: React.FC<TimelineProps> = ({
             stageHeight={project.stageHeight}
             onSelect={() => onSelectFormation(formation.id)}
             onDelete={() => onDeleteFormation(formation.id)}
+            onDuplicate={onDuplicateFormation ? () => onDuplicateFormation(formation.id) : undefined}
             onUpdateDuration={(duration) => onUpdateFormation(formation.id, { duration })}
             onUpdateLabel={(label) => onUpdateFormation(formation.id, { label })}
             onDragStart={handleFormationDragStart}

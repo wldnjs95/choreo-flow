@@ -15,6 +15,7 @@ interface FormationBlockProps {
   stageHeight: number;
   onSelect: () => void;
   onDelete: () => void;
+  onDuplicate?: () => void;
   onUpdateDuration: (duration: number) => void;
   onUpdateLabel: (label: string) => void;
   onDragStart?: (formationId: string) => void;
@@ -30,6 +31,7 @@ export const FormationBlock: React.FC<FormationBlockProps> = ({
   stageHeight,
   onSelect,
   onDelete,
+  onDuplicate,
   onUpdateDuration,
   onUpdateLabel,
   onDragStart,
@@ -177,18 +179,32 @@ export const FormationBlock: React.FC<FormationBlockProps> = ({
         {width >= 50 && renderMiniPreview()}
       </div>
 
-      {/* Delete button (visible when selected) */}
+      {/* Action buttons (visible when selected) */}
       {isSelected && (
-        <button
-          className="formation-delete-btn"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          title="Delete Formation"
-        >
-          ×
-        </button>
+        <div className="formation-action-buttons">
+          {onDuplicate && (
+            <button
+              className="formation-action-btn duplicate"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDuplicate();
+              }}
+              title="Duplicate Formation (Ctrl/Cmd+D)"
+            >
+              ⧉
+            </button>
+          )}
+          <button
+            className="formation-action-btn delete"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            title="Delete Formation"
+          >
+            ×
+          </button>
+        </div>
       )}
 
       {/* Resize handle */}
