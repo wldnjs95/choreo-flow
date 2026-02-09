@@ -2256,7 +2256,6 @@ export default function DanceChoreography() {
   const [cueSheet, setCueSheet] = useState<CueSheetResult | null>(null);
   const [cueSheetLoading, setCueSheetLoading] = useState(false);
   const [cueSheetError, setCueSheetError] = useState<string | null>(null);
-  const [cueSheetLanguage, setCueSheetLanguage] = useState<'ko' | 'en'>('ko');
 
   // Initialize custom positions when dancer count or stage size changes
   // Skip if test case preset just updated (to preserve test case positions)
@@ -2478,7 +2477,7 @@ export default function DanceChoreography() {
       }));
 
       const cueSheetResult = await generateCueSheet(paths, {
-        language: cueSheetLanguage,
+        language: 'en',
         stageWidth,
         stageHeight,
         totalCounts,
@@ -2492,7 +2491,7 @@ export default function DanceChoreography() {
     } finally {
       setCueSheetLoading(false);
     }
-  }, [result, dancers, cueSheetLanguage, stageWidth, stageHeight, totalCounts]);
+  }, [result, dancers, stageWidth, stageHeight, totalCounts]);
 
   // Handle formation preset in editor
   const handleApplyPreset = useCallback((formation: FormationType, target: 'start' | 'end', spread: number = 1.0) => {
@@ -2822,8 +2821,6 @@ export default function DanceChoreography() {
         isLoading={cueSheetLoading}
         error={cueSheetError}
         onGenerate={handleGenerateCueSheet}
-        language={cueSheetLanguage}
-        onLanguageChange={setCueSheetLanguage}
       />
     </div>
   );

@@ -14,8 +14,6 @@ interface CueSheetModalProps {
   isLoading: boolean;
   error: string | null;
   onGenerate: () => void;
-  language: 'ko' | 'en';
-  onLanguageChange: (lang: 'ko' | 'en') => void;
 }
 
 export function CueSheetModal({
@@ -25,8 +23,6 @@ export function CueSheetModal({
   isLoading,
   error,
   onGenerate,
-  language,
-  onLanguageChange,
 }: CueSheetModalProps) {
   const [selectedDancer, setSelectedDancer] = useState<number | 'all'>('all');
   const [expandedDancers, setExpandedDancers] = useState<Set<number>>(new Set());
@@ -68,13 +64,13 @@ export function CueSheetModal({
   };
 
   const copyToClipboard = (dancer: DancerCueSheet) => {
-    const text = formatDancerCueSheetAsText(dancer, language);
+    const text = formatDancerCueSheetAsText(dancer);
     navigator.clipboard.writeText(text);
   };
 
   const copyAllToClipboard = () => {
     if (!cueSheet) return;
-    const text = formatFullCueSheetAsText(cueSheet, language);
+    const text = formatFullCueSheetAsText(cueSheet);
     navigator.clipboard.writeText(text);
   };
 
@@ -86,16 +82,8 @@ export function CueSheetModal({
     <div className="cue-sheet-modal-overlay" onClick={onClose}>
       <div className="cue-sheet-modal" onClick={e => e.stopPropagation()}>
         <div className="cue-sheet-modal-header">
-          <h2>{language === 'ko' ? '큐시트' : 'Cue Sheet'}</h2>
+          <h2>Cue Sheet</h2>
           <div className="cue-sheet-header-controls">
-            <select
-              value={language}
-              onChange={e => onLanguageChange(e.target.value as 'ko' | 'en')}
-              className="language-select"
-            >
-              <option value="ko">한국어</option>
-              <option value="en">English</option>
-            </select>
             <button className="close-button" onClick={onClose}>×</button>
           </div>
         </div>
@@ -104,17 +92,13 @@ export function CueSheetModal({
           {!cueSheet && !isLoading && !error && (
             <div className="cue-sheet-empty-state">
               <div className="empty-icon">📋</div>
-              <p>
-                {language === 'ko'
-                  ? '선택한 알고리즘의 경로 데이터를 기반으로 댄서들을 위한 큐시트를 생성합니다.'
-                  : 'Generate cue sheets for dancers based on the selected algorithm\'s path data.'}
-              </p>
+              <p>Generate cue sheets for dancers based on the selected algorithm's path data.</p>
               <button
                 className="generate-button"
                 onClick={onGenerate}
                 disabled={isLoading}
               >
-                {language === 'ko' ? '큐시트 생성하기' : 'Generate Cue Sheet'}
+                Generate Cue Sheet
               </button>
             </div>
           )}
@@ -122,7 +106,7 @@ export function CueSheetModal({
           {isLoading && (
             <div className="cue-sheet-loading">
               <div className="loading-spinner"></div>
-              <p>{language === 'ko' ? 'Gemini가 큐시트를 작성 중입니다...' : 'Gemini is writing cue sheets...'}</p>
+              <p>Gemini is writing cue sheets...</p>
             </div>
           )}
 
@@ -131,7 +115,7 @@ export function CueSheetModal({
               <div className="error-icon">⚠️</div>
               <p>{error}</p>
               <button className="retry-button" onClick={onGenerate}>
-                {language === 'ko' ? '다시 시도' : 'Retry'}
+                Retry
               </button>
             </div>
           )}
@@ -140,22 +124,22 @@ export function CueSheetModal({
             <>
               <div className="cue-sheet-info">
                 <div className="info-item">
-                  <span className="info-label">{language === 'ko' ? '무대 크기' : 'Stage'}</span>
+                  <span className="info-label">Stage</span>
                   <span className="info-value">{cueSheet.stageInfo}</span>
                 </div>
                 <div className="info-item">
-                  <span className="info-label">{language === 'ko' ? '총 카운트' : 'Total Counts'}</span>
+                  <span className="info-label">Total Counts</span>
                   <span className="info-value">{cueSheet.totalCounts}</span>
                 </div>
                 <div className="info-item">
-                  <span className="info-label">{language === 'ko' ? '댄서 수' : 'Dancers'}</span>
+                  <span className="info-label">Dancers</span>
                   <span className="info-value">{cueSheet.dancers.length}</span>
                 </div>
               </div>
 
               {cueSheet.generalNotes && cueSheet.generalNotes.length > 0 && (
                 <div className="general-notes">
-                  <h4>{language === 'ko' ? '전체 주의사항' : 'General Notes'}</h4>
+                  <h4>General Notes</h4>
                   <ul>
                     {cueSheet.generalNotes.map((note, i) => (
                       <li key={i}>{note}</li>
@@ -166,12 +150,12 @@ export function CueSheetModal({
 
               <div className="cue-sheet-controls">
                 <div className="dancer-filter">
-                  <label>{language === 'ko' ? '댄서 선택' : 'Select Dancer'}</label>
+                  <label>Select Dancer</label>
                   <select
                     value={selectedDancer}
                     onChange={e => setSelectedDancer(e.target.value === 'all' ? 'all' : Number(e.target.value))}
                   >
-                    <option value="all">{language === 'ko' ? '전체 보기' : 'View All'}</option>
+                    <option value="all">View All</option>
                     {cueSheet.dancers.map(d => (
                       <option key={d.dancerId} value={d.dancerId}>
                         {d.dancerLabel}
@@ -180,9 +164,9 @@ export function CueSheetModal({
                   </select>
                 </div>
                 <div className="expand-controls">
-                  <button onClick={expandAll}>{language === 'ko' ? '모두 펼치기' : 'Expand All'}</button>
-                  <button onClick={collapseAll}>{language === 'ko' ? '모두 접기' : 'Collapse All'}</button>
-                  <button onClick={copyAllToClipboard}>{language === 'ko' ? '전체 복사' : 'Copy All'}</button>
+                  <button onClick={expandAll}>Expand All</button>
+                  <button onClick={collapseAll}>Collapse All</button>
+                  <button onClick={copyAllToClipboard}>Copy All</button>
                 </div>
               </div>
 
@@ -204,7 +188,7 @@ export function CueSheetModal({
                             e.stopPropagation();
                             copyToClipboard(dancer);
                           }}
-                          title={language === 'ko' ? '복사' : 'Copy'}
+                          title="Copy"
                         >
                           📋
                         </button>
@@ -235,7 +219,7 @@ export function CueSheetModal({
 
               <div className="cue-sheet-footer">
                 <button className="regenerate-button" onClick={onGenerate} disabled={isLoading}>
-                  {language === 'ko' ? '다시 생성' : 'Regenerate'}
+                  Regenerate
                 </button>
               </div>
             </>
@@ -250,7 +234,7 @@ export function CueSheetModal({
 // Helper Functions
 // ============================================
 
-function formatDancerCueSheetAsText(dancer: DancerCueSheet, _language: 'ko' | 'en'): string {
+function formatDancerCueSheetAsText(dancer: DancerCueSheet): string {
   const lines: string[] = [];
   lines.push(`[${dancer.dancerLabel}]`);
   lines.push(dancer.summary);
@@ -268,15 +252,15 @@ function formatDancerCueSheetAsText(dancer: DancerCueSheet, _language: 'ko' | 'e
   return lines.join('\n');
 }
 
-function formatFullCueSheetAsText(cueSheet: CueSheetResult, language: 'ko' | 'en'): string {
+function formatFullCueSheetAsText(cueSheet: CueSheetResult): string {
   const lines: string[] = [];
-  lines.push(`=== ${cueSheet.title || (language === 'ko' ? '큐시트' : 'Cue Sheet')} ===`);
-  lines.push(`${language === 'ko' ? '무대' : 'Stage'}: ${cueSheet.stageInfo}`);
-  lines.push(`${language === 'ko' ? '총 카운트' : 'Total Counts'}: ${cueSheet.totalCounts}`);
+  lines.push(`=== ${cueSheet.title || 'Cue Sheet'} ===`);
+  lines.push(`Stage: ${cueSheet.stageInfo}`);
+  lines.push(`Total Counts: ${cueSheet.totalCounts}`);
   lines.push('');
 
   if (cueSheet.generalNotes && cueSheet.generalNotes.length > 0) {
-    lines.push(`[${language === 'ko' ? '전체 주의사항' : 'General Notes'}]`);
+    lines.push(`[General Notes]`);
     for (const note of cueSheet.generalNotes) {
       lines.push(`• ${note}`);
     }
@@ -285,7 +269,7 @@ function formatFullCueSheetAsText(cueSheet: CueSheetResult, language: 'ko' | 'en
 
   for (const dancer of cueSheet.dancers) {
     lines.push('─'.repeat(40));
-    lines.push(formatDancerCueSheetAsText(dancer, language));
+    lines.push(formatDancerCueSheetAsText(dancer));
   }
 
   return lines.join('\n');
