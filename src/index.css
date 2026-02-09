@@ -6510,6 +6510,83 @@ textarea:focus {
   background: #A8E6CF;
 }
 
+/* Hold indicator - visual bar showing hold time at end of formation */
+.hold-indicator {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 193, 7, 0.2),
+    rgba(255, 193, 7, 0.2) 4px,
+    rgba(255, 193, 7, 0.35) 4px,
+    rgba(255, 193, 7, 0.35) 8px
+  );
+  border-left: 2px solid rgba(255, 193, 7, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.hold-label {
+  font-size: 9px;
+  color: #ffc107;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+}
+
+/* Hold controls - +/- buttons to adjust hold time */
+.hold-controls {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(20, 20, 35, 0.9);
+  border-radius: 10px;
+  padding: 1px 4px;
+  border: 1px solid rgba(255, 193, 7, 0.4);
+}
+
+.hold-btn {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 193, 7, 0.3);
+  color: #ffc107;
+  font-size: 10px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  padding: 0;
+  line-height: 1;
+}
+
+.hold-btn:hover:not(:disabled) {
+  background: rgba(255, 193, 7, 0.5);
+}
+
+.hold-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.hold-value {
+  font-size: 9px;
+  color: #ffc107;
+  min-width: 20px;
+  text-align: center;
+}
+
 /* Add formation button */
 .add-formation-btn {
   position: absolute;

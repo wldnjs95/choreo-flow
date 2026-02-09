@@ -346,6 +346,7 @@ export const Timeline: React.FC<TimelineProps> = ({
             onDuplicate={onDuplicateFormation ? () => onDuplicateFormation(formation.id) : undefined}
             onUpdateDuration={(duration) => onUpdateFormation(formation.id, { duration })}
             onUpdateLabel={(label) => onUpdateFormation(formation.id, { label })}
+            onUpdateHoldCounts={(holdCounts) => onUpdateFormation(formation.id, { holdCounts })}
             onDragStart={handleFormationDragStart}
             onDragEnd={handleFormationDragEnd}
           />

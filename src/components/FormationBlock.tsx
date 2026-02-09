@@ -18,6 +18,7 @@ interface FormationBlockProps {
   onDuplicate?: () => void;
   onUpdateDuration: (duration: number) => void;
   onUpdateLabel: (label: string) => void;
+  onUpdateHoldCounts?: (holdCounts: number) => void;
   onDragStart?: (formationId: string) => void;
   onDragEnd?: () => void;
 }
@@ -34,6 +35,7 @@ export const FormationBlock: React.FC<FormationBlockProps> = ({
   onDuplicate,
   onUpdateDuration,
   onUpdateLabel,
+  onUpdateHoldCounts,
   onDragStart,
   onDragEnd,
 }) => {
@@ -63,6 +65,8 @@ export const FormationBlock: React.FC<FormationBlockProps> = ({
 
   const width = formation.duration * zoom;
   const left = formation.startCount * zoom;
+  const holdCounts = formation.holdCounts || 0;
+  const holdWidth = holdCounts * zoom;
 
   // Handle double-click to edit label
   const handleDoubleClick = (e: React.MouseEvent) => {
@@ -212,6 +216,51 @@ export const FormationBlock: React.FC<FormationBlockProps> = ({
         className="formation-resize-handle"
         onMouseDown={handleResizeStart}
       />
+
+      {/* Hold time indicator */}
+      {holdCounts > 0 && (
+        <div
+          className="hold-indicator"
+          style={{ width: holdWidth }}
+          title={`Hold for ${holdCounts} count${holdCounts > 1 ? 's' : ''}`}
+        >
+          <span className="hold-label">⏸ {holdCounts}</span>
+        </div>
+      )}
+
+      {/* Hold adjustment controls (visible when selected) */}
+      {isSelected && onUpdateHoldCounts && (
+        <div className="hold-controls">
+          <button
+            className="hold-btn minus"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (holdCounts > 0) {
+                onUpdateHoldCounts(holdCounts - 1);
+              }
+            }}
+            disabled={holdCounts <= 0}
+            title="Decrease hold time"
+          >
+            −
+          </button>
+          <span className="hold-value" title="Hold counts">⏸{holdCounts}</span>
+          <button
+            className="hold-btn plus"
+            onClick={(e) => {
+              e.stopPropagation();
+              // Don't allow hold time to exceed duration - 1
+              if (holdCounts < formation.duration - 1) {
+                onUpdateHoldCounts(holdCounts + 1);
+              }
+            }}
+            disabled={holdCounts >= formation.duration - 1}
+            title="Increase hold time"
+          >
+            +
+          </button>
+        </div>
+      )}
 
       {/* Transition type indicator */}
       <div className={`transition-indicator ${formation.transitionType}`} title={`Transition: ${formation.transitionType}`} />

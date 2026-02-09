@@ -30,6 +30,7 @@ export interface FormationKeyframe {
   id: string;
   startCount: number;      // Start count (0, 8, 16...)
   duration: number;        // Duration in counts (default 8)
+  holdCounts?: number;     // Counts to hold position before next transition (default 0)
   positions: DancerPosition[];
   label?: string;          // "Intro", "Chorus", etc.
   transitionType: TransitionType;

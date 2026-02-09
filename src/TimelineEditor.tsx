@@ -2968,16 +2968,25 @@ Score each option 0-100 based on the weighted criteria above.
     const pathKey = `${currentFormation.id}->${nextFormation.id}`;
     const paths = getPathsForAlgorithm(pathKey, pathAlgorithm);
 
-    // Calculate transition timing - start moving from the beginning of formation
+    // Calculate transition timing - account for holdCounts
     const transitionStart = currentFormation.startCount;
-    const transitionEnd = currentFormation.startCount + currentFormation.duration;
+    const holdCounts = currentFormation.holdCounts || 0;
+    const effectiveTransitionDuration = currentFormation.duration - holdCounts;
+    const transitionEnd = transitionStart + effectiveTransitionDuration;
 
     if (currentCount < transitionStart) {
       return currentFormation.positions;
     }
 
+    // During hold time (after transition complete), show next formation positions
+    if (currentCount >= transitionEnd) {
+      return nextFormation.positions;
+    }
+
     // Calculate normalized time within transition (0 to 1)
-    const t = (currentCount - transitionStart) / (transitionEnd - transitionStart);
+    const t = effectiveTransitionDuration > 0
+      ? (currentCount - transitionStart) / effectiveTransitionDuration
+      : 1;
 
     // Use generated paths if available
     if (paths && paths.length > 0) {
@@ -2997,7 +3006,7 @@ Score each option 0-100 based on the weighted criteria above.
         }
 
         // Find the path point at current time
-        const pathTime = t * currentFormation!.duration;
+        const pathTime = t * effectiveTransitionDuration;
         let pointIndex = 0;
         for (let i = 0; i < dancerPath.path.length - 1; i++) {
           if (dancerPath.path[i].t <= pathTime && dancerPath.path[i + 1].t > pathTime) {
