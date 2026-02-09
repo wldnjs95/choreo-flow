@@ -507,7 +507,7 @@ const TimelineEditor: React.FC = () => {
     // Fix: Remove currentCount from dependencies to prevent animation restart
   }, [isPlaying, playbackSpeed, project.formations, metronomeEnabled, playMetronomeClick]);
 
-  // Update formation
+  // Update formation (saves to undo history)
   const updateFormation = useCallback((id: string, updates: Partial<FormationKeyframe>) => {
     saveToHistory();
     setProject(prev => ({
@@ -518,6 +518,16 @@ const TimelineEditor: React.FC = () => {
       ),
     }));
   }, [saveToHistory]);
+
+  // Update formation without saving history (for drag operations)
+  const updateFormationDrag = useCallback((id: string, updates: Partial<FormationKeyframe>) => {
+    setProject(prev => ({
+      ...prev,
+      formations: prev.formations.map(f =>
+        f.id === id ? { ...f, ...updates } : f
+      ),
+    }));
+  }, []);
 
   // Swap two dancers' positions in CURRENT formation only (keep colors and names)
   const swapDancers = useCallback((dancerId1: number, dancerId2: number) => {
@@ -998,6 +1008,8 @@ const TimelineEditor: React.FC = () => {
       if (!selectedDancers.has(dancerId)) {
         setSelectedDancers(new Set([dancerId]));
       }
+      // Save to history ONCE at start of drag
+      saveToHistory();
       setDraggingDancer(dancerId);
     }
   };
@@ -1050,7 +1062,7 @@ const TimelineEditor: React.FC = () => {
       return p;
     });
 
-    updateFormation(selectedFormation.id, { positions: newPositions });
+    updateFormationDrag(selectedFormation.id, { positions: newPositions });
   };
 
   const handleMouseUp = () => {
@@ -1098,7 +1110,7 @@ const TimelineEditor: React.FC = () => {
         return p;
       });
 
-      updateFormation(selectedFormation.id, { positions: snappedPositions });
+      updateFormationDrag(selectedFormation.id, { positions: snappedPositions });
     }
     setDraggingDancer(null);
   };
