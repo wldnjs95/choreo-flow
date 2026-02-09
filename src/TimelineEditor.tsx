@@ -577,8 +577,8 @@ const TimelineEditor: React.FC = () => {
     }
   }, [swapSourceDancerId, swapDancers, showToast]);
 
-  // Handle long press on dancer to show quick swap menu
-  const handleDancerLongPress = useCallback((dancerId: number, screenX: number, screenY: number) => {
+  // Handle right-click on dancer to show quick swap menu
+  const handleDancerRightClick = useCallback((dancerId: number, screenX: number, screenY: number) => {
     setQuickSwapPopup({
       sourceDancerId: dancerId,
       screenX,
@@ -3478,7 +3478,7 @@ Score each option 0-100 based on the weighted criteria above.
                   isDimmed={isDimmed}
                   onMouseDown={uiMode === 'edit' ? (e) => handleDancerMouseDown(dancer.dancerId, e) : undefined}
                   onDoubleClick={uiMode === 'edit' ? () => handleDancerDoubleClick(dancer.dancerId) : undefined}
-                  onLongPress={uiMode === 'edit' ? (_e, screenX, screenY) => handleDancerLongPress(dancer.dancerId, screenX, screenY) : undefined}
+                  onContextMenu={uiMode === 'edit' ? (e) => handleDancerRightClick(dancer.dancerId, e.clientX, e.clientY) : undefined}
                 />
               );
             })}

@@ -3,10 +3,8 @@
  * Reusable dancer visualization component for stage rendering
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { getDancerColor, PADDING } from '../constants/visualization';
-
-const LONG_PRESS_DURATION = 500; // ms
 
 export interface DancerCircleProps {
   id: number;
@@ -24,7 +22,7 @@ export interface DancerCircleProps {
   onClick?: (e: React.MouseEvent) => void;
   onMouseDown?: (e: React.MouseEvent) => void;
   onDoubleClick?: (e: React.MouseEvent) => void;
-  onLongPress?: (e: React.MouseEvent, screenX: number, screenY: number) => void;  // Long press for quick swap
+  onContextMenu?: (e: React.MouseEvent) => void;  // Right-click for quick swap
   style?: React.CSSProperties;
 }
 
@@ -47,79 +45,12 @@ export function DancerCircle({
   onClick,
   onMouseDown,
   onDoubleClick,
-  onLongPress,
+  onContextMenu,
   style,
 }: DancerCircleProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressTriggered = useRef(false);
   const dancerColor = color || getDancerColor(id);
   const fontSize = labelSize || Math.max(12, radius * 0.9);
-
-  // Clean up timer on unmount
-  useEffect(() => {
-    return () => {
-      if (longPressTimer.current) {
-        clearTimeout(longPressTimer.current);
-      }
-    };
-  }, []);
-
-  const handleMouseDownInternal = (e: React.MouseEvent) => {
-    longPressTriggered.current = false;
-
-    // Start long press timer
-    if (onLongPress) {
-      const screenX = e.clientX;
-      const screenY = e.clientY;
-      longPressTimer.current = setTimeout(() => {
-        longPressTriggered.current = true;
-        onLongPress(e, screenX, screenY);
-      }, LONG_PRESS_DURATION);
-    }
-
-    // Call original onMouseDown
-    if (onMouseDown) {
-      onMouseDown(e);
-    }
-  };
-
-  const handleMouseUpInternal = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-  };
-
-  const handleMouseLeaveInternal = () => {
-    setIsHovered(false);
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-  };
-
-  const handleClickInternal = (e: React.MouseEvent) => {
-    // Don't trigger click if long press was triggered
-    if (longPressTriggered.current) {
-      e.stopPropagation();
-      return;
-    }
-    if (onClick) {
-      onClick(e);
-    }
-  };
-
-  const handleDoubleClickInternal = (e: React.MouseEvent) => {
-    // Don't trigger double-click if long press was triggered
-    if (longPressTriggered.current) {
-      e.stopPropagation();
-      return;
-    }
-    if (onDoubleClick) {
-      onDoubleClick(e);
-    }
-  };
 
   // POV highlight: larger radius and glow effect
   const displayRadius = isPovHighlight ? radius * 1.3 : isSwapTarget ? radius * 1.15 : radius;
@@ -148,15 +79,22 @@ export function DancerCircle({
   const displayText = name ? name.charAt(0).toUpperCase() : String(id);
   const displayFontSize = fontSize;
 
+  const handleContextMenuInternal = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (onContextMenu) {
+      onContextMenu(e);
+    }
+  };
+
   return (
     <g
-      style={{ cursor: onMouseDown || onClick || onDoubleClick || onLongPress ? 'pointer' : 'default', opacity, ...style }}
-      onClick={handleClickInternal}
-      onMouseDown={handleMouseDownInternal}
-      onMouseUp={handleMouseUpInternal}
-      onDoubleClick={handleDoubleClickInternal}
+      style={{ cursor: onMouseDown || onClick || onDoubleClick || onContextMenu ? 'pointer' : 'default', opacity, ...style }}
+      onClick={onClick}
+      onMouseDown={onMouseDown}
+      onDoubleClick={onDoubleClick}
+      onContextMenu={handleContextMenuInternal}
       onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={handleMouseLeaveInternal}
+      onMouseLeave={() => setIsHovered(false)}
     >
       <circle
         cx={x}
