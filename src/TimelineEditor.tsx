@@ -741,6 +741,59 @@ const TimelineEditor: React.FC = () => {
     showToast(`Rotated ${selectedDancers.size} positions ${dirLabel}`, 'success', 1500);
   }, [selectedDancers, selectedFormationId, saveToHistory, showToast]);
 
+  // Rotate entire formation by angle (degrees)
+  const rotateFormationByAngle = useCallback((angleDegrees: number) => {
+    if (!selectedFormationId) {
+      showToast('Select a formation first', 'info', 2000);
+      return;
+    }
+
+    const formation = project.formations.find(f => f.id === selectedFormationId);
+    if (!formation || formation.positions.length === 0) return;
+
+    saveToHistory();
+
+    // Calculate centroid of all dancers
+    const centroid = {
+      x: formation.positions.reduce((sum, d) => sum + d.position.x, 0) / formation.positions.length,
+      y: formation.positions.reduce((sum, d) => sum + d.position.y, 0) / formation.positions.length,
+    };
+
+    // Convert angle to radians
+    const angleRad = (angleDegrees * Math.PI) / 180;
+    const cosA = Math.cos(angleRad);
+    const sinA = Math.sin(angleRad);
+
+    setProject(prev => ({
+      ...prev,
+      updatedAt: new Date().toISOString(),
+      formations: prev.formations.map(f => {
+        if (f.id !== selectedFormationId) return f;
+        return {
+          ...f,
+          positions: f.positions.map(p => {
+            // Translate to origin (centroid), rotate, translate back
+            const dx = p.position.x - centroid.x;
+            const dy = p.position.y - centroid.y;
+            const newX = centroid.x + (dx * cosA - dy * sinA);
+            const newY = centroid.y + (dx * sinA + dy * cosA);
+
+            // Clamp to stage boundaries
+            return {
+              ...p,
+              position: {
+                x: Math.max(0.5, Math.min(prev.stageWidth - 0.5, newX)),
+                y: Math.max(0.5, Math.min(prev.stageHeight - 0.5, newY)),
+              },
+            };
+          }),
+        };
+      }),
+    }));
+
+    showToast(`Rotated formation by ${angleDegrees}°`, 'success', 1500);
+  }, [selectedFormationId, project.formations, saveToHistory, showToast]);
+
   // Update dancer name
   const updateDancerName = useCallback((dancerId: number, name: string) => {
     setProject(prev => ({
@@ -3284,6 +3337,47 @@ Score each option 0-100 based on the weighted criteria above.
                   title="Rotate positions clockwise"
                 >
                   ↻
+                </button>
+              </div>
+            )}
+            {/* Formation Rotation - Edit mode only, when formation is selected */}
+            {uiMode === 'edit' && selectedFormation && (
+              <div className="formation-rotation-controls">
+                <span className="rotation-label">Rotate:</span>
+                <button
+                  className="angle-rotate-btn"
+                  onClick={() => rotateFormationByAngle(-45)}
+                  title="Rotate formation 45° counter-clockwise"
+                >
+                  -45°
+                </button>
+                <button
+                  className="angle-rotate-btn"
+                  onClick={() => rotateFormationByAngle(-90)}
+                  title="Rotate formation 90° counter-clockwise"
+                >
+                  -90°
+                </button>
+                <button
+                  className="angle-rotate-btn"
+                  onClick={() => rotateFormationByAngle(90)}
+                  title="Rotate formation 90° clockwise"
+                >
+                  +90°
+                </button>
+                <button
+                  className="angle-rotate-btn"
+                  onClick={() => rotateFormationByAngle(45)}
+                  title="Rotate formation 45° clockwise"
+                >
+                  +45°
+                </button>
+                <button
+                  className="angle-rotate-btn flip"
+                  onClick={() => rotateFormationByAngle(180)}
+                  title="Flip formation 180°"
+                >
+                  180°
                 </button>
               </div>
             )}
