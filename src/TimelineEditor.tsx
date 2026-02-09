@@ -2985,6 +2985,7 @@ Score each option 0-100 based on the weighted criteria above.
             startCount: f.startCount,
             duration: f.duration,
           })),
+          dancerNames: project.dancerNames,
         }
       );
 

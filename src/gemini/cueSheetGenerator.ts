@@ -56,6 +56,7 @@ export interface CueSheetConfig {
   includeRelativePositioning: boolean;
   includeArtisticNuance: boolean;
   formations?: FormationInfo[];  // Optional: for per-formation notes
+  dancerNames?: Record<number, string>;  // Custom dancer names (dancerId -> name)
 }
 
 // ============================================
@@ -305,6 +306,7 @@ function formatPathDataForGemini(
 
     return {
       dancerId: dancerPath.dancerId,
+      dancerName: config.dancerNames?.[dancerPath.dancerId] || `Dancer ${dancerPath.dancerId}`,
       startPosition: { zone: startZone, x: Math.round(startPos.x * 10) / 10, y: Math.round(startPos.y * 10) / 10 },
       endPosition: { zone: endZone, x: Math.round(endPos.x * 10) / 10, y: Math.round(endPos.y * 10) / 10 },
       timing: {
@@ -503,8 +505,10 @@ Please output in the following JSON format:
 **Important**:
 - Output ONLY valid JSON
 - Write cues chronologically for each dancer
+- **dancerLabel**: Use the "dancerName" from input data (NOT "D1", "D2" - use actual names like "Alice", "Bob")
 - **timeRange must use integer counts only** (e.g., "0~2", "3~5") - no decimals, no "counts" suffix
 - **formationNotes**: Write specific notes for each formation that the choreographer needs to focus on during that segment (key transitions, spatial awareness, timing cues, potential collision points)
+- When referencing other dancers in instructions/notes, use their actual names from the input data
 - Use polite, professional, and encouraging tone
 - Be specific enough for actual performance use`;
   }
