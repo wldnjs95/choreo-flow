@@ -167,6 +167,7 @@ const TimelineEditor: React.FC = () => {
   const [selectionBox, setSelectionBox] = useState<{startX: number; startY: number; endX: number; endY: number} | null>(null);
   const [isDraggingSelection, setIsDraggingSelection] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
+  const dragNeedsHistorySave = useRef(false); // Save history only on first move
 
   // Dancer swap state (double-click to swap)
   const [swapSourceDancerId, setSwapSourceDancerId] = useState<number | null>(null);
@@ -1008,8 +1009,8 @@ const TimelineEditor: React.FC = () => {
       if (!selectedDancers.has(dancerId)) {
         setSelectedDancers(new Set([dancerId]));
       }
-      // Save to history ONCE at start of drag
-      saveToHistory();
+      // Mark that we need to save history on first actual move
+      dragNeedsHistorySave.current = true;
       setDraggingDancer(dancerId);
     }
   };
@@ -1043,6 +1044,15 @@ const TimelineEditor: React.FC = () => {
 
     const deltaX = clampedX - currentDancer.position.x;
     const deltaY = clampedY - currentDancer.position.y;
+
+    // Skip if no actual movement
+    if (Math.abs(deltaX) < 0.001 && Math.abs(deltaY) < 0.001) return;
+
+    // Save history only on first actual move
+    if (dragNeedsHistorySave.current) {
+      saveToHistory();
+      dragNeedsHistorySave.current = false;
+    }
 
     // Update all selected dancers
     const dancersToMove = selectedDancers.has(draggingDancer)
@@ -1113,6 +1123,7 @@ const TimelineEditor: React.FC = () => {
       updateFormationDrag(selectedFormation.id, { positions: snappedPositions });
     }
     setDraggingDancer(null);
+    dragNeedsHistorySave.current = false;
   };
 
   // Save project to JSON
