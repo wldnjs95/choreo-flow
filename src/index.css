@@ -5751,12 +5751,12 @@ textarea:focus {
   transform: scale(0.95);
 }
 
-/* Formation rotation controls (angle-based) */
+/* Formation rotation controls (slider-based) */
 .formation-rotation-controls {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
+  gap: 8px;
+  padding: 4px 12px;
   background: rgba(108, 92, 231, 0.1);
   border: 1px solid rgba(108, 92, 231, 0.2);
   border-radius: 8px;
@@ -5767,38 +5767,98 @@ textarea:focus {
   font-size: 11px;
   color: #a29bfe;
   font-weight: 500;
-  margin-right: 4px;
 }
 
-.angle-rotate-btn {
-  padding: 4px 8px;
+.rotation-start-btn {
+  padding: 5px 12px;
   border: none;
-  border-radius: 4px;
-  background: rgba(108, 92, 231, 0.15);
+  border-radius: 6px;
+  background: linear-gradient(135deg, rgba(108, 92, 231, 0.3), rgba(162, 155, 254, 0.3));
   color: #a29bfe;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 }
 
-.angle-rotate-btn:hover {
-  background: rgba(108, 92, 231, 0.3);
+.rotation-start-btn:hover {
+  background: linear-gradient(135deg, rgba(108, 92, 231, 0.5), rgba(162, 155, 254, 0.5));
   color: #fff;
-  transform: scale(1.05);
+  transform: scale(1.02);
 }
 
-.angle-rotate-btn:active {
+.rotation-slider {
+  width: 120px;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: linear-gradient(to right,
+    rgba(255, 107, 107, 0.5) 0%,
+    rgba(108, 92, 231, 0.3) 50%,
+    rgba(78, 205, 196, 0.5) 100%
+  );
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.rotation-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #a29bfe, #6c5ce7);
+  border: 2px solid #fff;
+  cursor: grab;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  transition: transform 0.1s ease;
+}
+
+.rotation-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.rotation-slider::-webkit-slider-thumb:active {
+  cursor: grabbing;
   transform: scale(0.95);
 }
 
-.angle-rotate-btn.flip {
-  background: rgba(255, 107, 107, 0.15);
-  color: #ff6b6b;
+.rotation-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #a29bfe, #6c5ce7);
+  border: 2px solid #fff;
+  cursor: grab;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
-.angle-rotate-btn.flip:hover {
-  background: rgba(255, 107, 107, 0.3);
+.rotation-angle-display {
+  min-width: 40px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a29bfe;
+  text-align: center;
+}
+
+.rotation-cancel-btn {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 107, 107, 0.2);
+  color: #ff6b6b;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.rotation-cancel-btn:hover {
+  background: rgba(255, 107, 107, 0.4);
   color: #fff;
 }
 

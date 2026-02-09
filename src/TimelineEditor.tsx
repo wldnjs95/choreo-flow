@@ -182,6 +182,13 @@ const TimelineEditor: React.FC = () => {
   // Clipboard for copy/paste dancer positions
   const [copiedPositions, setCopiedPositions] = useState<Map<number, { x: number; y: number }> | null>(null);
 
+  // Rotation state for smooth rotation control
+  const [rotationAngle, setRotationAngle] = useState(0);
+  const [isRotating, setIsRotating] = useState(false);
+  const rotationOriginalPositions = useRef<Map<number, { x: number; y: number }> | null>(null);
+  const rotationCentroid = useRef<{ x: number; y: number } | null>(null);
+  const rotationDancerIds = useRef<Set<number> | null>(null);
+
   // Path state - now stores paths for ALL algorithms per transition
   // Key format: "formationId->formationId:algorithm"
   const [allAlgorithmPaths, setAllAlgorithmPaths] = useState<Map<string, Map<PathAlgorithm, GeneratedPath[]>>>(new Map());
@@ -747,12 +754,9 @@ const TimelineEditor: React.FC = () => {
     showToast(`Rotated ${selectedDancers.size} positions ${dirLabel}`, 'success', 1500);
   }, [selectedDancers, selectedFormationId, saveToHistory, showToast]);
 
-  // Rotate dancers by angle (degrees) - selected dancers only if any selected, otherwise all
-  const rotateFormationByAngle = useCallback((angleDegrees: number) => {
-    if (!selectedFormationId) {
-      showToast('Select a formation first', 'info', 2000);
-      return;
-    }
+  // Start rotation - save original positions
+  const startRotation = useCallback(() => {
+    if (!selectedFormationId) return;
 
     const formation = project.formations.find(f => f.id === selectedFormationId);
     if (!formation || formation.positions.length === 0) return;
@@ -764,22 +768,74 @@ const TimelineEditor: React.FC = () => {
 
     if (dancersToRotate.length === 0) return;
 
-    saveToHistory();
+    // Save original positions
+    const originalPositions = new Map<number, { x: number; y: number }>();
+    dancersToRotate.forEach(d => {
+      originalPositions.set(d.dancerId, { x: d.position.x, y: d.position.y });
+    });
+    rotationOriginalPositions.current = originalPositions;
 
-    // Calculate centroid of dancers to rotate
-    const centroid = {
+    // Save centroid
+    rotationCentroid.current = {
       x: dancersToRotate.reduce((sum, d) => sum + d.position.x, 0) / dancersToRotate.length,
       y: dancersToRotate.reduce((sum, d) => sum + d.position.y, 0) / dancersToRotate.length,
     };
 
-    // Convert angle to radians
+    // Save dancer IDs
+    rotationDancerIds.current = new Set(dancersToRotate.map(d => d.dancerId));
+
+    saveToHistory();
+    setIsRotating(true);
+    setRotationAngle(0);
+  }, [selectedFormationId, project.formations, selectedDancers, saveToHistory]);
+
+  // Apply rotation preview (during slider drag)
+  const applyRotationPreview = useCallback((angleDegrees: number) => {
+    if (!selectedFormationId || !rotationOriginalPositions.current || !rotationCentroid.current || !rotationDancerIds.current) return;
+
+    const centroid = rotationCentroid.current;
     const angleRad = (angleDegrees * Math.PI) / 180;
     const cosA = Math.cos(angleRad);
     const sinA = Math.sin(angleRad);
 
-    // Create set of dancer IDs to rotate for quick lookup
-    const rotateIds = new Set(dancersToRotate.map(d => d.dancerId));
+    setProject(prev => ({
+      ...prev,
+      formations: prev.formations.map(f => {
+        if (f.id !== selectedFormationId) return f;
+        return {
+          ...f,
+          positions: f.positions.map(p => {
+            const originalPos = rotationOriginalPositions.current?.get(p.dancerId);
+            if (!originalPos || !rotationDancerIds.current?.has(p.dancerId)) return p;
 
+            const dx = originalPos.x - centroid.x;
+            const dy = originalPos.y - centroid.y;
+            const newX = centroid.x + (dx * cosA - dy * sinA);
+            const newY = centroid.y + (dx * sinA + dy * cosA);
+
+            return {
+              ...p,
+              position: {
+                x: Math.max(0, Math.min(prev.stageWidth, newX)),
+                y: Math.max(0, Math.min(prev.stageHeight, newY)),
+              },
+            };
+          }),
+        };
+      }),
+    }));
+
+    setRotationAngle(angleDegrees);
+  }, [selectedFormationId]);
+
+  // Commit rotation (on slider release) - snap to grid
+  const commitRotation = useCallback(() => {
+    if (!selectedFormationId || !rotationDancerIds.current) {
+      setIsRotating(false);
+      return;
+    }
+
+    // Snap final positions to grid
     setProject(prev => ({
       ...prev,
       updatedAt: new Date().toISOString(),
@@ -788,21 +844,12 @@ const TimelineEditor: React.FC = () => {
         return {
           ...f,
           positions: f.positions.map(p => {
-            // Only rotate if this dancer is in the rotation set
-            if (!rotateIds.has(p.dancerId)) return p;
-
-            // Translate to origin (centroid), rotate, translate back
-            const dx = p.position.x - centroid.x;
-            const dy = p.position.y - centroid.y;
-            const newX = centroid.x + (dx * cosA - dy * sinA);
-            const newY = centroid.y + (dx * sinA + dy * cosA);
-
-            // Clamp to stage boundaries and snap to grid
+            if (!rotationDancerIds.current?.has(p.dancerId)) return p;
             return {
               ...p,
               position: {
-                x: Math.max(0, Math.min(prev.stageWidth, snapToGrid(newX))),
-                y: Math.max(0, Math.min(prev.stageHeight, snapToGrid(newY))),
+                x: Math.max(0, Math.min(prev.stageWidth, snapToGrid(p.position.x))),
+                y: Math.max(0, Math.min(prev.stageHeight, snapToGrid(p.position.y))),
               },
             };
           }),
@@ -810,9 +857,47 @@ const TimelineEditor: React.FC = () => {
       }),
     }));
 
-    const count = selectedDancers.size > 0 ? selectedDancers.size : formation.positions.length;
-    showToast(`Rotated ${count} dancer${count > 1 ? 's' : ''} by ${angleDegrees}°`, 'success', 1500);
-  }, [selectedFormationId, project.formations, selectedDancers, saveToHistory, showToast]);
+    const count = rotationDancerIds.current.size;
+    if (Math.abs(rotationAngle) > 0.5) {
+      showToast(`Rotated ${count} dancer${count > 1 ? 's' : ''} by ${Math.round(rotationAngle)}°`, 'success', 1500);
+    }
+
+    // Reset rotation state
+    rotationOriginalPositions.current = null;
+    rotationCentroid.current = null;
+    rotationDancerIds.current = null;
+    setIsRotating(false);
+    setRotationAngle(0);
+  }, [selectedFormationId, rotationAngle, showToast]);
+
+  // Cancel rotation - restore original positions
+  const cancelRotation = useCallback(() => {
+    if (!selectedFormationId || !rotationOriginalPositions.current) {
+      setIsRotating(false);
+      return;
+    }
+
+    setProject(prev => ({
+      ...prev,
+      formations: prev.formations.map(f => {
+        if (f.id !== selectedFormationId) return f;
+        return {
+          ...f,
+          positions: f.positions.map(p => {
+            const originalPos = rotationOriginalPositions.current?.get(p.dancerId);
+            if (!originalPos) return p;
+            return { ...p, position: originalPos };
+          }),
+        };
+      }),
+    }));
+
+    rotationOriginalPositions.current = null;
+    rotationCentroid.current = null;
+    rotationDancerIds.current = null;
+    setIsRotating(false);
+    setRotationAngle(0);
+  }, [selectedFormationId]);
 
   // Update dancer name
   const updateDancerName = useCallback((dancerId: number, name: string) => {
@@ -3374,41 +3459,37 @@ Score each option 0-100 based on the weighted criteria above.
             {uiMode === 'edit' && selectedFormation && (
               <div className="formation-rotation-controls">
                 <span className="rotation-label">Rotate:</span>
-                <button
-                  className="angle-rotate-btn"
-                  onClick={() => rotateFormationByAngle(-45)}
-                  title="Rotate formation 45° counter-clockwise"
-                >
-                  -45°
-                </button>
-                <button
-                  className="angle-rotate-btn"
-                  onClick={() => rotateFormationByAngle(-90)}
-                  title="Rotate formation 90° counter-clockwise"
-                >
-                  -90°
-                </button>
-                <button
-                  className="angle-rotate-btn"
-                  onClick={() => rotateFormationByAngle(90)}
-                  title="Rotate formation 90° clockwise"
-                >
-                  +90°
-                </button>
-                <button
-                  className="angle-rotate-btn"
-                  onClick={() => rotateFormationByAngle(45)}
-                  title="Rotate formation 45° clockwise"
-                >
-                  +45°
-                </button>
-                <button
-                  className="angle-rotate-btn flip"
-                  onClick={() => rotateFormationByAngle(180)}
-                  title="Flip formation 180°"
-                >
-                  180°
-                </button>
+                {isRotating ? (
+                  <>
+                    <input
+                      type="range"
+                      className="rotation-slider"
+                      min="-180"
+                      max="180"
+                      step="1"
+                      value={rotationAngle}
+                      onChange={(e) => applyRotationPreview(Number(e.target.value))}
+                      onMouseUp={commitRotation}
+                      onTouchEnd={commitRotation}
+                    />
+                    <span className="rotation-angle-display">{Math.round(rotationAngle)}°</span>
+                    <button
+                      className="rotation-cancel-btn"
+                      onClick={cancelRotation}
+                      title="Cancel rotation"
+                    >
+                      ✕
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="rotation-start-btn"
+                    onClick={startRotation}
+                    title={selectedDancers.size > 0 ? `Rotate ${selectedDancers.size} selected dancers` : 'Rotate formation'}
+                  >
+                    {selectedDancers.size > 0 ? `↻ ${selectedDancers.size}명` : '↻ 전체'}
+                  </button>
+                )}
               </div>
             )}
             {/* POV (Point of View) Selector - Rehearsal mode only */}
