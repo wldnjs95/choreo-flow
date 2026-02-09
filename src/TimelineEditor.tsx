@@ -603,6 +603,43 @@ const TimelineEditor: React.FC = () => {
     return null;
   }, []);
 
+  // Calculate stacked exit position for dancers in exit zone (for display/placement)
+  const calculateExitZoneStackPosition = useCallback((
+    dancerId: number,
+    side: 'left' | 'right',
+    allPositions: { dancerId: number; position: { x: number; y: number } }[],
+    stageWidth: number,
+    stageHeight: number
+  ): { x: number; y: number } => {
+    const EXIT_ZONE_CENTER = 0.75;
+    const SLOT_SPACING = 1.0;
+
+    // Get all dancers in this exit zone (excluding current dancer)
+    const dancersInZone = allPositions.filter(p => {
+      if (p.dancerId === dancerId) return false;
+      const zoneSide = getExitZoneSide(p.position.x, stageWidth);
+      return zoneSide === side;
+    });
+
+    // Sort by Y position (top to bottom)
+    dancersInZone.sort((a, b) => b.position.y - a.position.y);
+
+    // Find next available slot from top
+    const exitX = side === 'left' ? EXIT_ZONE_CENTER : stageWidth - EXIT_ZONE_CENTER;
+    let slotY = stageHeight - SLOT_SPACING * 0.5; // Start from top
+
+    for (const dancer of dancersInZone) {
+      if (Math.abs(dancer.position.y - slotY) < SLOT_SPACING * 0.5) {
+        slotY -= SLOT_SPACING; // Move to next slot
+      }
+    }
+
+    // Clamp to stage bounds
+    slotY = Math.max(SLOT_SPACING * 0.5, Math.min(stageHeight - SLOT_SPACING * 0.5, slotY));
+
+    return { x: exitX, y: slotY };
+  }, [getExitZoneSide]);
+
   // Swap two dancers' positions in CURRENT formation only (keep colors and names)
   const swapDancers = useCallback((dancerId1: number, dancerId2: number) => {
     if (dancerId1 === dancerId2) return;
@@ -1348,11 +1385,15 @@ const TimelineEditor: React.FC = () => {
 
           const exitSide = exitZoneAssignments.get(p.dancerId);
           if (exitSide) {
-            // Dancer is in exit zone - snap X to center, keep Y free (for flexible entry positioning)
-            const EXIT_ZONE_CENTER = 0.75;
-            const exitX = exitSide === 'left' ? EXIT_ZONE_CENTER : prev.stageWidth - EXIT_ZONE_CENTER;
-            const snappedY = Math.max(0.5, Math.min(prev.stageHeight - 0.5, snapToGrid(p.position.y)));
-            return { ...p, position: { x: exitX, y: snappedY } };
+            // Dancer is in exit zone - stack vertically for clean display
+            const stackedPos = calculateExitZoneStackPosition(
+              p.dancerId,
+              exitSide,
+              formation.positions,
+              prev.stageWidth,
+              prev.stageHeight
+            );
+            return { ...p, position: stackedPos };
           } else {
             // Normal grid snap
             return {
@@ -1818,13 +1859,16 @@ const TimelineEditor: React.FC = () => {
             ],
           });
         } else if (startInExit) {
-          // Entering from exit zone - horizontal entry then to position
-          const entryY = endPosition.y; // Match target Y for horizontal entry
-          const entryX = startPosition.x < project.stageWidth / 2 ? EXIT_ZONE_WIDTH + 0.5 : project.stageWidth - EXIT_ZONE_WIDTH - 0.5;
+          // Entering from exit zone - start from ideal Y position (matching target Y) for smooth horizontal entry
+          const EXIT_ZONE_CENTER = 0.75;
+          const idealStartX = startPosition.x < project.stageWidth / 2 ? EXIT_ZONE_CENTER : project.stageWidth - EXIT_ZONE_CENTER;
+          const idealStartY = endPosition.y; // Start at same Y as target for horizontal entry
+          const idealStartPos = { x: idealStartX, y: idealStartY };
+
+          // Generate smooth path from ideal position to target
           entryPaths.push({
             dancerId: pos.dancerId,
-            path: generateHorizontalPath(startPosition, { x: entryX, y: entryY }, fromFormation.duration * 0.3)
-              .concat([{ x: endPosition.x, y: endPosition.y, t: fromFormation.duration }]),
+            path: generateHorizontalPath(idealStartPos, endPosition, fromFormation.duration),
           });
         } else if (endInExit) {
           // Exiting to exit zone - horizontal exit
@@ -1850,7 +1894,6 @@ const TimelineEditor: React.FC = () => {
     const newDancers = toFormation.positions.filter(
       pos => !fromFormation.positions.some(p => p.dancerId === pos.dancerId)
     );
-    const usedEntryPositions: { x: number; y: number }[] = [];
     for (const newDancer of newDancers) {
       const targetPosition = { x: newDancer.position.x, y: newDancer.position.y };
       const targetInExit = isInExitZone(targetPosition.x, project.stageWidth);
@@ -1865,23 +1908,18 @@ const TimelineEditor: React.FC = () => {
           ],
         });
       } else {
-        // New dancer entering to stage - horizontal entry
-        const entryPosition = calculateOptimalEntryPosition(
-          targetPosition,
-          project.stageWidth,
-          project.stageHeight,
-          usedEntryPositions
-        );
-        usedEntryPositions.push(entryPosition);
+        // New dancer entering to stage - start from ideal position (same Y as target)
+        const EXIT_ZONE_CENTER = 0.75;
+        // Choose entry side based on which is closer to target X
+        const useLeftSide = targetPosition.x < project.stageWidth / 2;
+        const idealStartX = useLeftSide ? EXIT_ZONE_CENTER : project.stageWidth - EXIT_ZONE_CENTER;
+        const idealStartPos = { x: idealStartX, y: targetPosition.y };
 
-        // Create horizontal entry path
-        const entryPath = generateHorizontalPath(
-          entryPosition,
-          { x: entryPosition.x < project.stageWidth / 2 ? EXIT_ZONE_WIDTH + 0.5 : project.stageWidth - EXIT_ZONE_WIDTH - 0.5, y: targetPosition.y },
-          fromFormation.duration * 0.3
-        );
-        entryPath.push({ x: targetPosition.x, y: targetPosition.y, t: fromFormation.duration });
-        entryPaths.push({ dancerId: newDancer.dancerId, path: entryPath });
+        // Generate smooth horizontal path from ideal position to target
+        entryPaths.push({
+          dancerId: newDancer.dancerId,
+          path: generateHorizontalPath(idealStartPos, targetPosition, fromFormation.duration),
+        });
       }
     }
 
