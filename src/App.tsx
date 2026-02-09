@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import FormationCreator from './FormationCreator';
 import TimelineEditor from './TimelineEditor';
 
 const ACCESS_CODE = '0323';
@@ -55,7 +54,6 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<TimelineEditor />} />
-          <Route path="/create_formation" element={<FormationCreator />} />
         </Routes>
       </BrowserRouter>
     </PasswordGate>
