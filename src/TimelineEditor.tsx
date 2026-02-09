@@ -470,7 +470,13 @@ const TimelineEditor: React.FC = () => {
                   positions: f.positions.map(p => {
                     const copiedPos = copiedPositions.get(p.dancerId);
                     if (copiedPos) {
-                      return { ...p, position: { x: copiedPos.x, y: copiedPos.y } };
+                      return {
+                        ...p,
+                        position: {
+                          x: Math.max(0, Math.min(prev.stageWidth, snapToGrid(copiedPos.x))),
+                          y: Math.max(0, Math.min(prev.stageHeight, snapToGrid(copiedPos.y))),
+                        },
+                      };
                     }
                     return p;
                   }),
@@ -741,7 +747,7 @@ const TimelineEditor: React.FC = () => {
     showToast(`Rotated ${selectedDancers.size} positions ${dirLabel}`, 'success', 1500);
   }, [selectedDancers, selectedFormationId, saveToHistory, showToast]);
 
-  // Rotate entire formation by angle (degrees)
+  // Rotate dancers by angle (degrees) - selected dancers only if any selected, otherwise all
   const rotateFormationByAngle = useCallback((angleDegrees: number) => {
     if (!selectedFormationId) {
       showToast('Select a formation first', 'info', 2000);
@@ -751,18 +757,28 @@ const TimelineEditor: React.FC = () => {
     const formation = project.formations.find(f => f.id === selectedFormationId);
     if (!formation || formation.positions.length === 0) return;
 
+    // Determine which dancers to rotate
+    const dancersToRotate = selectedDancers.size > 0
+      ? formation.positions.filter(p => selectedDancers.has(p.dancerId))
+      : formation.positions;
+
+    if (dancersToRotate.length === 0) return;
+
     saveToHistory();
 
-    // Calculate centroid of all dancers
+    // Calculate centroid of dancers to rotate
     const centroid = {
-      x: formation.positions.reduce((sum, d) => sum + d.position.x, 0) / formation.positions.length,
-      y: formation.positions.reduce((sum, d) => sum + d.position.y, 0) / formation.positions.length,
+      x: dancersToRotate.reduce((sum, d) => sum + d.position.x, 0) / dancersToRotate.length,
+      y: dancersToRotate.reduce((sum, d) => sum + d.position.y, 0) / dancersToRotate.length,
     };
 
     // Convert angle to radians
     const angleRad = (angleDegrees * Math.PI) / 180;
     const cosA = Math.cos(angleRad);
     const sinA = Math.sin(angleRad);
+
+    // Create set of dancer IDs to rotate for quick lookup
+    const rotateIds = new Set(dancersToRotate.map(d => d.dancerId));
 
     setProject(prev => ({
       ...prev,
@@ -772,18 +788,21 @@ const TimelineEditor: React.FC = () => {
         return {
           ...f,
           positions: f.positions.map(p => {
+            // Only rotate if this dancer is in the rotation set
+            if (!rotateIds.has(p.dancerId)) return p;
+
             // Translate to origin (centroid), rotate, translate back
             const dx = p.position.x - centroid.x;
             const dy = p.position.y - centroid.y;
             const newX = centroid.x + (dx * cosA - dy * sinA);
             const newY = centroid.y + (dx * sinA + dy * cosA);
 
-            // Clamp to stage boundaries
+            // Clamp to stage boundaries and snap to grid
             return {
               ...p,
               position: {
-                x: Math.max(0.5, Math.min(prev.stageWidth - 0.5, newX)),
-                y: Math.max(0.5, Math.min(prev.stageHeight - 0.5, newY)),
+                x: Math.max(0, Math.min(prev.stageWidth, snapToGrid(newX))),
+                y: Math.max(0, Math.min(prev.stageHeight, snapToGrid(newY))),
               },
             };
           }),
@@ -791,8 +810,9 @@ const TimelineEditor: React.FC = () => {
       }),
     }));
 
-    showToast(`Rotated formation by ${angleDegrees}°`, 'success', 1500);
-  }, [selectedFormationId, project.formations, saveToHistory, showToast]);
+    const count = selectedDancers.size > 0 ? selectedDancers.size : formation.positions.length;
+    showToast(`Rotated ${count} dancer${count > 1 ? 's' : ''} by ${angleDegrees}°`, 'success', 1500);
+  }, [selectedFormationId, project.formations, selectedDancers, saveToHistory, showToast]);
 
   // Update dancer name
   const updateDancerName = useCallback((dancerId: number, name: string) => {
@@ -1207,26 +1227,36 @@ const TimelineEditor: React.FC = () => {
       return;
     }
 
-    // Snap to grid on release
-    if (draggingDancer !== null && selectedFormation) {
+    // Snap to grid on release - use setProject to get latest state
+    if (draggingDancer !== null && selectedFormationId) {
       const dancersToMove = selectedDancers.has(draggingDancer)
         ? Array.from(selectedDancers)
         : [draggingDancer];
 
-      const snappedPositions = selectedFormation.positions.map(p => {
-        if (dancersToMove.includes(p.dancerId)) {
-          return {
-            ...p,
-            position: {
-              x: Math.max(0, Math.min(project.stageWidth, snapToGrid(p.position.x))),
-              y: Math.max(0, Math.min(project.stageHeight, snapToGrid(p.position.y))),
-            },
-          };
-        }
-        return p;
-      });
+      setProject(prev => {
+        const formation = prev.formations.find(f => f.id === selectedFormationId);
+        if (!formation) return prev;
 
-      updateFormationDrag(selectedFormation.id, { positions: snappedPositions });
+        const snappedPositions = formation.positions.map(p => {
+          if (dancersToMove.includes(p.dancerId)) {
+            return {
+              ...p,
+              position: {
+                x: Math.max(0, Math.min(prev.stageWidth, snapToGrid(p.position.x))),
+                y: Math.max(0, Math.min(prev.stageHeight, snapToGrid(p.position.y))),
+              },
+            };
+          }
+          return p;
+        });
+
+        return {
+          ...prev,
+          formations: prev.formations.map(f =>
+            f.id === selectedFormationId ? { ...f, positions: snappedPositions } : f
+          ),
+        };
+      });
     }
     setDraggingDancer(null);
     dragNeedsHistorySave.current = false;
