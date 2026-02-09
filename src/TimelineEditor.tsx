@@ -3487,7 +3487,7 @@ Score each option 0-100 based on the weighted criteria above.
                     onClick={startRotation}
                     title={selectedDancers.size > 0 ? `Rotate ${selectedDancers.size} selected dancers` : 'Rotate formation'}
                   >
-                    {selectedDancers.size > 0 ? `↻ ${selectedDancers.size}명` : '↻ 전체'}
+                    {selectedDancers.size > 0 ? `↻ ${selectedDancers.size}` : '↻ All'}
                   </button>
                 )}
               </div>
