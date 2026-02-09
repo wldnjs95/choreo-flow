@@ -2982,6 +2982,12 @@ Score each option 0-100 based on the weighted criteria above.
           language: 'en',
           includeRelativePositioning: true,
           includeArtisticNuance: true,
+          formations: project.formations.map((f, i) => ({
+            index: i,
+            name: f.label || `Formation ${i + 1}`,
+            startCount: f.startCount,
+            duration: f.duration,
+          })),
         }
       );
 
@@ -3666,31 +3672,55 @@ Score each option 0-100 based on the weighted criteria above.
             )}
           </div>
 
-          {/* Choreographer POV: General Notes above stage (Rehearsal mode only) */}
-          {uiMode === 'rehearsal' && povMode === 'choreographer' && cueSheet && cueSheet.generalNotes && cueSheet.generalNotes.length > 0 && (
-            <div className={`pov-cue-sheet pov-general-notes ${isCueSheetCollapsed ? 'collapsed' : ''}`}>
-              <div className="pov-cue-card">
-                <div className="pov-cue-header">
-                  <span className="pov-dancer-label">👁️ General Notes</span>
-                  <button
-                    className="pov-cue-toggle"
-                    onClick={() => setIsCueSheetCollapsed(!isCueSheetCollapsed)}
-                    title={isCueSheetCollapsed ? 'Expand (C)' : 'Collapse (C)'}
-                  >
-                    {isCueSheetCollapsed ? '▼' : '▲'}
-                  </button>
-                </div>
-                {!isCueSheetCollapsed && (
-                  <div className="pov-cue-list">
-                    {cueSheet.generalNotes.map((note, i) => (
-                      <div key={i} className="pov-cue-item">
-                        <span className="pov-cue-instruction">{note}</span>
+          {/* Choreographer POV: Formation-specific notes above stage (Rehearsal mode only) */}
+          {uiMode === 'rehearsal' && povMode === 'choreographer' && cueSheet && (
+            (() => {
+              // Find current formation's notes based on currentCount
+              const currentFormationNote = cueSheet.formationNotes?.find(
+                fn => currentCount >= fn.startCount && currentCount < fn.endCount
+              );
+              const currentFormation = project.formations.find(
+                f => currentCount >= f.startCount && currentCount < f.startCount + f.duration
+              );
+
+              if (!currentFormationNote || currentFormationNote.notes.length === 0) {
+                return null;
+              }
+
+              return (
+                <div className={`pov-cue-sheet pov-general-notes ${isCueSheetCollapsed ? 'collapsed' : ''}`}>
+                  <div className="pov-cue-card">
+                    <div className="pov-cue-header">
+                      <span className="pov-dancer-label">
+                        👁️ {currentFormation?.label || `Formation ${currentFormationNote.formationIndex + 1}`}
+                      </span>
+                      {isCueSheetCollapsed && currentFormationNote.notes[0] && (
+                        <span className="pov-cue-compact-info">{currentFormationNote.notes[0]}</span>
+                      )}
+                      <button
+                        className="pov-cue-toggle"
+                        onClick={() => setIsCueSheetCollapsed(!isCueSheetCollapsed)}
+                        title={isCueSheetCollapsed ? 'Expand (C)' : 'Collapse (C)'}
+                      >
+                        {isCueSheetCollapsed ? '▼' : '▲'}
+                      </button>
+                    </div>
+                    {!isCueSheetCollapsed && (
+                      <div className="pov-cue-current">
+                        <div className="pov-cue-time-badge">
+                          {currentFormationNote.startCount}~{currentFormationNote.endCount}
+                        </div>
+                        {currentFormationNote.notes.map((note, i) => (
+                          <div key={i} className="pov-cue-instruction-main" style={{ marginBottom: i < currentFormationNote.notes.length - 1 ? '8px' : 0 }}>
+                            {note}
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
-              </div>
-            </div>
+                </div>
+              );
+            })()
           )}
 
           {/* Individual Dancer Cue Sheet (POV mode) - Shows above stage (Rehearsal mode only) */}

@@ -25,12 +25,27 @@ export interface DancerCueSheet {
   summary: string;          // Brief summary of the dancer's role
 }
 
+export interface FormationNote {
+  formationIndex: number;     // 0-based formation index
+  startCount: number;
+  endCount: number;
+  notes: string[];            // Notes for this specific formation/transition
+}
+
 export interface CueSheetResult {
   title: string;
   totalCounts: number;
   stageInfo: string;
   dancers: DancerCueSheet[];
-  generalNotes: string[];
+  generalNotes: string[];       // Legacy: overall notes (deprecated)
+  formationNotes?: FormationNote[];  // Per-formation notes for choreographer
+}
+
+export interface FormationInfo {
+  index: number;
+  name: string;
+  startCount: number;
+  duration: number;
 }
 
 export interface CueSheetConfig {
@@ -40,6 +55,7 @@ export interface CueSheetConfig {
   language: 'ko' | 'en';
   includeRelativePositioning: boolean;
   includeArtisticNuance: boolean;
+  formations?: FormationInfo[];  // Optional: for per-formation notes
 }
 
 // ============================================
@@ -402,6 +418,27 @@ ${JSON.stringify(pathData, null, 2)}
 - 존댓말과 격려하는 톤 사용
 - 실제 공연에서 사용 가능한 수준의 구체적 지시`;
   } else {
+    // Build formations section if available
+    const formationsSection = config.formations && config.formations.length > 0
+      ? `
+## Formations
+This choreography consists of ${config.formations.length} formations:
+${config.formations.map((f, i) => `- Formation ${i + 1} "${f.name}": counts ${f.startCount}~${f.startCount + f.duration}`).join('\n')}
+`
+      : '';
+
+    // Build formationNotes example if formations exist
+    const formationNotesExample = config.formations && config.formations.length > 0
+      ? `"formationNotes": [
+${config.formations.map((f, i) => `    {
+      "formationIndex": ${i},
+      "startCount": ${f.startCount},
+      "endCount": ${f.startCount + f.duration},
+      "notes": ["Choreographer note for ${f.name}", "Key focus point for this formation"]
+    }`).join(',\n')}
+  ],`
+      : `"formationNotes": [],`;
+
     return `## Role Definition
 You are a veteran **Stage Director and Choreographer** with 20 years of experience.
 Your mission is to translate 'Dancer Coordinate Movement Data (JSON)' calculated by computer algorithms into **'Natural Language Cue Sheets'** that dancers can intuitively understand.
@@ -410,7 +447,7 @@ Your mission is to translate 'Dancer Coordinate Movement Data (JSON)' calculated
 - Stage size: ${config.stageWidth}m (width) × ${config.stageHeight}m (depth)
 - Total counts: ${config.totalCounts} counts
 - Coordinate system: (0,0) is upstage left, higher y = closer to audience
-
+${formationsSection}
 ### Stage Zone Definitions
 - **Downstage (Front)**: y > ${(config.stageHeight * 0.67).toFixed(1)}m (closer to audience)
 - **Upstage (Back)**: y < ${(config.stageHeight * 0.33).toFixed(1)}m (away from audience)
@@ -439,7 +476,8 @@ Please output in the following JSON format:
 \`\`\`json
 {
   "title": "Cue Sheet Title",
-  "generalNotes": ["General note 1", "General note 2"],
+  "generalNotes": ["Overall choreography note"],
+  ${formationNotesExample}
   "dancers": [
     {
       "dancerId": 1,
@@ -447,12 +485,12 @@ Please output in the following JSON format:
       "summary": "Brief summary of this dancer's movement (1 sentence)",
       "cues": [
         {
-          "timeRange": "0~2 counts",
+          "timeRange": "0~2",
           "instruction": "Standby upstage left, eyes forward",
           "notes": "Prepare to start with D3"
         },
         {
-          "timeRange": "2~5 counts",
+          "timeRange": "2~5",
           "instruction": "As soon as D5 passes, dash quickly to center stage",
           "notes": "Curved path, watch for crossing with D2"
         }
@@ -465,7 +503,8 @@ Please output in the following JSON format:
 **Important**:
 - Output ONLY valid JSON
 - Write cues chronologically for each dancer
-- **timeRange must use integer counts only** (e.g., "0~2 counts", "3~5 counts") - no decimals
+- **timeRange must use integer counts only** (e.g., "0~2", "3~5") - no decimals, no "counts" suffix
+- **formationNotes**: Write specific notes for each formation that the choreographer needs to focus on during that segment (key transitions, spatial awareness, timing cues, potential collision points)
 - Use polite, professional, and encouraging tone
 - Be specific enough for actual performance use`;
   }
