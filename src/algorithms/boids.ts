@@ -36,15 +36,15 @@ const DEFAULT_CONFIG: BoidsConfig = {
   stageWidth: 12,
   stageHeight: 10,
   numPoints: 20,
-  separationWeight: 1.5,         // 분리 가중치 (가까운 이웃으로부터 멀어지기)
-  alignmentWeight: 1.0,           // 정렬 가중치 (이웃의 평균 방향으로 정렬)
-  cohesionWeight: 1.0,           // 응집 가중치 (이웃의 중심으로 이동)
-  goalWeight: 2.0,                // 목표 가중치 (목표 지점으로 이동)
-  separationRadius: 0.75,         // 분리 반경 (1.5 * collisionRadius)
-  neighborRadius: 3.0,            // 이웃 반경 (정렬/응집을 위한 거리)
-  maxSpeed: 2.0,                  // 최대 속도 (미터/초)
-  maxForce: 0.5,                  // 최대 조향력
-  timeStep: 0.2,                  // 시뮬레이션 시간 간격 (초)
+  separationWeight: 1.5,         // Separation weight (move away from nearby neighbors)
+  alignmentWeight: 1.0,           // Alignment weight (align with average neighbor direction)
+  cohesionWeight: 1.0,           // Cohesion weight (move toward neighbor center)
+  goalWeight: 2.0,                // Goal weight (move toward target position)
+  separationRadius: 0.75,         // Separation radius (1.5 * collisionRadius)
+  neighborRadius: 3.0,            // Neighbor radius (distance for alignment/cohesion)
+  maxSpeed: 2.0,                  // Maximum speed (meters/second)
+  maxForce: 0.5,                  // Maximum steering force
+  timeStep: 0.2,                  // Simulation time step (seconds)
 };
 
 /**

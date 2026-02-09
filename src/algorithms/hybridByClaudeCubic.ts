@@ -1,22 +1,22 @@
 /**
  * Hybrid By Claude (Cubic Bezier) Algorithm
  *
- * 핵심 원칙:
- * 1. [Hard Constraint] 충돌 0 보장
- * 2. [Soft Constraint] 경로 교차 최소화 - 다른 댄서의 경로를 가로지르지 않음
- * 3. [Simplicity] 최대한 직선 경로 유지
- * 4. [Visual Sync] 시각적 동기화 지원 (syncMode 옵션)
- * 5. [Asymmetric Curves] 비대칭 곡선으로 충돌 회피 향상
+ * Core Principles:
+ * 1. [Hard Constraint] Zero collision guarantee
+ * 2. [Soft Constraint] Minimize path crossings - avoid crossing other dancers' paths
+ * 3. [Simplicity] Keep linear paths as much as possible
+ * 4. [Visual Sync] Support visual synchronization (syncMode option)
+ * 5. [Asymmetric Curves] Improve collision avoidance with asymmetric curves
  *
- * Quadratic (Quad) 버전과의 차이:
- * - Cubic Bezier 사용으로 비대칭 곡선 생성 가능
- * - 충돌 발생 위치에 따라 시작/끝 근처에서 더 많이 휘는 경로 생성
- * - S자 곡선 등 다양한 경로 패턴 지원
+ * Differences from Quadratic (Quad) version:
+ * - Cubic Bezier enables asymmetric curve generation
+ * - Generate paths with more bend near start/end based on collision location
+ * - Support various path patterns like S-curves
  *
- * 알고리즘:
- * 1. 모든 댄서 직선 경로 생성
- * 2. 충돌 해결 (필수) - 비대칭 곡선 포함
- * 3. 경로 교차 최소화 (선호)
+ * Algorithm:
+ * 1. Generate linear paths for all dancers
+ * 2. Resolve collisions (required) - including asymmetric curves
+ * 3. Minimize path crossings (preferred)
  */
 
 import type { Assignment } from './hungarian';
@@ -73,11 +73,11 @@ interface DancerPathInfo {
   path: PathPoint[];
   startTime: number;
   endTime: number;
-  curveType: string; // 곡선 타입 설명
+  curveType: string; // Curve type description
 }
 
 // ============================================
-// Cubic Bezier Curve Presets (비대칭 포함)
+// Cubic Bezier Curve Presets (including asymmetric)
 // ============================================
 
 interface CurvePreset {
@@ -87,34 +87,34 @@ interface CurvePreset {
 }
 
 /**
- * 다양한 곡선 프리셋 생성
- * - symmetric: 대칭 곡선 (양쪽 동일)
- * - start_heavy: 시작점에서 크게 휨
- * - end_heavy: 끝점에서 크게 휨
- * - s_curve: S자 곡선
+ * Generate various curve presets
+ * - symmetric: Symmetric curve (same on both sides)
+ * - start_heavy: Large bend near start
+ * - end_heavy: Large bend near end
+ * - s_curve: S-shaped curve
  */
 function generateCurvePresets(
   dx: number,
   dy: number,
   distance: number
 ): CurvePreset[] {
-  // 수직 방향 벡터 (경로에 수직)
+  // Perpendicular direction vector (perpendicular to path)
   const perpX = -dy / distance;
   const perpY = dx / distance;
 
   const presets: CurvePreset[] = [];
 
-  // 1. 직선 (제어점 없음)
+  // 1. Linear (no control points)
   presets.push({
     name: 'linear',
     ctrl1: { x: 0, y: 0 },
     ctrl2: { x: 0, y: 0 },
   });
 
-  // 2. 대칭 곡선 (기존 Quad와 유사)
+  // 2. Symmetric curves (similar to original Quad)
   const symmetricOffsets = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0];
   for (const offset of symmetricOffsets) {
-    // 양쪽 동일한 offset
+    // Same offset on both sides
     presets.push({
       name: `symmetric_${offset}`,
       ctrl1: { x: perpX * offset * 0.7, y: perpY * offset * 0.7 },
@@ -127,7 +127,7 @@ function generateCurvePresets(
     });
   }
 
-  // 3. 시작점에서 크게 휨 (Start Heavy) - 초반 충돌 회피에 유용
+  // 3. Large bend at start (Start Heavy) - useful for early collision avoidance
   const heavyOffsets = [1.5, 2.0, 2.5, 3.0, 3.5, 4.0];
   for (const offset of heavyOffsets) {
     presets.push({
@@ -142,7 +142,7 @@ function generateCurvePresets(
     });
   }
 
-  // 4. 끝점에서 크게 휨 (End Heavy) - 후반 충돌 회피에 유용
+  // 4. Large bend at end (End Heavy) - useful for late collision avoidance
   for (const offset of heavyOffsets) {
     presets.push({
       name: `end_heavy_${offset}`,
@@ -156,7 +156,7 @@ function generateCurvePresets(
     });
   }
 
-  // 5. S자 곡선 (반대 방향으로 휨)
+  // 5. S-curve (bending in opposite directions)
   const sCurveOffsets = [1.5, 2.0, 2.5, 3.0];
   for (const offset of sCurveOffsets) {
     presets.push({
@@ -243,7 +243,7 @@ interface PathCandidate {
   curveType: string;
   crossings: number;
   syncPenalty: number;
-  curvePenalty: number; // 곡선 복잡도 페널티
+  curvePenalty: number; // Curve complexity penalty
 }
 
 function getCandidateSettings(syncMode: SyncMode, totalCounts: number) {
@@ -274,7 +274,7 @@ function getCandidateSettings(syncMode: SyncMode, totalCounts: number) {
 }
 
 /**
- * 곡선 복잡도 계산 (대칭 < 비대칭 < S자)
+ * Calculate curve complexity (symmetric < asymmetric < S-curve)
  */
 function calculateCurvePenalty(curveType: string): number {
   if (curveType === 'linear') return 0;
@@ -295,13 +295,13 @@ function findBestPath(
 
   const candidates: PathCandidate[] = [];
 
-  // 경로 방향 계산
+  // Calculate path direction
   const dx = endPosition.x - startPosition.x;
   const dy = endPosition.y - startPosition.y;
   const distance = Math.sqrt(dx * dx + dy * dy);
 
   if (distance < 0.01) {
-    // 같은 위치면 정지
+    // Stay in place if same position
     const staticPath = generateLinearPath(startPosition, endPosition, 0, totalCounts, numPoints);
     return {
       ...info,
@@ -312,10 +312,10 @@ function findBestPath(
     };
   }
 
-  // 곡선 프리셋 생성
+  // Generate curve presets
   const presets = generateCurvePresets(dx, dy, distance);
 
-  // Phase 1: 동기화된 경로 (delay=0)
+  // Phase 1: Synchronized paths (delay=0)
   for (const preset of presets) {
     const path = generateCubicBezierPath(
       startPosition,
@@ -342,9 +342,9 @@ function findBestPath(
     }
   }
 
-  // Phase 2: 지연 허용 경로
+  // Phase 2: Delayed paths allowed
   for (const delay of settings.delays) {
-    if (delay === 0) continue; // Phase 1에서 이미 처리
+    if (delay === 0) continue; // Already processed in Phase 1
 
     for (const dur of settings.durations) {
       const endTime = Math.min(delay + dur, totalCounts);
@@ -383,21 +383,21 @@ function findBestPath(
     return null;
   }
 
-  // 최적 후보 선택
+  // Select optimal candidate
   candidates.sort((a, b) => {
     if (syncMode === 'strict') {
-      // Strict: 동기화 > 교차 > 곡선 복잡도
+      // Strict: sync > crossings > curve complexity
       if (a.syncPenalty !== b.syncPenalty) return a.syncPenalty - b.syncPenalty;
       if (a.crossings !== b.crossings) return a.crossings - b.crossings;
       return a.curvePenalty - b.curvePenalty;
     } else if (syncMode === 'balanced') {
-      // Balanced: 교차 > 동기화 + 곡선 복잡도
+      // Balanced: crossings > sync + curve complexity
       if (a.crossings !== b.crossings) return a.crossings - b.crossings;
       const scoreA = a.syncPenalty + a.curvePenalty * 0.5;
       const scoreB = b.syncPenalty + b.curvePenalty * 0.5;
       return scoreA - scoreB;
     } else {
-      // Relaxed: 교차 > 곡선 복잡도 > 지연
+      // Relaxed: crossings > curve complexity > delay
       if (a.crossings !== b.crossings) return a.crossings - b.crossings;
       if (a.curvePenalty !== b.curvePenalty) return a.curvePenalty - b.curvePenalty;
       return a.startTime - b.startTime;
@@ -429,7 +429,7 @@ export function computeAllPathsWithHybridByClaudeCubic(
   console.log(`[HybridByClaudeCubic] Dancers: ${assignments.length}, totalCounts: ${cfg.totalCounts}`);
   console.log(`[HybridByClaudeCubic] Sync Mode: ${cfg.syncMode}`);
 
-  // 댄서 정렬: 앞→뒤 이동하는 댄서 우선
+  // Sort dancers: front→back movers first
   const sortedAssignments = [...assignments].sort((a, b) => {
     const aGoingBack = a.startPosition.y > a.endPosition.y;
     const bGoingBack = b.startPosition.y > b.endPosition.y;
@@ -448,7 +448,7 @@ export function computeAllPathsWithHybridByClaudeCubic(
 
   const paths: DancerPathInfo[] = [];
 
-  // Step 1: 순차적으로 경로 생성
+  // Step 1: Generate paths sequentially
   for (const assignment of sortedAssignments) {
     const info: DancerPathInfo = {
       dancerId: assignment.dancerId,
@@ -466,7 +466,7 @@ export function computeAllPathsWithHybridByClaudeCubic(
       const crossings = countCrossingsWithOthers(bestPath.path, paths.filter(p => p.dancerId !== bestPath.dancerId));
       console.log(`[HybridByClaudeCubic] Dancer ${assignment.dancerId}: curve=${bestPath.curveType}, delay=${bestPath.startTime.toFixed(1)}, crossings=${crossings}`);
     } else {
-      // Fallback: 극단적인 비대칭 곡선
+      // Fallback: extreme asymmetric curve
       console.warn(`[HybridByClaudeCubic] Dancer ${assignment.dancerId}: No path found, trying extreme fallback`);
 
       const { startPosition, endPosition } = assignment;
@@ -485,7 +485,7 @@ export function computeAllPathsWithHybridByClaudeCubic(
           const endTime = cfg.totalCounts;
           if (endTime - delay < 1.0) continue;
 
-          // 비대칭 곡선 시도 (시작에서 크게 휨)
+          // Try asymmetric curve (large bend at start)
           const ctrl1 = { x: perpX * offset, y: perpY * offset };
           const ctrl2 = { x: perpX * offset * 0.1, y: perpY * offset * 0.1 };
 
@@ -512,7 +512,7 @@ export function computeAllPathsWithHybridByClaudeCubic(
             break outer;
           }
 
-          // 반대 방향 시도
+          // Try opposite direction
           const ctrl1Neg = { x: -perpX * offset, y: -perpY * offset };
           const ctrl2Neg = { x: -perpX * offset * 0.1, y: -perpY * offset * 0.1 };
 
@@ -542,7 +542,7 @@ export function computeAllPathsWithHybridByClaudeCubic(
       }
 
       if (!fallbackFound) {
-        // 최후의 수단
+        // Last resort
         console.error(`[HybridByClaudeCubic] Dancer ${assignment.dancerId}: All fallbacks failed, using extreme path`);
 
         const extremeOffset = assignment.dancerId % 2 === 0 ? 12.0 : -12.0;
@@ -571,7 +571,7 @@ export function computeAllPathsWithHybridByClaudeCubic(
     }
   }
 
-  // Step 2: 최종 검증 및 충돌 해결
+  // Step 2: Final validation and collision resolution
   const MAX_FIX_ITERATIONS = 50;
 
   for (let iter = 0; iter < MAX_FIX_ITERATIONS; iter++) {
@@ -603,7 +603,7 @@ export function computeAllPathsWithHybridByClaudeCubic(
     if (fixed) {
       paths[toFixIdx] = fixed;
     } else {
-      // 강제 비대칭 곡선
+      // Force asymmetric curve
       const { startPosition, endPosition } = toFix.assignment;
       const dx = endPosition.x - startPosition.x;
       const dy = endPosition.y - startPosition.y;
@@ -635,7 +635,7 @@ export function computeAllPathsWithHybridByClaudeCubic(
     }
   }
 
-  // Step 3: 최종 통계
+  // Step 3: Final statistics
   const finalCollisions = findAllCollisions(paths, cfg.collisionRadius, cfg.totalCounts);
   const linearCount = paths.filter(p => p.curveType === 'linear').length;
   const symmetricCount = paths.filter(p => p.curveType.startsWith('symmetric_')).length;
@@ -669,7 +669,7 @@ export function computeAllPathsWithHybridByClaudeCubic(
     console.error(`[HybridByClaudeCubic] FAILED: ${finalCollisions.length} collision(s) remaining`);
   }
 
-  // 결과 반환
+  // Return results
   return paths.map(p => {
     const pathDist = calculatePathDistance(p.path);
     const duration = p.endTime - p.startTime;

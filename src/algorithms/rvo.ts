@@ -29,10 +29,10 @@ const DEFAULT_CONFIG: RVOConfig = {
   stageWidth: 12,
   stageHeight: 10,
   numPoints: 20,
-  timeHorizon: 3.0,            // 충돌 예측 시간 범위 (초) - 증가하여 정면 충돌 미리 감지
-  neighborDist: 8.0,           // 이웃으로 고려할 최대 거리 (미터) - 증가하여 정면 충돌 감지
-  maxSpeed: 2.0,               // 최대 속도 (미터/초)
-  timeStep: 0.1,               // 시뮬레이션 시간 간격 (초)
+  timeHorizon: 3.0,            // Collision prediction time range (seconds) - increased for early head-on detection
+  neighborDist: 8.0,           // Maximum distance to consider neighbors (meters) - increased for head-on detection
+  maxSpeed: 2.0,               // Maximum speed (meters/second)
+  timeStep: 0.1,               // Simulation time step (seconds)
 };
 
 /**
@@ -95,7 +95,7 @@ function calculateVelocityObstacle(
 
   // Combined radius with safety margin for head-on collisions
   const combinedRadius = agent.radius + neighbor.radius;
-  const safetyMargin = 0.3; // 추가 안전 마진
+  const safetyMargin = 0.3; // Additional safety margin
 
   if (dist < 0.01) {
     // Too close, return large obstacle
@@ -123,7 +123,7 @@ function calculateVelocityObstacle(
 
   // Velocity obstacle radius with safety margin (larger for head-on collisions)
   const baseRadius = (combinedRadius + safetyMargin) / timeHorizon;
-  const radius = isHeadOn ? baseRadius * 1.5 : baseRadius; // 정면 충돌 시 더 큰 장애물
+  const radius = isHeadOn ? baseRadius * 1.5 : baseRadius; // Larger obstacle for head-on collision
 
   return { centerX, centerY, radius, isHeadOn };
 }
@@ -199,12 +199,12 @@ function findOptimalVelocity(
 
   // Sample velocities in a circle around preferred velocity
   // For head-on collisions, sample more directions and lower speeds
-  const numSamples = hasHeadOnCollision ? 72 : 36; // 더 많은 샘플링
-  const speedMultiplier = hasHeadOnCollision ? 0.6 : 1.0; // 정면 충돌 시 더 낮은 속도 시도
+  const numSamples = hasHeadOnCollision ? 72 : 36; // More sampling for head-on
+  const speedMultiplier = hasHeadOnCollision ? 0.6 : 1.0; // Try lower speeds for head-on collision
 
   for (let i = 0; i < numSamples; i++) {
     const angle = (i / numSamples) * 2 * Math.PI;
-    const speed = maxSpeed * speedMultiplier * (0.3 + (i % 4) * 0.2); // 더 다양한 속도 시도
+    const speed = maxSpeed * speedMultiplier * (0.3 + (i % 4) * 0.2); // Try various speeds
 
     const vx = adjustedPreferredVel.vx + Math.cos(angle) * speed * 0.6;
     const vy = adjustedPreferredVel.vy + Math.sin(angle) * speed * 0.6;

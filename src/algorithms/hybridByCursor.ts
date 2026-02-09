@@ -1,13 +1,13 @@
 /**
  * Hybrid By Cursor
  *
- * Multidate Candidate Mode: Start formation → End formation 경로 계산.
- * 우선순위:
- * 1. [Hard] 충돌 방지 (Collision Free)
- * 2. [Movement] 직선 우선, 회피/지연 시 부드러운 곡선 (Linear Base + Curved Detour)
- * 3. [Time] 도착 시간 동기화 — Time Filling(곡선 데투어), Delay 시 Y 작은 인원 지연
- * 4. [Kinematics] 자연스러운 속도, 급격한 방향 전환 없음
- * 5. [Load] 이동 거리 편차 제어 (maxDetourRatio)
+ * Multi-candidate Mode: Start formation → End formation path calculation.
+ * Priority:
+ * 1. [Hard] Collision Free
+ * 2. [Movement] Linear path first, curved detour for avoidance/delay
+ * 3. [Time] Arrival time sync — Time Filling (curved detour), delay for back dancers (lower Y)
+ * 4. [Kinematics] Natural speed, no abrupt direction changes
+ * 5. [Load] Travel distance deviation control (maxDetourRatio)
  */
 
 import type { Assignment, Position } from './hungarian';
@@ -76,7 +76,7 @@ function hasCollisionWithAny(
   return false;
 }
 
-/** 곡선 오프셋 후보 (직선 우선, 회피 시 부드러운 곡선) */
+/** Curve offset candidates (linear first, smooth curve for avoidance) */
 function buildCurveOffsets(maxCurveOffset: number): (number | [number, number])[] {
   const base: (number | [number, number])[] = [
     0,
@@ -98,7 +98,7 @@ function buildCurveOffsets(maxCurveOffset: number): (number | [number, number])[
   });
 }
 
-/** 최대 지연 가능 시간 (물리적 한계) */
+/** Maximum delay time (physical limit) */
 function computeMaxDelay(
   straightDistance: number,
   totalCounts: number,
@@ -108,7 +108,7 @@ function computeMaxDelay(
   return Math.max(0, totalCounts - minDuration);
 }
 
-/** Delay 허용도: Y가 작을수록(무대 뒤) 더 많이 지연 가능 */
+/** Delay allowance: lower Y (back of stage) allows more delay */
 function getDelayAllowance(startY: number, stageHeight: number): number {
   if (stageHeight <= 0) return 0.5;
   const yNorm = Math.min(1, Math.max(0, startY / stageHeight));
@@ -182,8 +182,8 @@ function tryBuildCurvedCandidate(
 }
 
 /**
- * Time Filling: 일찍 도착하는 인원을 위해 곡선 데투어로 도착 시간을 totalCounts에 맞춤.
- * 목표 길이 = min(maxHumanSpeed * totalCounts, straightDistance * maxDetourRatio)
+ * Time Filling: Adjust arrival time to totalCounts using curved detour for early arrivers.
+ * Target length = min(maxHumanSpeed * totalCounts, straightDistance * maxDetourRatio)
  */
 function buildTimeFillingPath(
   start: Position,
@@ -236,7 +236,7 @@ export function computeAllPathsWithHybridByCursor(
   const cfg: HybridByCursorConfig = { ...DEFAULT_CONFIG, ...config };
   const targetEndTime = cfg.totalCounts;
 
-  // 처리 순서: 거리 긴 순, 동일하면 Y 큰 순(앞쪽 먼저) → 뒤쪽(Y 작은)이 나중에 처리되어 지연 허용 대상이 됨
+  // Processing order: longest distance first, then higher Y first (front dancers) → back dancers (lower Y) processed later for delay allowance
   const sorted = [...assignments].sort((a, b) => {
     if (b.distance !== a.distance) return b.distance - a.distance;
     return b.startPosition.y - a.startPosition.y;
@@ -246,7 +246,7 @@ export function computeAllPathsWithHybridByCursor(
   const results: { dancerId: number; candidate: PathCandidate }[] = [];
   const curveOffsets = buildCurveOffsets(cfg.maxCurveOffset);
 
-  // ---------- Phase 1: 충돌 없이 경로 배정 (직선 우선, 필요 시 곡선/지연) ----------
+  // ---------- Phase 1: Assign collision-free paths (linear first, curve/delay if needed) ----------
   for (const assignment of sorted) {
     const { dancerId, startPosition, endPosition } = assignment;
     const straightDistance = distance(startPosition, endPosition);
@@ -256,7 +256,7 @@ export function computeAllPathsWithHybridByCursor(
 
     let selected: PathCandidate | null = null;
 
-    // 1) 직선 우선: start 0, end totalCounts
+    // 1) Linear first: start 0, end totalCounts
     const linearCandidate = tryBuildLinearCandidate(
       startPosition,
       endPosition,
@@ -279,7 +279,7 @@ export function computeAllPathsWithHybridByCursor(
       selected = linearCandidate;
     }
 
-    // 2) 직선 불가 시 부드러운 곡선(Bezier) 데투어 시도
+    // 2) If linear fails, try smooth curved (Bezier) detour
     if (!selected) {
       for (const offset of curveOffsets) {
         const candidate = tryBuildCurvedCandidate(
@@ -309,7 +309,7 @@ export function computeAllPathsWithHybridByCursor(
       }
     }
 
-    // 3) 여전히 충돌 시 지연: Y 작은 인원(뒤쪽) 도착 지연
+    // 3) If still colliding, delay: back dancers (lower Y) arrive later
     if (!selected && maxDelay > 0.01) {
       const delayStep = 0.5;
       for (let delay = delayStep; delay <= maxDelay + 1e-6; delay += delayStep) {
@@ -369,7 +369,7 @@ export function computeAllPathsWithHybridByCursor(
       }
     }
 
-    // 4) Fallback: 데투어 범위 확대
+    // 4) Fallback: expand detour range
     if (!selected) {
       const fallbackOffsets = buildCurveOffsets(cfg.maxCurveOffset * 1.5);
       for (const offset of fallbackOffsets) {
@@ -400,7 +400,7 @@ export function computeAllPathsWithHybridByCursor(
       }
     }
 
-    // 5) 최후: 직선 강제 (검증 시 충돌 플래그됨)
+    // 5) Last resort: force linear path (will be flagged as collision during validation)
     if (!selected) {
       const path = generateLinearPath(
         startPosition,
@@ -422,7 +422,7 @@ export function computeAllPathsWithHybridByCursor(
     results.push({ dancerId, candidate: selected });
   }
 
-  // ---------- Phase 2: 도착 시간 동기화 — Time Filling (곡선 데투어로 동시 도착) ----------
+  // ---------- Phase 2: Arrival time sync — Time Filling (curved detour for simultaneous arrival) ----------
   const targetPathLengthForSync = cfg.maxHumanSpeed * targetEndTime;
 
   const finalResults: DancerPath[] = results.map(({ dancerId, candidate }, idx) => {
@@ -433,7 +433,7 @@ export function computeAllPathsWithHybridByCursor(
     let path = candidate.path;
     let totalDistance = candidate.totalDistance;
 
-    // startTime === 0 이고, 현재 경로가 목표 시간을 다 쓰지 않으면 Time Filling (충돌 없을 때만)
+    // Apply Time Filling if startTime === 0 and current path doesn't use full target time (only if no collision)
     if (candidate.startTime === 0 && duration >= targetEndTime - 0.01) {
       const wouldArriveEarly =
         candidate.totalDistance / cfg.maxHumanSpeed < targetEndTime - 0.5;

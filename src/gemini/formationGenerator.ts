@@ -89,7 +89,7 @@ export async function generateFormationFromText(
   if (!apiAvailable) {
     return {
       success: false,
-      error: 'API 서버에 연결할 수 없습니다. "npm run dev:all"로 서버를 실행해주세요.',
+      error: 'Cannot connect to API server. Please run "npm run dev:all" to start the server.',
     };
   }
 
@@ -143,9 +143,9 @@ Return ONLY the JSON object with positions array and description.`;
       });
 
       if (promptFeedback?.blockReason) {
-        throw new Error(`요청이 차단되었습니다: ${promptFeedback.blockReason}`);
+        throw new Error(`Request was blocked: ${promptFeedback.blockReason}`);
       }
-      throw new Error('Gemini로부터 빈 응답이 반환되었습니다. 다시 시도해주세요.');
+      throw new Error('Empty response from Gemini. Please try again.');
     }
 
     // Parse JSON from response
@@ -159,7 +159,7 @@ Return ONLY the JSON object with positions array and description.`;
     if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
       return {
         success: false,
-        error: 'API 서버에 연결할 수 없습니다. "npm run dev:all"로 서버를 실행해주세요.',
+        error: 'Cannot connect to API server. Please run "npm run dev:all" to start the server.',
       };
     }
 
@@ -184,7 +184,7 @@ export async function generateFormationFromSketch(
   if (!apiAvailable) {
     return {
       success: false,
-      error: 'API 서버에 연결할 수 없습니다. "npm run dev:all"로 서버를 실행해주세요.',
+      error: 'Cannot connect to API server. Please run "npm run dev:all" to start the server.',
     };
   }
 
@@ -258,12 +258,12 @@ Return ONLY the JSON object with positions array and description.`;
       });
 
       if (finishReason === 'SAFETY') {
-        throw new Error('이미지가 안전 필터에 의해 차단되었습니다. 다른 스케치를 시도해주세요.');
+        throw new Error('Image was blocked by safety filter. Please try a different sketch.');
       }
       if (promptFeedback?.blockReason) {
-        throw new Error(`요청이 차단되었습니다: ${promptFeedback.blockReason}`);
+        throw new Error(`Request was blocked: ${promptFeedback.blockReason}`);
       }
-      throw new Error('Gemini로부터 빈 응답이 반환되었습니다. 다시 시도해주세요.');
+      throw new Error('Empty response from Gemini. Please try again.');
     }
 
     const result = parseFormationResponse(text, dancerCount, stageWidth, stageHeight);
@@ -275,7 +275,7 @@ Return ONLY the JSON object with positions array and description.`;
     if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
       return {
         success: false,
-        error: 'API 서버에 연결할 수 없습니다. "npm run dev:all"로 서버를 실행해주세요.',
+        error: 'Cannot connect to API server. Please run "npm run dev:all" to start the server.',
       };
     }
 
@@ -366,12 +366,12 @@ function parseFormationResponse(
  * Example formation descriptions for UI hints
  */
 export const FORMATION_EXAMPLES = [
-  '원형으로 배치해줘',
-  'V자 대형으로 앞을 향하게',
-  '3열로 피라미드 형태',
-  '좌우 대칭으로 2줄',
-  '하트 모양으로',
-  '대각선으로 계단식 배치',
-  '가운데에 1명, 주변에 원형으로',
-  '별 모양 대형',
+  'Arrange in a circle',
+  'V formation facing front',
+  'Pyramid shape with 3 rows',
+  'Symmetrical 2 lines',
+  'Heart shape',
+  'Diagonal staircase arrangement',
+  '1 person in center, others in circle',
+  'Star formation',
 ];

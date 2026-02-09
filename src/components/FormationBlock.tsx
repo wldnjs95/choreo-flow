@@ -64,8 +64,8 @@ export const FormationBlock: React.FC<FormationBlockProps> = ({
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startXRef.current;
-      const deltaCounts = Math.round(deltaX / zoom / 4) * 4; // Snap to 4-count
-      const newDuration = Math.max(4, startWidthRef.current + deltaCounts);
+      const deltaCounts = Math.round(deltaX / zoom); // Snap to 1-count
+      const newDuration = Math.max(1, Math.min(8, startWidthRef.current + deltaCounts));
       onUpdateDuration(newDuration);
     };
 

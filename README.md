@@ -1,73 +1,52 @@
-# React + TypeScript + Vite
+# Dance Choreography Planner
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A visual tool for planning and simulating dance choreography with automated path generation and collision avoidance.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Timeline-based Formation Editor**: Create and edit dance formations on a visual timeline
+- **Multiple Path Algorithms**: 6 different pathfinding algorithms optimized for different choreography styles
+- **Collision-Free Paths**: Automatic collision detection and avoidance
+- **Gemini AI Integration**: AI-powered cue sheet generation and path evaluation
+- **POV Mode**: View choreography from individual dancer perspectives
+- **Rehearsal Mode**: Playback and practice mode with cue sheets
 
-## React Compiler
+## Path Algorithms
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Each algorithm is optimized for different choreography needs:
 
-## Expanding the ESLint configuration
+| Algorithm | Best For |
+|-----------|----------|
+| Natural Curves | Organic, flowing movements with S-curves |
+| Clean Flow | Minimizing path crossings, simple formations |
+| Wave Sync | Staggered timing (back-to-front waves) |
+| Perfect Sync | Synchronized arrival timing |
+| Balanced Direct | Even travel distances across dancers |
+| Swap Safe | Dancer exchange formations (A↔B) |
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Getting Started
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+```bash
+# Install dependencies
+npm install
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+# Start development server (frontend + API)
+npm run dev:all
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# Build for production
+npm run build
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Tech Stack
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- React + TypeScript + Vite
+- Hono (API server)
+- Google Gemini API (AI features)
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## AI Development Note
+
+This project utilized various AI coding assistants to explore and optimize different pathfinding approaches. Each algorithm was developed iteratively with AI assistance to find optimal solutions for specific choreography scenarios.
+
+## License
+
+MIT

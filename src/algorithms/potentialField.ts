@@ -24,16 +24,16 @@ export interface PotentialFieldConfig {
 }
 
 const DEFAULT_CONFIG: PotentialFieldConfig = {
-  totalCounts: 8,              // 총 음악 비트 수 (총 이동 시간)
-  collisionRadius: 0.5,         // 댄서 간 최소 거리 (미터 단위, 이 거리보다 가까우면 충돌)
-  stageWidth: 12,               // 무대 너비 (미터)
-  stageHeight: 10,              // 무대 높이 (미터)
-  numPoints: 30,                // 경로당 생성되는 점의 개수 (점이 많을수록 부드러운 경로)
-  attractiveGain: 1.0,          // 목표 지점으로 끌어당기는 힘의 강도 (값이 클수록 목표로 빠르게 이동)
-  repulsiveGain: 2.0,           // 장애물(다른 댄서)로부터 밀어내는 힘의 강도 (값이 클수록 충돌 회피가 강함)
-  repulsiveRange: 1.0,          // 척력이 작동하는 최대 거리 (미터, 이 거리 내의 장애물만 고려)
-  stepSize: 0.1,                // 한 스텝당 이동 거리 (미터, 값이 클수록 빠르게 이동하지만 부정확할 수 있음)
-  maxIterations: 100,           // 경로 생성 시 최대 반복 횟수 (현재 미사용)
+  totalCounts: 8,              // Total music beats (total movement time)
+  collisionRadius: 0.5,         // Minimum distance between dancers (meters, collision if closer)
+  stageWidth: 12,               // Stage width (meters)
+  stageHeight: 10,              // Stage height (meters)
+  numPoints: 30,                // Points per path (more points = smoother path)
+  attractiveGain: 1.0,          // Attractive force strength (higher = faster toward goal)
+  repulsiveGain: 2.0,           // Repulsive force strength (higher = stronger collision avoidance)
+  repulsiveRange: 1.0,          // Maximum repulsive range (meters, only considers obstacles within this)
+  stepSize: 0.1,                // Step size per iteration (meters, higher = faster but less accurate)
+  maxIterations: 100,           // Maximum iterations for path generation (currently unused)
 };
 
 /**

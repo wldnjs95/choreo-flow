@@ -1,7 +1,7 @@
 {
   "formations": [
     {
-      "name": "4_2line_1",
+      "name": "2 Rows A",
       "dancerCount": 4,
       "positions": [
         { "x": 9.5, "y": 6.5 },
@@ -13,7 +13,7 @@
       "stageHeight": 12
     },
     {
-      "name": "4_2line_2",
+      "name": "2 Rows B",
       "dancerCount": 4,
       "positions": [
         { "x": 9.5, "y": 8 },
@@ -25,7 +25,7 @@
       "stageHeight": 12
     },
     {
-      "name": "5_2line_1",
+      "name": "2 Rows A",
       "dancerCount": 5,
       "positions": [
         { "x": 9, "y": 7.5 },
@@ -38,7 +38,7 @@
       "stageHeight": 12
     },
     {
-      "name": "5_2line_2",
+      "name": "2 Rows B",
       "dancerCount": 5,
       "positions": [
         { "x": 9, "y": 5 },
@@ -51,7 +51,7 @@
       "stageHeight": 12
     },
     {
-      "name": "6_2line_1",
+      "name": "2 Rows",
       "dancerCount": 6,
       "positions": [
         { "x": 8.5, "y": 5 },
@@ -65,7 +65,7 @@
       "stageHeight": 12
     },
     {
-      "name": "6_vshape_2",
+      "name": "V Shape",
       "dancerCount": 6,
       "positions": [
         { "x": 3.5, "y": 4.5 },
@@ -79,7 +79,7 @@
       "stageHeight": 12
     },
     {
-      "name": "7_round_1",
+      "name": "Circle",
       "dancerCount": 7,
       "positions": [
         { "x": 7.5, "y": 6 },
@@ -94,7 +94,7 @@
       "stageHeight": 12
     },
     {
-      "name": "7_vvshape_2",
+      "name": "W Shape",
       "dancerCount": 7,
       "positions": [
         { "x": 7.5, "y": 7 },
@@ -109,7 +109,7 @@
       "stageHeight": 12
     },
     {
-      "name": "8_2line_1",
+      "name": "2 Rows",
       "dancerCount": 8,
       "positions": [
         { "x": 7.5, "y": 7 },
@@ -125,7 +125,7 @@
       "stageHeight": 12
     },
     {
-      "name": "8_v2line_2",
+      "name": "2 Columns",
       "dancerCount": 8,
       "positions": [
         { "x": 10, "y": 9 },
@@ -141,7 +141,7 @@
       "stageHeight": 12
     },
     {
-      "name": "9_v2line_1",
+      "name": "2 Columns Center",
       "dancerCount": 9,
       "positions": [
         { "x": 10, "y": 9 },
@@ -158,7 +158,7 @@
       "stageHeight": 12
     },
     {
-      "name": "9_4line_2",
+      "name": "Scattered",
       "dancerCount": 9,
       "positions": [
         { "x": 13, "y": 7 },
@@ -175,7 +175,7 @@
       "stageHeight": 12
     },
     {
-      "name": "10_rvline_1",
+      "name": "Diamond Spread",
       "dancerCount": 10,
       "positions": [
         { "x": 13, "y": 7 },
@@ -193,7 +193,7 @@
       "stageHeight": 12
     },
     {
-      "name": "10_4line_2",
+      "name": "4 Rows",
       "dancerCount": 10,
       "positions": [
         { "x": 11, "y": 5 },
@@ -211,7 +211,7 @@
       "stageHeight": 12
     },
     {
-      "name": "11_3vline_1",
+      "name": "3 Columns",
       "dancerCount": 11,
       "positions": [
         { "x": 11, "y": 2.5 },
@@ -230,7 +230,7 @@
       "stageHeight": 12
     },
     {
-      "name": "11_2dline_2",
+      "name": "Diagonal",
       "dancerCount": 11,
       "positions": [
         { "x": 11.5, "y": 5 },
@@ -249,7 +249,7 @@
       "stageHeight": 12
     },
     {
-      "name": "12_2dline_1",
+      "name": "Diagonal Spread",
       "dancerCount": 12,
       "positions": [
         { "x": 11.5, "y": 5 },
@@ -269,7 +269,7 @@
       "stageHeight": 12
     },
     {
-      "name": "12_heart_2",
+      "name": "Heart",
       "dancerCount": 12,
       "positions": [
         { "x": 5, "y": 8 },

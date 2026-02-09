@@ -129,7 +129,7 @@ export function createEmptyFormation(
     }
 
     positions.push({
-      dancerId: i,
+      dancerId: i + 1,
       position: { x, y: Math.max(0.5, Math.min(stageHeight - 0.5, y)) },
       color: colors[i % colors.length],
     });

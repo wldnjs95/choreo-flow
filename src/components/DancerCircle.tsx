@@ -90,7 +90,7 @@ export function DancerCircle({
           strokeWidth={0.5}
           style={{ pointerEvents: 'none', userSelect: 'none' }}
         >
-          {id + 1}
+          {id}
         </text>
       )}
     </g>

@@ -176,31 +176,42 @@ export function Stage({
 
 /**
  * Convert stage coordinates to screen coordinates
+ * @param audienceAtTop - If true (default), high Y (front/audience) is at top of screen
+ *                        If false, high Y (front/audience) is at bottom of screen
  */
 export function stageToScreen(
   position: { x: number; y: number },
   scale: number,
-  stageHeight: number
+  stageHeight: number,
+  audienceAtTop: boolean = true
 ): { x: number; y: number } {
   return {
     x: PADDING + position.x * scale,
-    y: PADDING + (stageHeight - position.y) * scale,
+    y: audienceAtTop
+      ? PADDING + (stageHeight - position.y) * scale  // Flip Y: high Y at top
+      : PADDING + position.y * scale,                  // No flip: high Y at bottom
   };
 }
 
 /**
  * Convert screen coordinates to stage coordinates
+ * @param audienceAtTop - If true (default), high Y (front/audience) is at top of screen
+ *                        If false, high Y (front/audience) is at bottom of screen
  */
 export function screenToStage(
   clientX: number,
   clientY: number,
   svgRect: DOMRect,
   scale: number,
-  stageHeight: number
+  stageHeight: number,
+  audienceAtTop: boolean = true
 ): { x: number; y: number } {
+  const screenY = (clientY - svgRect.top - PADDING) / scale;
   return {
     x: (clientX - svgRect.left - PADDING) / scale,
-    y: stageHeight - (clientY - svgRect.top - PADDING) / scale,
+    y: audienceAtTop
+      ? stageHeight - screenY  // Flip Y
+      : screenY,               // No flip
   };
 }
 

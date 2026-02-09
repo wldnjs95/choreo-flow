@@ -23,7 +23,7 @@ interface TimelineProps {
 const GRID_HEIGHT = 90; // Increased for thumbnails
 const RULER_HEIGHT = 24;
 const MIN_ZOOM = 4;
-const MAX_ZOOM = 20;
+const MAX_ZOOM = 40; // Extended for 1-count granularity
 
 export const Timeline: React.FC<TimelineProps> = ({
   project,
@@ -48,9 +48,18 @@ export const Timeline: React.FC<TimelineProps> = ({
     ? Math.max(lastFormation.startCount + lastFormation.duration + 16, 64)
     : 64;
 
-  // Generate ruler marks (every 8 counts)
+  // Generate ruler marks - interval based on zoom level
+  // At low zoom: every 8 counts, at medium: every 4, at high: every 1
+  const getMarkInterval = (z: number): number => {
+    if (z >= 30) return 1;  // Max zoom: every 1 count
+    if (z >= 20) return 2;  // High zoom: every 2 counts
+    if (z >= 12) return 4;  // Medium zoom: every 4 counts
+    return 8;               // Low zoom: every 8 counts
+  };
+
+  const markInterval = getMarkInterval(zoom);
   const rulerMarks: number[] = [];
-  for (let i = 0; i <= totalCounts; i += 8) {
+  for (let i = 0; i <= totalCounts; i += markInterval) {
     rulerMarks.push(i);
   }
 
@@ -189,16 +198,20 @@ export const Timeline: React.FC<TimelineProps> = ({
         style={{ width: totalCounts * zoom, cursor: onSeek ? 'pointer' : 'default' }}
         onClick={handleRulerClick}
       >
-        {rulerMarks.map(count => (
-          <div
-            key={count}
-            className="ruler-mark"
-            style={{ left: count * zoom }}
-          >
-            <span className="ruler-label">{count}</span>
-            <div className="ruler-tick" />
-          </div>
-        ))}
+        {rulerMarks.map(count => {
+          const isMajor = count % 8 === 0;
+          const isMinor = !isMajor && count % 4 === 0;
+          return (
+            <div
+              key={count}
+              className={`ruler-mark ${isMajor ? 'major' : ''} ${isMinor ? 'minor' : ''}`}
+              style={{ left: count * zoom }}
+            >
+              <span className="ruler-label">{count}</span>
+              <div className="ruler-tick" />
+            </div>
+          );
+        })}
       </div>
 
       {/* Timeline track */}
@@ -212,14 +225,17 @@ export const Timeline: React.FC<TimelineProps> = ({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {/* 8-count grid lines */}
-        {rulerMarks.map(count => (
-          <div
-            key={count}
-            className={`grid-line ${count % 32 === 0 ? 'major' : ''}`}
-            style={{ left: count * zoom }}
-          />
-        ))}
+        {/* Grid lines matching ruler marks */}
+        {rulerMarks.map(count => {
+          const isMajor = count % 8 === 0;
+          return (
+            <div
+              key={count}
+              className={`grid-line ${isMajor ? 'major' : ''}`}
+              style={{ left: count * zoom }}
+            />
+          );
+        })}
 
         {/* Playhead */}
         <div
