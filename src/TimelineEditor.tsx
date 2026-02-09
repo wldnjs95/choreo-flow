@@ -603,43 +603,6 @@ const TimelineEditor: React.FC = () => {
     return null;
   }, []);
 
-  // Calculate stacked exit position for dancers in exit zone
-  const calculateExitZoneStackPosition = useCallback((
-    dancerId: number,
-    side: 'left' | 'right',
-    allPositions: { dancerId: number; position: { x: number; y: number } }[],
-    stageWidth: number,
-    stageHeight: number
-  ): { x: number; y: number } => {
-    const EXIT_ZONE_CENTER = 0.75;
-    const SLOT_SPACING = 1.0;
-
-    // Get all dancers in this exit zone (excluding current dancer)
-    const dancersInZone = allPositions.filter(p => {
-      if (p.dancerId === dancerId) return false;
-      const zoneSide = getExitZoneSide(p.position.x, stageWidth);
-      return zoneSide === side;
-    });
-
-    // Sort by Y position (top to bottom)
-    dancersInZone.sort((a, b) => b.position.y - a.position.y);
-
-    // Find next available slot from top
-    const exitX = side === 'left' ? EXIT_ZONE_CENTER : stageWidth - EXIT_ZONE_CENTER;
-    let slotY = stageHeight - SLOT_SPACING * 0.5; // Start from top
-
-    for (const dancer of dancersInZone) {
-      if (Math.abs(dancer.position.y - slotY) < SLOT_SPACING * 0.5) {
-        slotY -= SLOT_SPACING; // Move to next slot
-      }
-    }
-
-    // Clamp to stage bounds
-    slotY = Math.max(SLOT_SPACING * 0.5, Math.min(stageHeight - SLOT_SPACING * 0.5, slotY));
-
-    return { x: exitX, y: slotY };
-  }, [getExitZoneSide]);
-
   // Swap two dancers' positions in CURRENT formation only (keep colors and names)
   const swapDancers = useCallback((dancerId1: number, dancerId2: number) => {
     if (dancerId1 === dancerId2) return;
@@ -1385,15 +1348,11 @@ const TimelineEditor: React.FC = () => {
 
           const exitSide = exitZoneAssignments.get(p.dancerId);
           if (exitSide) {
-            // Dancer is in exit zone - stack vertically
-            const stackedPos = calculateExitZoneStackPosition(
-              p.dancerId,
-              exitSide,
-              formation.positions,
-              prev.stageWidth,
-              prev.stageHeight
-            );
-            return { ...p, position: stackedPos };
+            // Dancer is in exit zone - snap X to center, keep Y free (for flexible entry positioning)
+            const EXIT_ZONE_CENTER = 0.75;
+            const exitX = exitSide === 'left' ? EXIT_ZONE_CENTER : prev.stageWidth - EXIT_ZONE_CENTER;
+            const snappedY = Math.max(0.5, Math.min(prev.stageHeight - 0.5, snapToGrid(p.position.y)));
+            return { ...p, position: { x: exitX, y: snappedY } };
           } else {
             // Normal grid snap
             return {

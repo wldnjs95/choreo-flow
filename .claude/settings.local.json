@@ -30,7 +30,8 @@
       "Bash(/Users/jiwonpark/Desktop/Project/hacka/dance-choreography/src/algorithms/HybridAlgorithmBase.ts)",
       "Bash(/Users/jiwonpark/Desktop/Project/hacka/dance-choreography/src/TestingPage.tsx )",
       "Bash(/Users/jiwonpark/Desktop/Project/hacka/dance-choreography/src/SimulationPage.tsx)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(gh repo view:*)"
     ]
   }
 }
