@@ -10,6 +10,7 @@ import { Timeline } from './components/Timeline';
 import { PresetPreview } from './components/PresetPreview';
 import { SettingsModal } from './components/SettingsModal';
 import { ConfirmDialog } from './components/ConfirmDialog';
+import { CustomSelect } from './components/CustomSelect';
 import type {
   ChoreographyProject,
   FormationKeyframe,
@@ -193,6 +194,7 @@ const TimelineEditor: React.FC = () => {
   const [showCueSheet, setShowCueSheet] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showConfirmNew, setShowConfirmNew] = useState(false);
+  const [isCueSheetCollapsed, setIsCueSheetCollapsed] = useState(false);
   // Track which algorithm was used for each transition's cue sheet generation
   // Key: pathKey (e.g., "formation-1->formation-2"), Value: algorithm used
   const [cueSheetGeneratedWith, setCueSheetGeneratedWith] = useState<Map<string, PathAlgorithm>>(new Map());
@@ -401,6 +403,12 @@ const TimelineEditor: React.FC = () => {
           showToast('Switched to Edit Mode', 'info', 2000);
         }
       }
+      // C key: Toggle cue sheet collapse (only in rehearsal mode, not typing)
+      if (e.key.toLowerCase() === 'c' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
+        if (uiMode === 'rehearsal') {
+          setIsCueSheetCollapsed(prev => !prev);
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -503,7 +511,7 @@ const TimelineEditor: React.FC = () => {
     }));
   }, [saveToHistory]);
 
-  // Swap two dancers across ALL formations
+  // Swap two dancers' positions across ALL formations (keep colors and names)
   const swapDancers = useCallback((dancerId1: number, dancerId2: number) => {
     if (dancerId1 === dancerId2) return;
 
@@ -511,30 +519,30 @@ const TimelineEditor: React.FC = () => {
     setProject(prev => ({
       ...prev,
       updatedAt: new Date().toISOString(),
-      formations: prev.formations.map(f => ({
-        ...f,
-        positions: f.positions.map(p => {
-          if (p.dancerId === dancerId1) {
-            // Find dancer 2's color and swap
-            const dancer2 = f.positions.find(d => d.dancerId === dancerId2);
-            return { ...p, dancerId: dancerId2, color: dancer2?.color || p.color };
-          } else if (p.dancerId === dancerId2) {
-            // Find dancer 1's color and swap
-            const dancer1 = f.positions.find(d => d.dancerId === dancerId1);
-            return { ...p, dancerId: dancerId1, color: dancer1?.color || p.color };
-          }
-          return p;
-        }),
-      })),
-      // Also swap dancer names if they exist
-      dancerNames: prev.dancerNames ? {
-        ...prev.dancerNames,
-        [dancerId1]: prev.dancerNames[dancerId2] || '',
-        [dancerId2]: prev.dancerNames[dancerId1] || '',
-      } : undefined,
+      formations: prev.formations.map(f => {
+        // Find both dancers
+        const dancer1 = f.positions.find(d => d.dancerId === dancerId1);
+        const dancer2 = f.positions.find(d => d.dancerId === dancerId2);
+
+        if (!dancer1 || !dancer2) return f;
+
+        // Swap only their positions, keep dancerId, color, and name intact
+        return {
+          ...f,
+          positions: f.positions.map(p => {
+            if (p.dancerId === dancerId1) {
+              return { ...p, position: dancer2.position };
+            } else if (p.dancerId === dancerId2) {
+              return { ...p, position: dancer1.position };
+            }
+            return p;
+          }),
+        };
+      }),
+      // Do NOT swap dancer names - they stay with their dancer IDs
     }));
 
-    showToast(`Swapped dancer ${dancerId1} ↔ ${dancerId2}`, 'success', 2000);
+    showToast(`Swapped positions: ${dancerId1} ↔ ${dancerId2}`, 'success', 2000);
   }, [saveToHistory, showToast]);
 
   // Handle dancer double-click for swap
@@ -566,6 +574,20 @@ const TimelineEditor: React.FC = () => {
     }));
   }, []);
 
+  // Get next formation number (for permanent labeling)
+  const getNextFormationNumber = useCallback((formations: FormationKeyframe[]) => {
+    let maxNum = 0;
+    for (const f of formations) {
+      if (f.label) {
+        const num = parseInt(f.label, 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    }
+    return maxNum + 1;
+  }, []);
+
   // Add new formation
   const addFormation = useCallback((afterId: string | null) => {
     saveToHistory();
@@ -585,14 +607,17 @@ const TimelineEditor: React.FC = () => {
         startCount = lastFormation.startCount + lastFormation.duration;
       }
 
+      // Get next permanent formation number
+      const nextNumber = getNextFormationNumber(formations);
+
       // Copy positions from previous formation if available
       const prevFormation = insertIndex > 0 ? formations[insertIndex - 1] : null;
       const newFormation = prevFormation
         ? {
-            ...createEmptyFormation(startCount, prev.dancerCount, prev.stageWidth, prev.stageHeight),
+            ...createEmptyFormation(startCount, prev.dancerCount, prev.stageWidth, prev.stageHeight, nextNumber),
             positions: prevFormation.positions.map(p => ({ ...p, position: { ...p.position } })),
           }
-        : createEmptyFormation(startCount, prev.dancerCount, prev.stageWidth, prev.stageHeight);
+        : createEmptyFormation(startCount, prev.dancerCount, prev.stageWidth, prev.stageHeight, nextNumber);
 
       formations.splice(insertIndex, 0, newFormation);
 
@@ -612,7 +637,7 @@ const TimelineEditor: React.FC = () => {
         formations,
       };
     });
-  }, [saveToHistory]);
+  }, [saveToHistory, getNextFormationNumber]);
 
   // Add formation from preset (for drag & drop)
   const addFormationFromPreset = useCallback((preset: FormationPreset, atCount?: number) => {
@@ -716,30 +741,37 @@ const TimelineEditor: React.FC = () => {
 
   // Reorder formation (move to new position)
   const reorderFormation = useCallback((formationId: string, toIndex: number) => {
-    saveToHistory();
-    setProject(prev => {
-      const formations = [...prev.formations];
-      const fromIndex = formations.findIndex(f => f.id === formationId);
+    // Pre-check if move is valid before modifying state
+    const formations = project.formations;
+    const fromIndex = formations.findIndex(f => f.id === formationId);
 
-      if (fromIndex === -1 || fromIndex === toIndex) return prev;
+    if (fromIndex === -1 || fromIndex === toIndex) return;
+
+    // Calculate adjusted index (where to insert after removal)
+    const adjustedIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+
+    // Check if this would result in no actual movement
+    if (adjustedIndex === fromIndex) return;
+
+    saveToHistory();
+
+    setProject(prev => {
+      const newFormations = [...prev.formations];
 
       // Remove formation from current position
-      const [movedFormation] = formations.splice(fromIndex, 1);
-
-      // Adjust toIndex if we removed from before the target position
-      const adjustedIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+      const [movedFormation] = newFormations.splice(fromIndex, 1);
 
       // Insert at new position
-      formations.splice(adjustedIndex, 0, movedFormation);
+      newFormations.splice(adjustedIndex, 0, movedFormation);
 
       // Recalculate all start counts
-      let currentCount = 0;
-      for (let i = 0; i < formations.length; i++) {
-        formations[i] = {
-          ...formations[i],
-          startCount: currentCount,
+      let count = 0;
+      for (let i = 0; i < newFormations.length; i++) {
+        newFormations[i] = {
+          ...newFormations[i],
+          startCount: count,
         };
-        currentCount += formations[i].duration;
+        count += newFormations[i].duration;
       }
 
       // Clear cue sheet tracking since transitions changed
@@ -748,12 +780,12 @@ const TimelineEditor: React.FC = () => {
       return {
         ...prev,
         updatedAt: new Date().toISOString(),
-        formations,
+        formations: newFormations,
       };
     });
 
     showToast('Formation moved', 'success', 1500);
-  }, [saveToHistory, showToast]);
+  }, [project.formations, saveToHistory, showToast]);
 
   // Handle stage mouse down for selection box
   const handleStageMouseDown = (e: React.MouseEvent) => {
@@ -2116,26 +2148,28 @@ Score each option 0-100 based on the weighted criteria above.
     try {
       const totalTransitions = project.formations.length - 1;
 
-      // Process each transition incrementally (generate paths + rank immediately)
+      // ============================================
+      // PHASE 1: Generate ALL paths first (fast, math-based)
+      // ============================================
+      const generatedPathsMap = new Map<string, Map<PathAlgorithm, GeneratedPath[]>>();
+      const transitionsToRank: Array<{ pathKey: string; algorithmPaths: Map<PathAlgorithm, GeneratedPath[]>; duration: number }> = [];
+
       for (let i = 0; i < totalTransitions; i++) {
         const current = project.formations[i];
         const next = project.formations[i + 1];
         const pathKey = `${current.id}->${next.id}`;
 
-        // Check if already generated and ranked
+        // Check if already generated
         const existingPaths = allAlgorithmPaths.get(pathKey);
         const alreadyGenerated = existingPaths && existingPaths.size > 0;
         const alreadyRanked = geminiResults.has(pathKey);
 
-        if (alreadyGenerated && alreadyRanked) {
-          continue; // Skip this transition entirely
-        }
-
-        // Step 1: Generate paths for this transition (if not already done)
         let algorithmPaths: Map<PathAlgorithm, GeneratedPath[]>;
+
         if (alreadyGenerated) {
           algorithmPaths = existingPaths;
         } else {
+          // Generate paths for this transition
           algorithmPaths = new Map<PathAlgorithm, GeneratedPath[]>();
           for (let j = 0; j < allAlgorithms.length; j++) {
             const algo = allAlgorithms[j];
@@ -2161,10 +2195,22 @@ Score each option 0-100 based on the weighted criteria above.
           await new Promise(resolve => setTimeout(resolve, 0));
         }
 
-        // Step 2: Rank with Gemini for this transition (if not already done)
+        generatedPathsMap.set(pathKey, algorithmPaths);
+
+        // Queue for Gemini ranking if not already ranked
         if (!alreadyRanked) {
-          setPathGenerationStatus(`Ranking with Gemini (${i + 1}/${totalTransitions})...`);
-          await rankPathsWithGemini(algorithmPaths, project.stageWidth, project.stageHeight, current.duration, pathKey);
+          transitionsToRank.push({ pathKey, algorithmPaths, duration: current.duration });
+        }
+      }
+
+      // ============================================
+      // PHASE 2: Gemini evaluation (slower, API-based)
+      // ============================================
+      if (transitionsToRank.length > 0) {
+        for (let i = 0; i < transitionsToRank.length; i++) {
+          const { pathKey, algorithmPaths, duration } = transitionsToRank[i];
+          setPathGenerationStatus(`Ranking with Gemini (${i + 1}/${transitionsToRank.length})...`);
+          await rankPathsWithGemini(algorithmPaths, project.stageWidth, project.stageHeight, duration, pathKey);
 
           // Yield to event loop to allow React to re-render after Gemini ranking
           await new Promise(resolve => setTimeout(resolve, 0));
@@ -2383,7 +2429,29 @@ Score each option 0-100 based on the weighted criteria above.
     return getPathsForAlgorithm(pathKey, pathAlgorithm);
   }, [selectedFormation, selectedFormationId, project.formations, getPathsForAlgorithm, pathAlgorithm]);
 
+  // Get paths based on current playback position (for use during playback)
+  const getPlaybackPaths = useCallback(() => {
+    if (project.formations.length < 2) return null;
+
+    // Find current formation based on currentCount
+    for (let i = 0; i < project.formations.length; i++) {
+      const f = project.formations[i];
+      if (currentCount >= f.startCount && currentCount < f.startCount + f.duration) {
+        // Found current formation, check if there's a next one
+        const nextFormation = project.formations[i + 1];
+        if (!nextFormation) return null;
+
+        const pathKey = `${f.id}->${nextFormation.id}`;
+        return getPathsForAlgorithm(pathKey, pathAlgorithm);
+      }
+    }
+    return null;
+  }, [currentCount, project.formations, getPathsForAlgorithm, pathAlgorithm]);
+
   const currentPaths = getCurrentPaths();
+  const playbackPaths = getPlaybackPaths();
+  // Use playbackPaths when playing, otherwise use currentPaths (selected formation)
+  const displayPaths = isPlaying ? playbackPaths : currentPaths;
   const hasNextFormation = selectedFormation && project.formations.findIndex(f => f.id === selectedFormationId) < project.formations.length - 1;
 
   // Compute current transition info for UI display
@@ -2539,8 +2607,8 @@ Score each option 0-100 based on the weighted criteria above.
       setCurrentCount(0);
     }
 
-    // Auto-generate paths if not all paths are generated
-    if (!allPathsGenerated && project.formations.length >= 2) {
+    // Auto-generate paths if not all paths are generated (skip if already generating)
+    if (!allPathsGenerated && project.formations.length >= 2 && !isGeneratingPaths) {
       await generateAllPaths();
     }
 
@@ -2838,31 +2906,56 @@ Score each option 0-100 based on the weighted criteria above.
           <h3>Formation Presets</h3>
           <div className="preset-filter">
             <label>Filter:</label>
-            <select
-              value={presetFilter}
-              onChange={(e) => setPresetFilter(e.target.value === 'all' ? 'all' : parseInt(e.target.value, 10))}
+            <CustomSelect
+              value={String(presetFilter)}
+              onChange={(val) => setPresetFilter(val === 'all' ? 'all' : parseInt(val, 10))}
               className="preset-filter-select"
-            >
-              <option value="all">All ({ALL_PRESETS.length})</option>
-              {[4, 5, 6, 7, 8, 9, 10, 11, 12].map(count => {
-                const countPresets = FORMATION_PRESETS.get(count) || [];
-                return (
-                  <option key={count} value={count}>{count}P ({countPresets.length})</option>
-                );
-              })}
-            </select>
+              options={[
+                { value: 'all', label: `All (${ALL_PRESETS.length})` },
+                ...[4, 5, 6, 7, 8, 9, 10, 11, 12].map(count => {
+                  const countPresets = FORMATION_PRESETS.get(count) || [];
+                  return { value: String(count), label: `${count}P (${countPresets.length})` };
+                })
+              ]}
+            />
           </div>
-          <div className="preset-grid">
-            {ALL_PRESETS
-              .filter(preset => presetFilter === 'all' || preset.dancerCount === presetFilter)
-              .map((preset, idx) => (
-                <PresetPreview
-                  key={`${preset.dancerCount}-${preset.name}-${idx}`}
-                  preset={preset}
-                  onClick={() => handleApplyPreset(preset)}
-                  audienceAtTop={audienceAtTop}
-                />
-              ))}
+          <div className="preset-grid-container">
+            {presetFilter === 'all' ? (
+              // Grouped view by dancer count
+              [4, 5, 6, 7, 8, 9, 10, 11, 12].map(count => {
+                const countPresets = ALL_PRESETS.filter(p => p.dancerCount === count);
+                if (countPresets.length === 0) return null;
+                return (
+                  <div key={count} className="preset-group">
+                    <div className="preset-group-header">{count}P</div>
+                    <div className="preset-grid">
+                      {countPresets.map((preset, idx) => (
+                        <PresetPreview
+                          key={`${preset.dancerCount}-${preset.name}-${idx}`}
+                          preset={preset}
+                          onClick={() => handleApplyPreset(preset)}
+                          audienceAtTop={audienceAtTop}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              // Flat view for single dancer count
+              <div className="preset-grid">
+                {ALL_PRESETS
+                  .filter(preset => preset.dancerCount === presetFilter)
+                  .map((preset, idx) => (
+                    <PresetPreview
+                      key={`${preset.dancerCount}-${preset.name}-${idx}`}
+                      preset={preset}
+                      onClick={() => handleApplyPreset(preset)}
+                      audienceAtTop={audienceAtTop}
+                    />
+                  ))}
+              </div>
+            )}
           </div>
         </div>
         )}
@@ -2879,10 +2972,9 @@ Score each option 0-100 based on the weighted criteria above.
               <div className="stage-header-right">
                 <div className="pov-selector">
                   <label>POV:</label>
-                  <select
+                  <CustomSelect
                     value={typeof povMode === 'number' ? `dancer-${povMode}` : povMode}
-                    onChange={(e) => {
-                      const value = e.target.value;
+                    onChange={(value) => {
                       if (value === 'choreographer') {
                         setPovMode('choreographer');
                       } else if (value.startsWith('dancer-')) {
@@ -2890,14 +2982,14 @@ Score each option 0-100 based on the weighted criteria above.
                       }
                     }}
                     className="pov-select"
-                  >
-                    <option value="choreographer">Choreographer</option>
-                    {selectedFormation?.positions.map((pos) => (
-                      <option key={pos.dancerId} value={`dancer-${pos.dancerId}`}>
-                        Dancer {pos.dancerId}
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: 'choreographer', label: 'Choreographer' },
+                      ...(selectedFormation?.positions.map((pos) => ({
+                        value: `dancer-${pos.dancerId}`,
+                        label: `Dancer ${pos.dancerId}`
+                      })) || [])
+                    ]}
+                  />
                 </div>
               </div>
             )}
@@ -2905,50 +2997,81 @@ Score each option 0-100 based on the weighted criteria above.
 
           {/* Choreographer POV: General Notes above stage (Rehearsal mode only) */}
           {uiMode === 'rehearsal' && povMode === 'choreographer' && cueSheet && cueSheet.generalNotes && cueSheet.generalNotes.length > 0 && (
-            <div className="pov-cue-sheet pov-general-notes">
+            <div className={`pov-cue-sheet pov-general-notes ${isCueSheetCollapsed ? 'collapsed' : ''}`}>
               <div className="pov-cue-card">
                 <div className="pov-cue-header">
                   <span className="pov-dancer-label">👁️ General Notes</span>
+                  <button
+                    className="pov-cue-toggle"
+                    onClick={() => setIsCueSheetCollapsed(!isCueSheetCollapsed)}
+                    title={isCueSheetCollapsed ? 'Expand (C)' : 'Collapse (C)'}
+                  >
+                    {isCueSheetCollapsed ? '▼' : '▲'}
+                  </button>
                 </div>
-                <div className="pov-cue-list">
-                  {cueSheet.generalNotes.map((note, i) => (
-                    <div key={i} className="pov-cue-item">
-                      <span className="pov-cue-instruction">{note}</span>
-                    </div>
-                  ))}
-                </div>
+                {!isCueSheetCollapsed && (
+                  <div className="pov-cue-list">
+                    {cueSheet.generalNotes.map((note, i) => (
+                      <div key={i} className="pov-cue-item">
+                        <span className="pov-cue-instruction">{note}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
 
           {/* Individual Dancer Cue Sheet (POV mode) - Shows above stage (Rehearsal mode only) */}
           {uiMode === 'rehearsal' && typeof povMode === 'number' && cueSheet && (
-            <div className="pov-cue-sheet">
+            <div className={`pov-cue-sheet ${isCueSheetCollapsed ? 'collapsed' : ''}`}>
               {cueSheet.dancers
                 .filter((dancer: DancerCueSheet) => dancer.dancerId === povMode)
-                .map((dancer: DancerCueSheet) => (
-                  <div key={dancer.dancerId} className="pov-cue-card">
-                    <div className="pov-cue-header">
-                      <span className="pov-dancer-label">🎯 {dancer.dancerLabel}</span>
-                      <span className="pov-dancer-summary">{dancer.summary}</span>
+                .map((dancer: DancerCueSheet) => {
+                  // Find current cue for collapsed mode
+                  const currentCueData = dancer.cues.find(cue => {
+                    const timeMatch = cue.timeRange.match(/(\d+)~(\d+)/);
+                    return timeMatch
+                      ? currentCount >= parseInt(timeMatch[1]) && currentCount < parseInt(timeMatch[2])
+                      : false;
+                  });
+
+                  return (
+                    <div key={dancer.dancerId} className="pov-cue-card">
+                      <div className="pov-cue-header">
+                        <span className="pov-dancer-label">🎯 {dancer.dancerLabel}</span>
+                        {!isCueSheetCollapsed && <span className="pov-dancer-summary">{dancer.summary}</span>}
+                        {isCueSheetCollapsed && currentCueData && (
+                          <span className="pov-cue-compact-info">{currentCueData.instruction}</span>
+                        )}
+                        <button
+                          className="pov-cue-toggle"
+                          onClick={() => setIsCueSheetCollapsed(!isCueSheetCollapsed)}
+                          title={isCueSheetCollapsed ? 'Expand (C)' : 'Collapse (C)'}
+                        >
+                          {isCueSheetCollapsed ? '▼' : '▲'}
+                        </button>
+                      </div>
+                      {!isCueSheetCollapsed && (
+                        <div className="pov-cue-list">
+                          {dancer.cues.map((cue, i) => {
+                            // Parse timeRange like "0~4" or "0~4 count" to check if current
+                            const timeMatch = cue.timeRange.match(/(\d+)~(\d+)/);
+                            const isCurrentCue = timeMatch
+                              ? currentCount >= parseInt(timeMatch[1]) && currentCount < parseInt(timeMatch[2])
+                              : false;
+                            return (
+                              <div key={i} className={`pov-cue-item ${isCurrentCue ? 'pov-cue-active' : ''}`}>
+                                <span className="pov-cue-time">{cue.timeRange}</span>
+                                <span className="pov-cue-instruction">{cue.instruction}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                    <div className="pov-cue-list">
-                      {dancer.cues.map((cue, i) => {
-                        // Parse timeRange like "0~4" or "0~4 count" to check if current
-                        const timeMatch = cue.timeRange.match(/(\d+)~(\d+)/);
-                        const isCurrentCue = timeMatch
-                          ? currentCount >= parseInt(timeMatch[1]) && currentCount < parseInt(timeMatch[2])
-                          : false;
-                        return (
-                          <div key={i} className={`pov-cue-item ${isCurrentCue ? 'pov-cue-active' : ''}`}>
-                            <span className="pov-cue-time">{cue.timeRange}</span>
-                            <span className="pov-cue-instruction">{cue.instruction}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
             </div>
           )}
 
@@ -3028,7 +3151,7 @@ Score each option 0-100 based on the weighted criteria above.
             </text>
 
             {/* Movement Paths */}
-            {showPaths && currentPaths && currentPaths.map((pathData) => {
+            {showPaths && displayPaths && displayPaths.map((pathData) => {
               const dancer = displayPositions.find(d => d.dancerId === pathData.dancerId);
               const color = dancer?.color || '#888';
               const path = pathData.path;
@@ -3183,19 +3306,20 @@ Score each option 0-100 based on the weighted criteria above.
               </div>
               <div className="property-row">
                 <label>Duration</label>
-                <select
-                  value={selectedFormation.duration}
-                  onChange={(e) => updateFormation(selectedFormation.id, { duration: parseInt(e.target.value, 10) })}
-                >
-                  <option value={1}>1 count</option>
-                  <option value={2}>2 counts</option>
-                  <option value={3}>3 counts</option>
-                  <option value={4}>4 counts</option>
-                  <option value={5}>5 counts</option>
-                  <option value={6}>6 counts</option>
-                  <option value={7}>7 counts</option>
-                  <option value={8}>8 counts</option>
-                </select>
+                <CustomSelect
+                  value={String(selectedFormation.duration)}
+                  onChange={(val) => updateFormation(selectedFormation.id, { duration: parseInt(val, 10) })}
+                  options={[
+                    { value: '1', label: '1 count' },
+                    { value: '2', label: '2 counts' },
+                    { value: '3', label: '3 counts' },
+                    { value: '4', label: '4 counts' },
+                    { value: '5', label: '5 counts' },
+                    { value: '6', label: '6 counts' },
+                    { value: '7', label: '7 counts' },
+                    { value: '8', label: '8 counts' },
+                  ]}
+                />
               </div>
               <div className="property-row">
                 <label>Start Count</label>
@@ -3258,10 +3382,11 @@ Score each option 0-100 based on the weighted criteria above.
                         return (
                           <div
                             key={algo}
-                            className={`algorithm-card ${isSelected ? 'selected' : ''} ${isGeminiPick ? 'gemini-pick' : ''}`}
+                            className={`algorithm-card ${isSelected ? 'selected' : ''} ${isGeminiPick ? 'gemini-pick' : ''} ${pathGenerationProgress ? 'disabled' : ''}`}
                             title={`Overview: ${PATH_ALGORITHM_DESCRIPTIONS[algo]}`}
                             onClick={() => {
-                              if (!isGeneratingPaths) {
+                              // Only block during actual path computation, allow during Gemini ranking
+                              if (!pathGenerationProgress) {
                                 setPathAlgorithm(algo);
                                 // Save user selection for this transition
                                 if (currentTransitionInfo) {
@@ -3323,9 +3448,9 @@ Score each option 0-100 based on the weighted criteria above.
                           .map(([algo, score]) => (
                             <div
                               key={algo}
-                              className={`score-item ${algo === currentGeminiResult.pick ? 'pick' : ''} ${algo === pathAlgorithm ? 'selected' : ''}`}
+                              className={`score-item ${algo === currentGeminiResult.pick ? 'pick' : ''} ${algo === pathAlgorithm ? 'selected' : ''} ${pathGenerationProgress ? 'disabled' : ''}`}
                               title={`Overview: ${PATH_ALGORITHM_DESCRIPTIONS[algo]}`}
-                              onClick={() => setPathAlgorithm(algo)}
+                              onClick={() => !pathGenerationProgress && setPathAlgorithm(algo)}
                             >
                               <div className="score-item-header">
                                 <span className="algo-name">{PATH_ALGORITHM_LABELS[algo]}</span>
@@ -3437,10 +3562,10 @@ Score each option 0-100 based on the weighted criteria above.
 
       {/* Playback controls */}
       <div className="playback-controls">
-        <button onClick={handleStop} className="playback-btn" title="Stop" disabled={isGeneratingPaths}>⏹</button>
+        <button onClick={handleStop} className="playback-btn" title="Stop" disabled={!!pathGenerationProgress}>⏹</button>
         {isPlaying ? (
           <button onClick={handlePause} className="playback-btn" title="Pause">⏸</button>
-        ) : isGeneratingPaths ? (
+        ) : pathGenerationProgress ? (
           <button className="playback-btn primary generating" disabled title="Generating paths...">
             <span className="loading-spinner small" />
           </button>
@@ -3451,7 +3576,7 @@ Score each option 0-100 based on the weighted criteria above.
           <span className="playback-status">
             {pathGenerationProgress
               ? `${pathGenerationProgress.algorithm} (${pathGenerationProgress.current}/${pathGenerationProgress.total})`
-              : pathGenerationStatus || 'Generating paths...'}
+              : pathGenerationStatus || 'Ranking with Gemini...'}
           </span>
         )}
         <label className="metronome-toggle">
@@ -3462,15 +3587,19 @@ Score each option 0-100 based on the weighted criteria above.
         </label>
         <div className="speed-control">
           <label>Speed:</label>
-          <select value={playbackSpeed} onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}>
-            <option value={0.25}>0.25x</option>
-            <option value={0.5}>0.5x</option>
-            <option value={1}>1x</option>
-            <option value={1.5}>1.5x</option>
-            <option value={2}>2x</option>
-            <option value={3}>3x</option>
-            <option value={4}>4x</option>
-          </select>
+          <CustomSelect
+            value={String(playbackSpeed)}
+            onChange={(val) => setPlaybackSpeed(parseFloat(val))}
+            options={[
+              { value: '0.25', label: '0.25x' },
+              { value: '0.5', label: '0.5x' },
+              { value: '1', label: '1x' },
+              { value: '1.5', label: '1.5x' },
+              { value: '2', label: '2x' },
+              { value: '3', label: '3x' },
+              { value: '4', label: '4x' },
+            ]}
+          />
         </div>
         <div className="zoom-control">
           <label>Zoom:</label>

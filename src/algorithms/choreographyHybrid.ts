@@ -257,15 +257,18 @@ interface PathCandidate {
 function generatePathCandidates(
   start: Position,
   end: Position,
-  baseDuration: number,
+  _baseDuration: number,  // Kept for API compatibility
   config: HybridConfig,
   preferredCurveSign: number = 0  // 0 = straight preferred, 1 = positive, -1 = negative
 ): PathCandidate[] {
   const candidates: PathCandidate[] = [];
   const { totalCounts, numPoints } = config;
 
-  const startTimes = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6];
-  const durationFactors = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5, 1.8, 2.0];
+  // Prefer starting later and ending near totalCounts (choreography standard)
+  // Start times: prefer later starts that still allow enough movement time
+  const startTimes = [0, 0.5, 1, 1.5, 2, 2.5, 3];
+  // End times: prefer ending at or near totalCounts
+  const endTimes = [totalCounts, totalCounts - 0.5, totalCounts - 1, totalCounts - 1.5, totalCounts - 2];
 
   // Reduced curve offsets (0.5-1.5m max) for natural human movement
   let curveOffsets: (number | [number, number])[];
@@ -297,15 +300,13 @@ function generatePathCandidates(
     ];
   }
 
-  for (const startTime of startTimes) {
-    if (startTime >= totalCounts - 1) continue;
-
-    for (const factor of durationFactors) {
-      const duration = Math.max(1.5, baseDuration * factor);
-      const endTime = startTime + duration;
-
-      if (endTime > totalCounts) continue;
-      if (endTime - startTime < 1) continue;
+  // Generate candidates with endTime-based approach (choreography: arrive near the end)
+  for (const endTime of endTimes) {
+    for (const startTime of startTimes) {
+      // Ensure valid duration (at least 2 counts for smooth movement)
+      const duration = endTime - startTime;
+      if (duration < 2) continue;
+      if (startTime >= endTime) continue;
 
       for (const curveOffset of curveOffsets) {
         const path = generateCubicBezierPath(
@@ -322,26 +323,27 @@ function generatePathCandidates(
     }
   }
 
-  // Sort: prefer straight paths, then earlier start, then based on curve preference
+  // Sort: prefer ending near totalCounts (choreography standard: arrive together at phrase end)
   candidates.sort((a, b) => {
     const curveA = typeof a.curveOffset === 'number' ? Math.abs(a.curveOffset) : Math.abs(a.curveOffset[0]);
     const curveB = typeof b.curveOffset === 'number' ? Math.abs(b.curveOffset) : Math.abs(b.curveOffset[0]);
 
-    // If no preferred curve direction, strongly prefer straighter paths
+    // PRIORITY 1: Prefer ending closer to totalCounts (arrive near phrase end)
+    const endDiffA = totalCounts - a.endTime;
+    const endDiffB = totalCounts - b.endTime;
+    if (Math.abs(endDiffA - endDiffB) > 0.3) return endDiffA - endDiffB;
+
+    // PRIORITY 2: Prefer longer duration (use more of the available time)
+    const durA = a.endTime - a.startTime;
+    const durB = b.endTime - b.startTime;
+    if (Math.abs(durA - durB) > 0.3) return durB - durA;  // Longer is better
+
+    // PRIORITY 3: Prefer straighter paths for visual cleanliness
     if (preferredCurveSign === 0) {
-      // Prefer paths with less curvature (straight = 0)
       if (Math.abs(curveA - curveB) > 0.1) return curveA - curveB;
     }
 
-    // Then prefer earlier start
-    if (Math.abs(a.startTime - b.startTime) > 0.3) return a.startTime - b.startTime;
-
-    // Then prefer shorter duration
-    const durA = a.endTime - a.startTime;
-    const durB = b.endTime - b.startTime;
-    if (Math.abs(durA - durB) > 0.3) return durA - durB;
-
-    // If we have a preferred curve direction, prefer those
+    // PRIORITY 4: If we have a preferred curve direction, prefer those
     if (preferredCurveSign !== 0) {
       const signA = typeof a.curveOffset === 'number' ? a.curveOffset : a.curveOffset[0];
       const signB = typeof b.curveOffset === 'number' ? b.curveOffset : b.curveOffset[0];

@@ -1,0 +1,161 @@
+{
+  "version": "2.0",
+  "project": {
+    "id": "demo-contemporary-001",
+    "name": "Contemporary Flow",
+    "createdAt": "2024-02-09T00:00:00.000Z",
+    "updatedAt": "2024-02-09T00:00:00.000Z",
+    "dancerCount": 8,
+    "stageWidth": 12,
+    "stageHeight": 10,
+    "dancerNames": {
+      "1": "Alex",
+      "2": "Jordan",
+      "3": "Taylor",
+      "4": "Morgan",
+      "5": "Casey",
+      "6": "Riley",
+      "7": "Quinn",
+      "8": "Avery"
+    },
+    "formations": [
+      {
+        "id": "formation-opening",
+        "startCount": 0,
+        "duration": 8,
+        "label": "Opening - Scattered",
+        "transitionType": "linear",
+        "positions": [
+          { "dancerId": 1, "position": { "x": 2, "y": 2 }, "color": "#FF6B6B" },
+          { "dancerId": 2, "position": { "x": 10, "y": 2.5 }, "color": "#4ECDC4" },
+          { "dancerId": 3, "position": { "x": 4, "y": 4 }, "color": "#45B7D1" },
+          { "dancerId": 4, "position": { "x": 8, "y": 3.5 }, "color": "#96CEB4" },
+          { "dancerId": 5, "position": { "x": 3, "y": 7 }, "color": "#FFEAA7" },
+          { "dancerId": 6, "position": { "x": 9, "y": 6 }, "color": "#DDA0DD" },
+          { "dancerId": 7, "position": { "x": 6, "y": 8 }, "color": "#98D8C8" },
+          { "dancerId": 8, "position": { "x": 6, "y": 5 }, "color": "#F7DC6F" }
+        ]
+      },
+      {
+        "id": "formation-gather",
+        "startCount": 8,
+        "duration": 8,
+        "label": "Gather - Cluster",
+        "transitionType": "curved",
+        "positions": [
+          { "dancerId": 1, "position": { "x": 5, "y": 4 }, "color": "#FF6B6B" },
+          { "dancerId": 2, "position": { "x": 7, "y": 4 }, "color": "#4ECDC4" },
+          { "dancerId": 3, "position": { "x": 4, "y": 5 }, "color": "#45B7D1" },
+          { "dancerId": 4, "position": { "x": 8, "y": 5 }, "color": "#96CEB4" },
+          { "dancerId": 5, "position": { "x": 5, "y": 6 }, "color": "#FFEAA7" },
+          { "dancerId": 6, "position": { "x": 7, "y": 6 }, "color": "#DDA0DD" },
+          { "dancerId": 7, "position": { "x": 6, "y": 3.5 }, "color": "#98D8C8" },
+          { "dancerId": 8, "position": { "x": 6, "y": 5 }, "color": "#F7DC6F" }
+        ]
+      },
+      {
+        "id": "formation-wave",
+        "startCount": 16,
+        "duration": 8,
+        "label": "Wave - Curved Line",
+        "transitionType": "curved",
+        "positions": [
+          { "dancerId": 1, "position": { "x": 2, "y": 3 }, "color": "#FF6B6B" },
+          { "dancerId": 2, "position": { "x": 3.5, "y": 4.5 }, "color": "#4ECDC4" },
+          { "dancerId": 3, "position": { "x": 5, "y": 3 }, "color": "#45B7D1" },
+          { "dancerId": 4, "position": { "x": 6.5, "y": 4.5 }, "color": "#96CEB4" },
+          { "dancerId": 5, "position": { "x": 8, "y": 3 }, "color": "#FFEAA7" },
+          { "dancerId": 6, "position": { "x": 9.5, "y": 4.5 }, "color": "#DDA0DD" },
+          { "dancerId": 7, "position": { "x": 5.5, "y": 6 }, "color": "#98D8C8" },
+          { "dancerId": 8, "position": { "x": 6.5, "y": 7 }, "color": "#F7DC6F" }
+        ]
+      },
+      {
+        "id": "formation-spiral",
+        "startCount": 24,
+        "duration": 8,
+        "label": "Spiral - Inward",
+        "transitionType": "curved",
+        "positions": [
+          { "dancerId": 1, "position": { "x": 6, "y": 2 }, "color": "#FF6B6B" },
+          { "dancerId": 2, "position": { "x": 9, "y": 3 }, "color": "#4ECDC4" },
+          { "dancerId": 3, "position": { "x": 10, "y": 5.5 }, "color": "#45B7D1" },
+          { "dancerId": 4, "position": { "x": 8, "y": 7.5 }, "color": "#96CEB4" },
+          { "dancerId": 5, "position": { "x": 5, "y": 8 }, "color": "#FFEAA7" },
+          { "dancerId": 6, "position": { "x": 2.5, "y": 6 }, "color": "#DDA0DD" },
+          { "dancerId": 7, "position": { "x": 3, "y": 3.5 }, "color": "#98D8C8" },
+          { "dancerId": 8, "position": { "x": 6, "y": 5 }, "color": "#F7DC6F" }
+        ]
+      },
+      {
+        "id": "formation-expand",
+        "startCount": 32,
+        "duration": 8,
+        "label": "Expand - Radial",
+        "transitionType": "linear",
+        "positions": [
+          { "dancerId": 1, "position": { "x": 6, "y": 1.5 }, "color": "#FF6B6B" },
+          { "dancerId": 2, "position": { "x": 10, "y": 3 }, "color": "#4ECDC4" },
+          { "dancerId": 3, "position": { "x": 10.5, "y": 6 }, "color": "#45B7D1" },
+          { "dancerId": 4, "position": { "x": 8, "y": 8.5 }, "color": "#96CEB4" },
+          { "dancerId": 5, "position": { "x": 4, "y": 8.5 }, "color": "#FFEAA7" },
+          { "dancerId": 6, "position": { "x": 1.5, "y": 6 }, "color": "#DDA0DD" },
+          { "dancerId": 7, "position": { "x": 2, "y": 3 }, "color": "#98D8C8" },
+          { "dancerId": 8, "position": { "x": 6, "y": 5 }, "color": "#F7DC6F" }
+        ]
+      },
+      {
+        "id": "formation-pairs",
+        "startCount": 40,
+        "duration": 8,
+        "label": "Pairs - Duet Positions",
+        "transitionType": "curved",
+        "positions": [
+          { "dancerId": 1, "position": { "x": 3, "y": 2.5 }, "color": "#FF6B6B" },
+          { "dancerId": 2, "position": { "x": 4, "y": 3 }, "color": "#4ECDC4" },
+          { "dancerId": 3, "position": { "x": 8, "y": 2.5 }, "color": "#45B7D1" },
+          { "dancerId": 4, "position": { "x": 9, "y": 3 }, "color": "#96CEB4" },
+          { "dancerId": 5, "position": { "x": 3, "y": 7 }, "color": "#FFEAA7" },
+          { "dancerId": 6, "position": { "x": 4, "y": 7.5 }, "color": "#DDA0DD" },
+          { "dancerId": 7, "position": { "x": 8, "y": 7 }, "color": "#98D8C8" },
+          { "dancerId": 8, "position": { "x": 9, "y": 7.5 }, "color": "#F7DC6F" }
+        ]
+      },
+      {
+        "id": "formation-solo",
+        "startCount": 48,
+        "duration": 8,
+        "label": "Solo Spotlight",
+        "transitionType": "linear",
+        "positions": [
+          { "dancerId": 1, "position": { "x": 6, "y": 3 }, "color": "#FF6B6B" },
+          { "dancerId": 2, "position": { "x": 2, "y": 5 }, "color": "#4ECDC4" },
+          { "dancerId": 3, "position": { "x": 10, "y": 5 }, "color": "#45B7D1" },
+          { "dancerId": 4, "position": { "x": 3, "y": 7.5 }, "color": "#96CEB4" },
+          { "dancerId": 5, "position": { "x": 9, "y": 7.5 }, "color": "#FFEAA7" },
+          { "dancerId": 6, "position": { "x": 4.5, "y": 8.5 }, "color": "#DDA0DD" },
+          { "dancerId": 7, "position": { "x": 7.5, "y": 8.5 }, "color": "#98D8C8" },
+          { "dancerId": 8, "position": { "x": 6, "y": 9 }, "color": "#F7DC6F" }
+        ]
+      },
+      {
+        "id": "formation-finale",
+        "startCount": 56,
+        "duration": 8,
+        "label": "Grand Finale - Triangle",
+        "transitionType": "curved",
+        "positions": [
+          { "dancerId": 1, "position": { "x": 6, "y": 1.5 }, "color": "#FF6B6B" },
+          { "dancerId": 2, "position": { "x": 4.5, "y": 3 }, "color": "#4ECDC4" },
+          { "dancerId": 3, "position": { "x": 7.5, "y": 3 }, "color": "#45B7D1" },
+          { "dancerId": 4, "position": { "x": 3, "y": 5 }, "color": "#96CEB4" },
+          { "dancerId": 5, "position": { "x": 9, "y": 5 }, "color": "#FFEAA7" },
+          { "dancerId": 6, "position": { "x": 4.5, "y": 7 }, "color": "#DDA0DD" },
+          { "dancerId": 7, "position": { "x": 7.5, "y": 7 }, "color": "#98D8C8" },
+          { "dancerId": 8, "position": { "x": 6, "y": 5 }, "color": "#F7DC6F" }
+        ]
+      }
+    ]
+  },
+  "exportedAt": "2024-02-09T00:00:00.000Z"
+}

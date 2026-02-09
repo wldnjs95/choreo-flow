@@ -138,7 +138,8 @@ export function createEmptyFormation(
   startCount: number,
   dancerCount: number,
   stageWidth: number,
-  stageHeight: number
+  stageHeight: number,
+  formationNumber?: number  // Permanent label number (doesn't change with reordering)
 ): FormationKeyframe {
   const positions: DancerPosition[] = [];
   const colors = [
@@ -179,6 +180,7 @@ export function createEmptyFormation(
     duration: 8,
     positions,
     transitionType: 'linear',
+    label: formationNumber ? String(formationNumber) : undefined,
   };
 }
 
@@ -200,6 +202,6 @@ export function createNewProject(
     dancerCount,
     stageWidth,
     stageHeight,
-    formations: [createEmptyFormation(0, dancerCount, stageWidth, stageHeight)],
+    formations: [createEmptyFormation(0, dancerCount, stageWidth, stageHeight, 1)],
   };
 }

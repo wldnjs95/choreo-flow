@@ -166,15 +166,18 @@ export const Timeline: React.FC<TimelineProps> = ({
     onSeek(clickedCount);
   };
 
+  // Snap to 8-count boundaries for formation reordering
+  const SNAP_COUNTS = 8;
+
   // Drag and drop handlers for preset and formation reordering
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
 
     // Check if it's a formation drag or preset drag
-    const formationId = e.dataTransfer.types.includes('application/x-formation-id');
+    const isFormationDrag = e.dataTransfer.types.includes('application/x-formation-id');
     const isPreset = e.dataTransfer.types.includes('application/json');
 
-    if (formationId) {
+    if (isFormationDrag) {
       e.dataTransfer.dropEffect = 'move';
       setDragType('formation');
     } else if (isPreset) {
@@ -188,7 +191,15 @@ export const Timeline: React.FC<TimelineProps> = ({
     if (timelineRef.current) {
       const rect = timelineRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left;
-      setDropIndicatorX(x);
+      const count = x / zoom;
+
+      // Snap to 8-count boundaries for formation drag
+      if (isFormationDrag) {
+        const snappedCount = Math.round(count / SNAP_COUNTS) * SNAP_COUNTS;
+        setDropIndicatorX(snappedCount * zoom);
+      } else {
+        setDropIndicatorX(x);
+      }
     }
   };
 
@@ -214,12 +225,16 @@ export const Timeline: React.FC<TimelineProps> = ({
     // Check for formation reorder first
     const formationId = e.dataTransfer.getData('application/x-formation-id');
     if (formationId && onReorderFormation) {
-      // Calculate target index based on drop position
+      // Snap to 8-count boundary
+      const snappedCount = Math.round(dropCount / SNAP_COUNTS) * SNAP_COUNTS;
+
+      // Calculate target index based on snapped position
+      // Find which position (between formations) the snapped count corresponds to
       let targetIndex = 0;
       for (let i = 0; i < project.formations.length; i++) {
         const f = project.formations[i];
-        const fMidpoint = f.startCount + f.duration / 2;
-        if (dropCount > fMidpoint) {
+        // If snapped count is at or after this formation's start, target is after it
+        if (snappedCount >= f.startCount + f.duration) {
           targetIndex = i + 1;
         }
       }
@@ -309,7 +324,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           >
             <div className="drop-indicator-line" />
             <div className="drop-indicator-label">
-              {Math.round(dropIndicatorX / zoom)}
+              {dragType === 'formation' ? '→ ' : ''}{Math.round(dropIndicatorX / zoom)}
             </div>
           </div>
         )}

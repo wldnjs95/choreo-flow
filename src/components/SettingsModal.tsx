@@ -2,9 +2,11 @@
  * Settings Modal Component
  *
  * Project-level settings including dancer count, stage configuration, and dancer names.
+ * Changes are only applied when user clicks Save.
  */
 
 import { useState, useEffect } from 'react';
+import { CustomSelect } from './CustomSelect';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -48,14 +50,35 @@ export function SettingsModal({
   audienceAtTop,
   onUpdateAudienceDirection,
 }: SettingsModalProps) {
+  // Local state for all settings (only applied on Save)
   const [localDancerCountStr, setLocalDancerCountStr] = useState(String(dancerCount));
-  const [customWidth, setCustomWidth] = useState(stageWidth);
-  const [customHeight, setCustomHeight] = useState(stageHeight);
+  const [localDancerNames, setLocalDancerNames] = useState<Record<number, string>>({});
+  const [localStageWidth, setLocalStageWidth] = useState(stageWidth);
+  const [localStageHeight, setLocalStageHeight] = useState(stageHeight);
+  const [localAudienceAtTop, setLocalAudienceAtTop] = useState(audienceAtTop);
   const [isCustomSize, setIsCustomSize] = useState(false);
 
   // Parse the string to number for comparison/calculation
   const localDancerCountNum = parseInt(localDancerCountStr, 10);
   const isValidCount = !isNaN(localDancerCountNum) && localDancerCountNum >= 1 && localDancerCountNum <= 35;
+
+  // Check if current size matches a preset
+  const getMatchingPreset = (w: number, h: number) => {
+    return STAGE_PRESETS.find(p => p.width === w && p.height === h);
+  };
+
+  // Sync local state when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setLocalDancerCountStr(String(dancerCount));
+      setLocalDancerNames({ ...dancerNames });
+      setLocalStageWidth(stageWidth);
+      setLocalStageHeight(stageHeight);
+      setLocalAudienceAtTop(audienceAtTop);
+      const matching = getMatchingPreset(stageWidth, stageHeight);
+      setIsCustomSize(!matching || matching.label === 'Custom');
+    }
+  }, [isOpen, dancerCount, dancerNames, stageWidth, stageHeight, audienceAtTop]);
 
   // ESC key handler
   useEffect(() => {
@@ -69,21 +92,6 @@ export function SettingsModal({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  // Check if current size matches a preset
-  const matchingPreset = STAGE_PRESETS.find(
-    p => p.width === stageWidth && p.height === stageHeight
-  );
-
-  // Sync local state when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setLocalDancerCountStr(String(dancerCount));
-      setCustomWidth(stageWidth);
-      setCustomHeight(stageHeight);
-      setIsCustomSize(!matchingPreset || matchingPreset.label === 'Custom');
-    }
-  }, [isOpen, dancerCount, stageWidth, stageHeight, matchingPreset]);
-
   if (!isOpen) return null;
 
   const handleDancerCountChange = (delta: number) => {
@@ -92,10 +100,63 @@ export function SettingsModal({
     setLocalDancerCountStr(String(newCount));
   };
 
-  const applyDancerCount = () => {
+  const handleLocalDancerNameChange = (dancerId: number, name: string) => {
+    setLocalDancerNames(prev => ({ ...prev, [dancerId]: name }));
+  };
+
+  const handleStagePresetChange = (value: string) => {
+    if (value === 'custom') {
+      setIsCustomSize(true);
+    } else {
+      setIsCustomSize(false);
+      const [w, h] = value.split('x').map(Number);
+      setLocalStageWidth(w);
+      setLocalStageHeight(h);
+    }
+  };
+
+  // Check if there are changes
+  const hasChanges = () => {
+    if (localDancerCountNum !== dancerCount) return true;
+    if (localStageWidth !== stageWidth || localStageHeight !== stageHeight) return true;
+    if (localAudienceAtTop !== audienceAtTop) return true;
+    // Check dancer names
+    for (let i = 1; i <= dancerCount; i++) {
+      if ((localDancerNames[i] || '') !== (dancerNames[i] || '')) return true;
+    }
+    return false;
+  };
+
+  // Save all changes
+  const handleSave = () => {
+    // Apply dancer count change
     if (isValidCount && localDancerCountNum !== dancerCount) {
       onUpdateDancerCount(localDancerCountNum);
     }
+
+    // Apply stage size change
+    if (localStageWidth !== stageWidth || localStageHeight !== stageHeight) {
+      const w = Math.max(4, Math.min(50, localStageWidth));
+      const h = Math.max(4, Math.min(50, localStageHeight));
+      onUpdateStageSize(w, h);
+    }
+
+    // Apply audience direction change
+    if (localAudienceAtTop !== audienceAtTop) {
+      onUpdateAudienceDirection(localAudienceAtTop);
+    }
+
+    // Apply dancer name changes
+    const countToUse = isValidCount ? localDancerCountNum : dancerCount;
+    for (let i = 1; i <= countToUse; i++) {
+      const localName = localDancerNames[i] || '';
+      const currentName = dancerNames[i] || '';
+      if (localName !== currentName) {
+        onUpdateDancerName(i, localName);
+      }
+    }
+
+    onClose();
   };
 
   return (
@@ -112,28 +173,18 @@ export function SettingsModal({
             <h3>Stage Configuration</h3>
             <div className="settings-row">
               <label>Stage Size</label>
-              <select
+              <CustomSelect
                 className="settings-select"
-                value={isCustomSize ? 'custom' : `${stageWidth}x${stageHeight}`}
-                onChange={(e) => {
-                  if (e.target.value === 'custom') {
-                    setIsCustomSize(true);
-                  } else {
-                    setIsCustomSize(false);
-                    const [w, h] = e.target.value.split('x').map(Number);
-                    setCustomWidth(w);
-                    setCustomHeight(h);
-                    onUpdateStageSize(w, h);
-                  }
-                }}
-              >
-                {STAGE_PRESETS.filter(p => p.label !== 'Custom').map(preset => (
-                  <option key={preset.label} value={`${preset.width}x${preset.height}`}>
-                    {preset.label}
-                  </option>
-                ))}
-                <option value="custom">Custom</option>
-              </select>
+                value={isCustomSize ? 'custom' : `${localStageWidth}x${localStageHeight}`}
+                onChange={handleStagePresetChange}
+                options={[
+                  ...STAGE_PRESETS.filter(p => p.label !== 'Custom').map(preset => ({
+                    value: `${preset.width}x${preset.height}`,
+                    label: preset.label
+                  })),
+                  { value: 'custom', label: 'Custom' }
+                ]}
+              />
             </div>
             {isCustomSize && (
               <div className="settings-row custom-size-row">
@@ -146,8 +197,8 @@ export function SettingsModal({
                       className="size-input"
                       min={4}
                       max={50}
-                      value={customWidth}
-                      onChange={(e) => setCustomWidth(Number(e.target.value))}
+                      value={localStageWidth}
+                      onChange={(e) => setLocalStageWidth(Number(e.target.value))}
                     />
                   </div>
                   <span className="size-separator">×</span>
@@ -158,22 +209,10 @@ export function SettingsModal({
                       className="size-input"
                       min={4}
                       max={50}
-                      value={customHeight}
-                      onChange={(e) => setCustomHeight(Number(e.target.value))}
+                      value={localStageHeight}
+                      onChange={(e) => setLocalStageHeight(Number(e.target.value))}
                     />
                   </div>
-                  {(customWidth !== stageWidth || customHeight !== stageHeight) && (
-                    <button
-                      className="count-apply-btn"
-                      onClick={() => {
-                        const w = Math.max(4, Math.min(50, customWidth));
-                        const h = Math.max(4, Math.min(50, customHeight));
-                        onUpdateStageSize(w, h);
-                      }}
-                    >
-                      Apply
-                    </button>
-                  )}
                 </div>
               </div>
             )}
@@ -181,14 +220,14 @@ export function SettingsModal({
               <label>Audience Direction</label>
               <div className="settings-toggle-group">
                 <button
-                  className={`settings-toggle-btn ${audienceAtTop ? 'active' : ''}`}
-                  onClick={() => onUpdateAudienceDirection(true)}
+                  className={`settings-toggle-btn ${localAudienceAtTop ? 'active' : ''}`}
+                  onClick={() => setLocalAudienceAtTop(true)}
                 >
                   ⬆ Top
                 </button>
                 <button
-                  className={`settings-toggle-btn ${!audienceAtTop ? 'active' : ''}`}
-                  onClick={() => onUpdateAudienceDirection(false)}
+                  className={`settings-toggle-btn ${!localAudienceAtTop ? 'active' : ''}`}
+                  onClick={() => setLocalAudienceAtTop(false)}
                 >
                   ⬇ Bottom
                 </button>
@@ -222,15 +261,6 @@ export function SettingsModal({
                 >
                   +
                 </button>
-                {(localDancerCountStr !== String(dancerCount)) && (
-                  <button
-                    className="count-apply-btn"
-                    onClick={applyDancerCount}
-                    disabled={!isValidCount}
-                  >
-                    Apply
-                  </button>
-                )}
               </div>
             </div>
           </div>
@@ -244,7 +274,7 @@ export function SettingsModal({
               )}
             </h3>
             <div className="settings-dancer-names-grid">
-              {Array.from({ length: dancerCount }, (_, i) => i + 1).map(dancerId => (
+              {Array.from({ length: isValidCount ? localDancerCountNum : dancerCount }, (_, i) => i + 1).map(dancerId => (
                 <div
                   key={dancerId}
                   className={`dancer-name-row ${swapSourceDancerId === dancerId ? 'swap-source' : ''}`}
@@ -259,8 +289,8 @@ export function SettingsModal({
                     type="text"
                     className="dancer-name-input"
                     placeholder={`Dancer ${dancerId}`}
-                    value={dancerNames[dancerId] || ''}
-                    onChange={(e) => onUpdateDancerName(dancerId, e.target.value)}
+                    value={localDancerNames[dancerId] || ''}
+                    onChange={(e) => handleLocalDancerNameChange(dancerId, e.target.value)}
                   />
                 </div>
               ))}
@@ -269,6 +299,20 @@ export function SettingsModal({
               Double-click dancers on stage to swap positions
             </p>
           </div>
+        </div>
+
+        {/* Footer with Save/Cancel buttons */}
+        <div className="settings-modal-footer">
+          <button className="settings-btn cancel" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="settings-btn save"
+            onClick={handleSave}
+            disabled={!hasChanges() || !isValidCount}
+          >
+            Save Changes
+          </button>
         </div>
       </div>
     </div>

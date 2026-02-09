@@ -1,0 +1,113 @@
+{
+  "version": "2.0",
+  "project": {
+    "id": "demo-kpop-001",
+    "name": "K-Pop Showcase",
+    "createdAt": "2024-02-09T00:00:00.000Z",
+    "updatedAt": "2024-02-09T00:00:00.000Z",
+    "dancerCount": 6,
+    "stageWidth": 10,
+    "stageHeight": 8,
+    "dancerNames": {
+      "1": "Mina",
+      "2": "Yuna",
+      "3": "Sana",
+      "4": "Jiwon",
+      "5": "Hyerin",
+      "6": "Dahyun"
+    },
+    "formations": [
+      {
+        "id": "formation-intro",
+        "startCount": 0,
+        "duration": 8,
+        "label": "Intro - V Formation",
+        "transitionType": "linear",
+        "positions": [
+          { "dancerId": 1, "position": { "x": 5, "y": 2 }, "color": "#FF6B6B" },
+          { "dancerId": 2, "position": { "x": 3.5, "y": 3.5 }, "color": "#4ECDC4" },
+          { "dancerId": 3, "position": { "x": 6.5, "y": 3.5 }, "color": "#45B7D1" },
+          { "dancerId": 4, "position": { "x": 2, "y": 5 }, "color": "#96CEB4" },
+          { "dancerId": 5, "position": { "x": 8, "y": 5 }, "color": "#FFEAA7" },
+          { "dancerId": 6, "position": { "x": 5, "y": 6 }, "color": "#DDA0DD" }
+        ]
+      },
+      {
+        "id": "formation-verse1",
+        "startCount": 8,
+        "duration": 8,
+        "label": "Verse 1 - Diagonal Line",
+        "transitionType": "curved",
+        "positions": [
+          { "dancerId": 1, "position": { "x": 2, "y": 2 }, "color": "#FF6B6B" },
+          { "dancerId": 2, "position": { "x": 3.5, "y": 3 }, "color": "#4ECDC4" },
+          { "dancerId": 3, "position": { "x": 5, "y": 4 }, "color": "#45B7D1" },
+          { "dancerId": 4, "position": { "x": 6.5, "y": 5 }, "color": "#96CEB4" },
+          { "dancerId": 5, "position": { "x": 8, "y": 6 }, "color": "#FFEAA7" },
+          { "dancerId": 6, "position": { "x": 5, "y": 7 }, "color": "#DDA0DD" }
+        ]
+      },
+      {
+        "id": "formation-prechorus",
+        "startCount": 16,
+        "duration": 8,
+        "label": "Pre-Chorus - Circle",
+        "transitionType": "curved",
+        "positions": [
+          { "dancerId": 1, "position": { "x": 5, "y": 2 }, "color": "#FF6B6B" },
+          { "dancerId": 2, "position": { "x": 7.5, "y": 3 }, "color": "#4ECDC4" },
+          { "dancerId": 3, "position": { "x": 8, "y": 5 }, "color": "#45B7D1" },
+          { "dancerId": 4, "position": { "x": 5, "y": 6.5 }, "color": "#96CEB4" },
+          { "dancerId": 5, "position": { "x": 2, "y": 5 }, "color": "#FFEAA7" },
+          { "dancerId": 6, "position": { "x": 2.5, "y": 3 }, "color": "#DDA0DD" }
+        ]
+      },
+      {
+        "id": "formation-chorus",
+        "startCount": 24,
+        "duration": 8,
+        "label": "Chorus - Diamond",
+        "transitionType": "linear",
+        "positions": [
+          { "dancerId": 1, "position": { "x": 5, "y": 1.5 }, "color": "#FF6B6B" },
+          { "dancerId": 2, "position": { "x": 3, "y": 4 }, "color": "#4ECDC4" },
+          { "dancerId": 3, "position": { "x": 7, "y": 4 }, "color": "#45B7D1" },
+          { "dancerId": 4, "position": { "x": 5, "y": 4 }, "color": "#96CEB4" },
+          { "dancerId": 5, "position": { "x": 5, "y": 6.5 }, "color": "#FFEAA7" },
+          { "dancerId": 6, "position": { "x": 5, "y": 4 }, "color": "#DDA0DD" }
+        ]
+      },
+      {
+        "id": "formation-bridge",
+        "startCount": 32,
+        "duration": 8,
+        "label": "Bridge - Split Lines",
+        "transitionType": "curved",
+        "positions": [
+          { "dancerId": 1, "position": { "x": 2.5, "y": 2.5 }, "color": "#FF6B6B" },
+          { "dancerId": 2, "position": { "x": 2.5, "y": 4 }, "color": "#4ECDC4" },
+          { "dancerId": 3, "position": { "x": 2.5, "y": 5.5 }, "color": "#45B7D1" },
+          { "dancerId": 4, "position": { "x": 7.5, "y": 2.5 }, "color": "#96CEB4" },
+          { "dancerId": 5, "position": { "x": 7.5, "y": 4 }, "color": "#FFEAA7" },
+          { "dancerId": 6, "position": { "x": 7.5, "y": 5.5 }, "color": "#DDA0DD" }
+        ]
+      },
+      {
+        "id": "formation-finale",
+        "startCount": 40,
+        "duration": 8,
+        "label": "Finale - Arrow",
+        "transitionType": "linear",
+        "positions": [
+          { "dancerId": 1, "position": { "x": 5, "y": 1 }, "color": "#FF6B6B" },
+          { "dancerId": 2, "position": { "x": 4, "y": 2.5 }, "color": "#4ECDC4" },
+          { "dancerId": 3, "position": { "x": 6, "y": 2.5 }, "color": "#45B7D1" },
+          { "dancerId": 4, "position": { "x": 3, "y": 4 }, "color": "#96CEB4" },
+          { "dancerId": 5, "position": { "x": 7, "y": 4 }, "color": "#FFEAA7" },
+          { "dancerId": 6, "position": { "x": 5, "y": 5.5 }, "color": "#DDA0DD" }
+        ]
+      }
+    ]
+  },
+  "exportedAt": "2024-02-09T00:00:00.000Z"
+}

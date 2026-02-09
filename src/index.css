@@ -16,6 +16,221 @@ body {
   padding: 20px;
 }
 
+/* ===================================
+   Global Modern Scrollbar
+   =================================== */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 15, 26, 0.4);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg,
+    rgba(78, 205, 196, 0.4) 0%,
+    rgba(108, 92, 231, 0.4) 100%
+  );
+  border-radius: 4px;
+  transition: background 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg,
+    rgba(78, 205, 196, 0.7) 0%,
+    rgba(108, 92, 231, 0.7) 100%
+  );
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(180deg,
+    rgba(78, 205, 196, 0.9) 0%,
+    rgba(108, 92, 231, 0.9) 100%
+  );
+}
+
+::-webkit-scrollbar-corner {
+  background: rgba(15, 15, 26, 0.4);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(78, 205, 196, 0.4) rgba(15, 15, 26, 0.4);
+}
+
+/* ===================================
+   Custom Select Component
+   =================================== */
+
+.custom-select {
+  position: relative;
+  min-width: 120px;
+  font-size: 13px;
+}
+
+.custom-select.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.custom-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(30, 30, 50, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #e0e0e0;
+}
+
+.custom-select-trigger:hover {
+  background: rgba(40, 40, 65, 0.9);
+  border-color: rgba(78, 205, 196, 0.3);
+}
+
+.custom-select.open .custom-select-trigger {
+  background: rgba(40, 40, 65, 0.95);
+  border-color: rgba(78, 205, 196, 0.5);
+  box-shadow: 0 0 0 2px rgba(78, 205, 196, 0.1);
+}
+
+.custom-select-value {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.custom-select-arrow {
+  display: flex;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.5);
+  transition: transform 0.2s ease;
+}
+
+.custom-select.open .custom-select-arrow {
+  transform: rotate(180deg);
+}
+
+.custom-select-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: rgba(25, 25, 45, 0.98);
+  border: 1px solid rgba(78, 205, 196, 0.2);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(16px);
+  max-height: 240px;
+  overflow-y: auto;
+  animation: selectDropdownFadeIn 0.15s ease-out;
+}
+
+@keyframes selectDropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.custom-select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  cursor: pointer;
+  color: #c0c0c0;
+  transition: all 0.15s ease;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.custom-select-option:last-child {
+  border-bottom: none;
+}
+
+.custom-select-option:hover {
+  background: rgba(78, 205, 196, 0.1);
+  color: #fff;
+}
+
+.custom-select-option.selected {
+  background: rgba(78, 205, 196, 0.15);
+  color: #4ECDC4;
+}
+
+.custom-select-option.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.custom-select-check {
+  font-size: 12px;
+  color: #4ECDC4;
+}
+
+/* ===================================
+   Tooltip Animation
+   =================================== */
+
+@keyframes tooltipFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dancer-tooltip {
+  animation: tooltipFadeIn 0.15s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* ===================================
+   Micro-interactions
+   =================================== */
+
+/* Smooth transitions for interactive elements */
+button, .btn, [role="button"] {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Card hover lift effect */
+.formation-block,
+.preset-item,
+.algorithm-option {
+  transition: all 0.2s ease;
+}
+
+.formation-block:hover,
+.preset-item:hover,
+.algorithm-option:hover {
+  transform: translateY(-2px);
+}
+
+/* Input focus glow */
+input:focus,
+select:focus,
+textarea:focus {
+  box-shadow: 0 0 0 3px rgba(78, 205, 196, 0.15);
+}
+
 /* Password Gate */
 .password-gate {
   position: fixed;
@@ -3760,6 +3975,12 @@ body {
   border-color: rgba(255, 255, 255, 0.2);
 }
 
+.algorithm-card.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .algorithm-card.selected {
   background: rgba(59, 130, 246, 0.15);
   border-color: #3b82f6;
@@ -3931,6 +4152,12 @@ body {
 
 .gemini-scores .score-item:hover {
   background: rgba(255, 255, 255, 0.05);
+}
+
+.gemini-scores .score-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .gemini-scores .score-item.selected {
@@ -4415,31 +4642,9 @@ body {
   font-weight: 500;
 }
 
+/* CustomSelect wrapper for POV */
 .pov-select {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-  padding: 6px 12px;
-  font-size: 12px;
-  color: #fff;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.pov-select:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 215, 0, 0.5);
-}
-
-.pov-select:focus {
-  outline: none;
-  border-color: #FFD700;
-  box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.2);
-}
-
-.pov-select option {
-  background: #1a1a2e;
-  color: #fff;
+  min-width: 130px;
 }
 
 /* POV Badge in Cue Sheet */
@@ -4504,13 +4709,31 @@ body {
 
 /* POV Individual Cue Sheet (above stage) */
 .pov-cue-sheet {
-  background: rgba(255, 215, 0, 0.08);
+  background: rgba(20, 20, 30, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 215, 0, 0.3);
   border-radius: 8px;
   padding: 12px 16px;
   margin-bottom: 12px;
   max-height: 150px;
   overflow-y: auto;
+  transition: all 0.2s ease;
+}
+
+.pov-cue-sheet:hover {
+  background: rgba(20, 20, 30, 0.9);
+}
+
+.pov-cue-sheet.collapsed {
+  max-height: 44px;
+  overflow: hidden;
+  padding: 10px 16px;
+  background: rgba(20, 20, 30, 0.6);
+}
+
+.pov-cue-sheet.collapsed:hover {
+  background: rgba(20, 20, 30, 0.75);
 }
 
 .pov-cue-card {
@@ -4525,6 +4748,38 @@ body {
   gap: 12px;
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(255, 215, 0, 0.2);
+}
+
+.pov-cue-sheet.collapsed .pov-cue-header {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.pov-cue-toggle {
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #aaa;
+  font-size: 10px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pov-cue-toggle:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.pov-cue-compact-info {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 400px;
 }
 
 .pov-dancer-label {
@@ -4569,8 +4824,16 @@ body {
 
 /* Choreographer General Notes (above stage) */
 .pov-general-notes {
-  background: rgba(78, 205, 196, 0.08);
+  background: rgba(20, 40, 40, 0.75);
   border-color: rgba(78, 205, 196, 0.3);
+}
+
+.pov-general-notes:hover {
+  background: rgba(20, 40, 40, 0.9);
+}
+
+.pov-general-notes.collapsed {
+  background: rgba(20, 40, 40, 0.6);
 }
 
 .pov-general-notes .pov-dancer-label {
@@ -4579,6 +4842,14 @@ body {
 
 .pov-general-notes .pov-cue-header {
   border-bottom-color: rgba(78, 205, 196, 0.2);
+}
+
+.pov-general-notes .pov-cue-toggle {
+  border-color: rgba(78, 205, 196, 0.3);
+}
+
+.pov-general-notes .pov-cue-toggle:hover {
+  background: rgba(78, 205, 196, 0.2);
 }
 
 /* Current cue highlight */
@@ -5153,33 +5424,62 @@ body {
 .preset-filter {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.15);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .preset-filter label {
   font-size: 11px;
-  color: #aaa;
+  color: #888;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
+/* CustomSelect wrapper - just needs flex sizing */
 .preset-filter-select {
   flex: 1;
-  padding: 4px 8px;
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+}
+
+/* Container for preset grid (supports grouped and flat views) */
+.preset-grid-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+/* Group wrapper for each dancer count */
+.preset-group {
+  margin-bottom: 16px;
+}
+
+.preset-group:last-child {
+  margin-bottom: 0;
+}
+
+.preset-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
   font-size: 11px;
+  font-weight: 600;
+  color: #4ECDC4;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  background: linear-gradient(90deg, rgba(78, 205, 196, 0.15) 0%, transparent 100%);
+  border-left: 3px solid #4ECDC4;
+  border-radius: 0 6px 6px 0;
 }
 
 .preset-grid {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
+  padding: 4px;
   align-content: start;
 }
 
@@ -5256,12 +5556,16 @@ body {
   align-items: center;
   margin-bottom: 16px;
   width: 100%;
+  padding: 12px 16px;
+  background: rgba(25, 25, 40, 0.6);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .stage-header-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .stage-header-right {
@@ -5271,20 +5575,25 @@ body {
 }
 
 .stage-header h3 {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 600;
   color: #fff;
   margin: 0;
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .count-display {
-  font-size: 14px;
+  font-size: 13px;
   color: #4ECDC4;
-  font-weight: 500;
-  background: rgba(78, 205, 196, 0.1);
-  padding: 4px 10px;
-  border-radius: 4px;
-  border: 1px solid rgba(78, 205, 196, 0.2);
+  font-weight: 600;
+  background: rgba(78, 205, 196, 0.08);
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(78, 205, 196, 0.15);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Formation quick nav */
@@ -5616,12 +5925,13 @@ body {
   font-size: 13px;
 }
 
-.speed-control select {
-  padding: 4px 8px;
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+/* CustomSelect in speed control */
+.speed-control .custom-select {
+  min-width: 70px;
+}
+
+.speed-control .custom-select-trigger {
+  padding: 4px 10px;
   font-size: 13px;
 }
 
@@ -6099,6 +6409,50 @@ body {
   flex: 1;
 }
 
+.settings-modal-footer {
+  padding: 16px 20px;
+  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.settings-modal-footer .settings-btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.settings-modal-footer .settings-btn.cancel {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ccc;
+}
+
+.settings-modal-footer .settings-btn.cancel:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.settings-modal-footer .settings-btn.save {
+  background: linear-gradient(135deg, #4ECDC4, #45B7D1);
+  color: #1a1a2e;
+}
+
+.settings-modal-footer .settings-btn.save:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(78, 205, 196, 0.4);
+}
+
+.settings-modal-footer .settings-btn.save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .settings-section {
   margin-bottom: 20px;
   padding-bottom: 20px;
@@ -6186,20 +6540,9 @@ body {
   color: #aaa;
 }
 
+/* CustomSelect wrapper for Settings */
 .settings-select {
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-  color: #fff;
-  font-size: 13px;
-  cursor: pointer;
   min-width: 160px;
-}
-
-.settings-select:focus {
-  outline: none;
-  border-color: #4ECDC4;
 }
 
 .settings-toggle-group {

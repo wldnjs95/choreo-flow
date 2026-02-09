@@ -3,7 +3,7 @@
  * Reusable dancer visualization component for stage rendering
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { getDancerColor, PADDING } from '../constants/visualization';
 
 export interface DancerCircleProps {
@@ -46,6 +46,7 @@ export function DancerCircle({
   onDoubleClick,
   style,
 }: DancerCircleProps) {
+  const [isHovered, setIsHovered] = useState(false);
   const dancerColor = color || getDancerColor(id);
   const fontSize = labelSize || Math.max(12, radius * 0.9);
 
@@ -72,9 +73,9 @@ export function DancerCircle({
     filterStyle = 'drop-shadow(0 0 10px rgba(255,255,255,0.5))';
   }
 
-  // Display text: name if available, otherwise ID
-  const displayText = name || String(id);
-  const displayFontSize = name && name.length > 2 ? fontSize * 0.7 : fontSize;
+  // Display text: first letter of name if available, otherwise ID
+  const displayText = name ? name.charAt(0).toUpperCase() : String(id);
+  const displayFontSize = fontSize;
 
   return (
     <g
@@ -82,6 +83,8 @@ export function DancerCircle({
       onClick={onClick}
       onMouseDown={onMouseDown}
       onDoubleClick={onDoubleClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
       <circle
         cx={x}
@@ -107,6 +110,51 @@ export function DancerCircle({
         >
           {displayText}
         </text>
+      )}
+      {/* Modern floating tooltip */}
+      {isHovered && name && (
+        <g className="dancer-tooltip">
+          {/* Shadow filter */}
+          <defs>
+            <filter id={`tooltip-shadow-${id}`} x="-50%" y="-50%" width="200%" height="200%">
+              <feDropShadow dx="0" dy="3" stdDeviation="4" floodColor="rgba(0, 0, 0, 0.35)" />
+            </filter>
+          </defs>
+
+          {/* Tooltip background */}
+          <rect
+            x={x - 45}
+            y={y - displayRadius - 36}
+            width={90}
+            height={26}
+            rx={6}
+            fill="rgba(30, 30, 45, 0.92)"
+            stroke="rgba(255, 255, 255, 0.1)"
+            strokeWidth={1}
+            filter={`url(#tooltip-shadow-${id})`}
+          />
+
+          {/* Name text */}
+          <text
+            x={x}
+            y={y - displayRadius - 21}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill="#fff"
+            fontSize={12}
+            fontWeight="500"
+            letterSpacing="0.2"
+            style={{ pointerEvents: 'none' }}
+          >
+            {name}
+          </text>
+
+          {/* Arrow pointer */}
+          <polygon
+            points={`${x - 5},${y - displayRadius - 10} ${x + 5},${y - displayRadius - 10} ${x},${y - displayRadius - 4}`}
+            fill="rgba(30, 30, 45, 0.92)"
+          />
+        </g>
       )}
     </g>
   );
