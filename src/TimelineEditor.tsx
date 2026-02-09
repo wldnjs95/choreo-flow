@@ -596,6 +596,50 @@ const TimelineEditor: React.FC = () => {
     }));
   }, []);
 
+  // Check if position is in exit zone and return which side ('left' | 'right' | null)
+  const getExitZoneSide = useCallback((x: number, stageWidth: number): 'left' | 'right' | null => {
+    if (x < EXIT_ZONE_WIDTH) return 'left';
+    if (x > stageWidth - EXIT_ZONE_WIDTH) return 'right';
+    return null;
+  }, []);
+
+  // Calculate stacked exit position for dancers in exit zone
+  const calculateExitZoneStackPosition = useCallback((
+    dancerId: number,
+    side: 'left' | 'right',
+    allPositions: { dancerId: number; position: { x: number; y: number } }[],
+    stageWidth: number,
+    stageHeight: number
+  ): { x: number; y: number } => {
+    const EXIT_ZONE_CENTER = 0.75;
+    const SLOT_SPACING = 1.0;
+
+    // Get all dancers in this exit zone (excluding current dancer)
+    const dancersInZone = allPositions.filter(p => {
+      if (p.dancerId === dancerId) return false;
+      const zoneSide = getExitZoneSide(p.position.x, stageWidth);
+      return zoneSide === side;
+    });
+
+    // Sort by Y position (top to bottom)
+    dancersInZone.sort((a, b) => b.position.y - a.position.y);
+
+    // Find next available slot from top
+    const exitX = side === 'left' ? EXIT_ZONE_CENTER : stageWidth - EXIT_ZONE_CENTER;
+    let slotY = stageHeight - SLOT_SPACING * 0.5; // Start from top
+
+    for (const dancer of dancersInZone) {
+      if (Math.abs(dancer.position.y - slotY) < SLOT_SPACING * 0.5) {
+        slotY -= SLOT_SPACING; // Move to next slot
+      }
+    }
+
+    // Clamp to stage bounds
+    slotY = Math.max(SLOT_SPACING * 0.5, Math.min(stageHeight - SLOT_SPACING * 0.5, slotY));
+
+    return { x: exitX, y: slotY };
+  }, [getExitZoneSide]);
+
   // Swap two dancers' positions in CURRENT formation only (keep colors and names)
   const swapDancers = useCallback((dancerId1: number, dancerId2: number) => {
     if (dancerId1 === dancerId2) return;
@@ -1313,6 +1357,7 @@ const TimelineEditor: React.FC = () => {
     }
 
     // Snap to grid on release - use setProject to get latest state
+    // Special handling for exit zones: auto-stack vertically
     if (draggingDancer !== null && selectedFormationId) {
       const dancersToMove = selectedDancers.has(draggingDancer)
         ? Array.from(selectedDancers)
@@ -1322,8 +1367,35 @@ const TimelineEditor: React.FC = () => {
         const formation = prev.formations.find(f => f.id === selectedFormationId);
         if (!formation) return prev;
 
+        // First pass: identify which dancers are going to exit zones
+        const exitZoneAssignments = new Map<number, 'left' | 'right'>();
+        for (const dancerId of dancersToMove) {
+          const dancer = formation.positions.find(p => p.dancerId === dancerId);
+          if (dancer) {
+            const side = getExitZoneSide(dancer.position.x, prev.stageWidth);
+            if (side) {
+              exitZoneAssignments.set(dancerId, side);
+            }
+          }
+        }
+
+        // Second pass: calculate positions
         const snappedPositions = formation.positions.map(p => {
-          if (dancersToMove.includes(p.dancerId)) {
+          if (!dancersToMove.includes(p.dancerId)) return p;
+
+          const exitSide = exitZoneAssignments.get(p.dancerId);
+          if (exitSide) {
+            // Dancer is in exit zone - stack vertically
+            const stackedPos = calculateExitZoneStackPosition(
+              p.dancerId,
+              exitSide,
+              formation.positions,
+              prev.stageWidth,
+              prev.stageHeight
+            );
+            return { ...p, position: stackedPos };
+          } else {
+            // Normal grid snap
             return {
               ...p,
               position: {
@@ -1332,7 +1404,6 @@ const TimelineEditor: React.FC = () => {
               },
             };
           }
-          return p;
         });
 
         return {
@@ -1724,101 +1795,176 @@ const TimelineEditor: React.FC = () => {
     return { x: exitX, y: exitY };
   }, []);
 
+  // Check if position is in exit zone
+  const isInExitZone = useCallback((x: number, stageWidth: number): boolean => {
+    return x < EXIT_ZONE_WIDTH || x > stageWidth - EXIT_ZONE_WIDTH;
+  }, []);
+
+  // Generate simple horizontal path for exit/entry
+  const generateHorizontalPath = useCallback((
+    startPos: { x: number; y: number },
+    endPos: { x: number; y: number },
+    totalCounts: number,
+    numPoints: number = 16
+  ): { x: number; y: number; t: number }[] => {
+    const path: { x: number; y: number; t: number }[] = [];
+    for (let i = 0; i <= numPoints; i++) {
+      const t = (i / numPoints) * totalCounts;
+      const progress = i / numPoints;
+      // Smooth easing
+      const eased = progress * progress * (3 - 2 * progress);
+      path.push({
+        x: startPos.x + (endPos.x - startPos.x) * eased,
+        y: startPos.y, // Keep Y constant for horizontal movement
+        t,
+      });
+    }
+    return path;
+  }, []);
+
   // Generate paths between formations using selected algorithm
   const generatePathsForTransition = useCallback(async (
     fromFormation: FormationKeyframe,
     toFormation: FormationKeyframe,
     algorithm: PathAlgorithm
   ): Promise<GeneratedPath[]> => {
-    // Create assignments for dancers in fromFormation
-    const assignments = fromFormation.positions.map((pos) => {
+    const regularAssignments: { dancerId: number; startPosition: { x: number; y: number }; endPosition: { x: number; y: number }; distance: number }[] = [];
+    const exitPaths: GeneratedPath[] = [];
+    const entryPaths: GeneratedPath[] = [];
+
+    // Process dancers in fromFormation
+    for (const pos of fromFormation.positions) {
       const endPos = toFormation.positions.find(p => p.dancerId === pos.dancerId);
       const startPosition = { x: pos.position.x, y: pos.position.y };
+      const startInExit = isInExitZone(startPosition.x, project.stageWidth);
 
-      // If dancer doesn't exist in next formation, they're exiting
-      let endPosition: { x: number; y: number };
       if (!endPos) {
-        // Calculate exit position (nearest exit zone, same Y level)
-        endPosition = calculateOptimalExitPosition(startPosition, project.stageWidth, project.stageHeight);
+        // Dancer is exiting - create horizontal path to exit zone
+        const exitPosition = calculateOptimalExitPosition(startPosition, project.stageWidth, project.stageHeight);
+        exitPaths.push({
+          dancerId: pos.dancerId,
+          path: generateHorizontalPath(startPosition, exitPosition, fromFormation.duration),
+        });
       } else {
-        endPosition = { x: endPos.position.x, y: endPos.position.y };
+        const endPosition = { x: endPos.position.x, y: endPos.position.y };
+        const endInExit = isInExitZone(endPosition.x, project.stageWidth);
+
+        if (startInExit && endInExit) {
+          // Both in exit zone - no path needed (stationary)
+          exitPaths.push({
+            dancerId: pos.dancerId,
+            path: [
+              { x: endPosition.x, y: endPosition.y, t: 0 },
+              { x: endPosition.x, y: endPosition.y, t: fromFormation.duration },
+            ],
+          });
+        } else if (startInExit) {
+          // Entering from exit zone - horizontal entry then to position
+          const entryY = endPosition.y; // Match target Y for horizontal entry
+          const entryX = startPosition.x < project.stageWidth / 2 ? EXIT_ZONE_WIDTH + 0.5 : project.stageWidth - EXIT_ZONE_WIDTH - 0.5;
+          entryPaths.push({
+            dancerId: pos.dancerId,
+            path: generateHorizontalPath(startPosition, { x: entryX, y: entryY }, fromFormation.duration * 0.3)
+              .concat([{ x: endPosition.x, y: endPosition.y, t: fromFormation.duration }]),
+          });
+        } else if (endInExit) {
+          // Exiting to exit zone - horizontal exit
+          exitPaths.push({
+            dancerId: pos.dancerId,
+            path: generateHorizontalPath(startPosition, endPosition, fromFormation.duration),
+          });
+        } else {
+          // Regular movement - use algorithm
+          const dx = endPosition.x - startPosition.x;
+          const dy = endPosition.y - startPosition.y;
+          regularAssignments.push({
+            dancerId: pos.dancerId,
+            startPosition,
+            endPosition,
+            distance: Math.sqrt(dx * dx + dy * dy),
+          });
+        }
       }
+    }
 
-      const dx = endPosition.x - startPosition.x;
-      const dy = endPosition.y - startPosition.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-
-      return {
-        dancerId: pos.dancerId,
-        startPosition,
-        endPosition,
-        distance,
-      };
-    });
-
-    // Find new dancers entering in toFormation (not in fromFormation)
-    const existingDancerIds = new Set(fromFormation.positions.map(p => p.dancerId));
-    const newDancers = toFormation.positions.filter(p => !existingDancerIds.has(p.dancerId));
-
-    // Calculate optimal entry positions for new dancers
-    const entryPositions: { x: number; y: number }[] = [];
+    // Handle new dancers entering (not in fromFormation)
+    const newDancers = toFormation.positions.filter(
+      pos => !fromFormation.positions.some(p => p.dancerId === pos.dancerId)
+    );
+    const usedEntryPositions: { x: number; y: number }[] = [];
     for (const newDancer of newDancers) {
       const targetPosition = { x: newDancer.position.x, y: newDancer.position.y };
-      const entryPosition = calculateOptimalEntryPosition(
-        targetPosition,
-        project.stageWidth,
-        project.stageHeight,
-        entryPositions
-      );
-      entryPositions.push(entryPosition);
+      const targetInExit = isInExitZone(targetPosition.x, project.stageWidth);
 
-      const dx = targetPosition.x - entryPosition.x;
-      const dy = targetPosition.y - entryPosition.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (targetInExit) {
+        // New dancer going directly to exit zone - just place them there
+        entryPaths.push({
+          dancerId: newDancer.dancerId,
+          path: [
+            { x: targetPosition.x, y: targetPosition.y, t: 0 },
+            { x: targetPosition.x, y: targetPosition.y, t: fromFormation.duration },
+          ],
+        });
+      } else {
+        // New dancer entering to stage - horizontal entry
+        const entryPosition = calculateOptimalEntryPosition(
+          targetPosition,
+          project.stageWidth,
+          project.stageHeight,
+          usedEntryPositions
+        );
+        usedEntryPositions.push(entryPosition);
 
-      assignments.push({
-        dancerId: newDancer.dancerId,
-        startPosition: entryPosition,
-        endPosition: targetPosition,
-        distance,
-      });
+        // Create horizontal entry path
+        const entryPath = generateHorizontalPath(
+          entryPosition,
+          { x: entryPosition.x < project.stageWidth / 2 ? EXIT_ZONE_WIDTH + 0.5 : project.stageWidth - EXIT_ZONE_WIDTH - 0.5, y: targetPosition.y },
+          fromFormation.duration * 0.3
+        );
+        entryPath.push({ x: targetPosition.x, y: targetPosition.y, t: fromFormation.duration });
+        entryPaths.push({ dancerId: newDancer.dancerId, path: entryPath });
+      }
     }
 
-    const config = {
-      totalCounts: fromFormation.duration,
-      numPoints: 32,
-      collisionRadius: 0.5,
-    };
+    // Generate paths for regular movements using algorithm
+    let algorithmResults: GeneratedPath[] = [];
+    if (regularAssignments.length > 0) {
+      const config = {
+        totalCounts: fromFormation.duration,
+        numPoints: 32,
+        collisionRadius: 0.5,
+      };
 
-    let results: { dancerId: number; path: { x: number; y: number; t: number }[] }[];
+      let results: { dancerId: number; path: { x: number; y: number; t: number }[] }[];
 
-    switch (algorithm) {
-      case 'clean_flow':
-        results = computePathsCleanFlow(assignments, config);
-        break;
-      case 'natural_curves':
-        results = computePathsNaturalCurves(assignments, config);
-        break;
-      case 'wave_sync':
-        results = computePathsWaveSync(assignments, config);
-        break;
-      case 'perfect_sync':
-        results = computePathsPerfectSync(assignments, config);
-        break;
-      case 'balanced_direct':
-        results = computePathsBalancedDirect(assignments, config);
-        break;
-      case 'harmonized_flow':
-      default:
-        results = computePathsHarmonizedFlow(assignments, config);
-        break;
+      switch (algorithm) {
+        case 'clean_flow':
+          results = computePathsCleanFlow(regularAssignments, config);
+          break;
+        case 'natural_curves':
+          results = computePathsNaturalCurves(regularAssignments, config);
+          break;
+        case 'wave_sync':
+          results = computePathsWaveSync(regularAssignments, config);
+          break;
+        case 'perfect_sync':
+          results = computePathsPerfectSync(regularAssignments, config);
+          break;
+        case 'balanced_direct':
+          results = computePathsBalancedDirect(regularAssignments, config);
+          break;
+        case 'harmonized_flow':
+        default:
+          results = computePathsHarmonizedFlow(regularAssignments, config);
+          break;
+      }
+
+      algorithmResults = results.map(r => ({ dancerId: r.dancerId, path: r.path }));
     }
 
-    return results.map(r => ({
-      dancerId: r.dancerId,
-      path: r.path,
-    }));
-  }, [calculateOptimalEntryPosition, calculateOptimalExitPosition, project.stageWidth, project.stageHeight]);
+    // Merge all paths
+    return [...algorithmResults, ...exitPaths, ...entryPaths];
+  }, [calculateOptimalEntryPosition, calculateOptimalExitPosition, isInExitZone, generateHorizontalPath, project.stageWidth, project.stageHeight]);
 
   // Path Stability / Deviation Tolerance
   // Calculate how much each dancer can deviate from planned path without collision
