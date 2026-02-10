@@ -4463,6 +4463,27 @@ textarea:focus {
   color: #aaa;
 }
 
+.cue-sheet-header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cue-sheet-delete {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  background: rgba(255, 107, 107, 0.15);
+  color: #ff6b6b;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cue-sheet-delete:hover {
+  background: rgba(255, 107, 107, 0.3);
+}
+
 .cue-sheet-close {
   width: 32px;
   height: 32px;

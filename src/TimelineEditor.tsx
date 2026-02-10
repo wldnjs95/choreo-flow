@@ -4381,7 +4381,22 @@ Score each option 0-100 based on the weighted criteria above.
                   Algorithm: {cueSheetAlgorithm ? PATH_ALGORITHM_LABELS[cueSheetAlgorithm] : 'User selections'}
                 </span>
               </div>
-              <button className="cue-sheet-close" onClick={() => setShowCueSheet(false)}>×</button>
+              <div className="cue-sheet-header-buttons">
+                <button
+                  className="cue-sheet-delete"
+                  onClick={() => {
+                    setCueSheet(null);
+                    setCueSheetAlgorithm(null);
+                    setCueSheetGeneratedWith(new Map());
+                    setShowCueSheet(false);
+                    showToast('Cue sheet deleted. Click "Generate Cue Sheet" to create a new one.', 'info');
+                  }}
+                  title="Delete cue sheet"
+                >
+                  🗑️ Delete
+                </button>
+                <button className="cue-sheet-close" onClick={() => setShowCueSheet(false)}>×</button>
+              </div>
             </div>
 
             {/* General Notes */}
