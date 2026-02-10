@@ -3727,12 +3727,14 @@ Score each option 0-100 based on the weighted criteria above.
               {cueSheet.dancers
                 .filter((dancer: DancerCueSheet) => dancer.dancerId === povMode)
                 .map((dancer: DancerCueSheet) => {
-                  // Find current cue for collapsed mode
+                  // Find current cue for collapsed mode - flexible regex for various formats
                   const currentCueData = dancer.cues.find(cue => {
-                    const timeMatch = cue.timeRange.match(/(\d+)~(\d+)/);
-                    return timeMatch
-                      ? currentCount >= parseInt(timeMatch[1]) && currentCount < parseInt(timeMatch[2])
-                      : false;
+                    // Match patterns like "0~8", "0-8", "0~8 counts", "counts 0~8", etc.
+                    const timeMatch = cue.timeRange.match(/(\d+)\s*[~\-]\s*(\d+)/);
+                    if (!timeMatch) return false;
+                    const startCount = parseInt(timeMatch[1]);
+                    const endCount = parseInt(timeMatch[2]);
+                    return currentCount >= startCount && currentCount < endCount;
                   });
 
                   return (
@@ -4373,7 +4375,7 @@ Score each option 0-100 based on the weighted criteria above.
               {cueSheet.dancers.map((dancer: DancerCueSheet) => (
                 <div key={dancer.dancerId} className="dancer-cue-card">
                   <div className="dancer-cue-header">
-                    <span className="dancer-label">{dancer.dancerLabel}</span>
+                    <span className="dancer-label">{project.dancerNames?.[dancer.dancerId] || dancer.dancerLabel}</span>
                     <span className="dancer-summary">{dancer.summary}</span>
                   </div>
                   <div className="dancer-cues">
