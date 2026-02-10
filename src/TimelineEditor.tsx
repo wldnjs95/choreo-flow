@@ -596,6 +596,14 @@ const TimelineEditor: React.FC = () => {
     }));
   }, []);
 
+  // Get dancer name - handles both string and number keys from JSON
+  const getDancerName = useCallback((dancerId: number, fallback?: string): string => {
+    const names = project.dancerNames as Record<string | number, string> | undefined;
+    if (!names) return fallback || `Dancer ${dancerId}`;
+    // Try both number and string keys (JSON has string keys)
+    return names[dancerId] || names[String(dancerId)] || fallback || `Dancer ${dancerId}`;
+  }, [project.dancerNames]);
+
   // Check if position is in exit zone and return which side ('left' | 'right' | null)
   const getExitZoneSide = useCallback((x: number, stageWidth: number): 'left' | 'right' | null => {
     if (x < EXIT_ZONE_WIDTH) return 'left';
@@ -3661,7 +3669,7 @@ Score each option 0-100 based on the weighted criteria above.
                       { value: 'choreographer', label: 'Choreographer' },
                       ...(selectedFormation?.positions.map((pos) => ({
                         value: `dancer-${pos.dancerId}`,
-                        label: project.dancerNames?.[pos.dancerId] || `Dancer ${pos.dancerId}`
+                        label: getDancerName(pos.dancerId)
                       })) || [])
                     ]}
                   />
@@ -3740,7 +3748,7 @@ Score each option 0-100 based on the weighted criteria above.
                   return (
                     <div key={dancer.dancerId} className="pov-cue-card">
                       <div className="pov-cue-header">
-                        <span className="pov-dancer-label">🎯 {project.dancerNames?.[dancer.dancerId] || dancer.dancerLabel}</span>
+                        <span className="pov-dancer-label">🎯 {getDancerName(dancer.dancerId, dancer.dancerLabel)}</span>
                         {!isCueSheetCollapsed && <span className="pov-dancer-summary">{dancer.summary}</span>}
                         {isCueSheetCollapsed && currentCueData && (
                           <span className="pov-cue-compact-info">{currentCueData.instruction}</span>
@@ -3925,7 +3933,7 @@ Score each option 0-100 based on the weighted criteria above.
               const isPovDancer = typeof povMode === 'number' && povMode === dancer.dancerId;
               const isDimmed = typeof povMode === 'number' && povMode !== dancer.dancerId;
               const isSwapTarget = swapSourceDancerId === dancer.dancerId;
-              const dancerName = project.dancerNames?.[dancer.dancerId];
+              const dancerName = getDancerName(dancer.dancerId);
               return (
                 <DancerCircle
                   key={dancer.dancerId}
@@ -4375,7 +4383,7 @@ Score each option 0-100 based on the weighted criteria above.
               {cueSheet.dancers.map((dancer: DancerCueSheet) => (
                 <div key={dancer.dancerId} className="dancer-cue-card">
                   <div className="dancer-cue-header">
-                    <span className="dancer-label">{project.dancerNames?.[dancer.dancerId] || dancer.dancerLabel}</span>
+                    <span className="dancer-label">{getDancerName(dancer.dancerId, dancer.dancerLabel)}</span>
                     <span className="dancer-summary">{dancer.summary}</span>
                   </div>
                   <div className="dancer-cues">
@@ -4482,7 +4490,7 @@ Score each option 0-100 based on the weighted criteria above.
                       {p.dancerId}
                     </span>
                     <span className="quick-swap-name">
-                      {project.dancerNames?.[p.dancerId] || `Dancer ${p.dancerId}`}
+                      {getDancerName(p.dancerId)}
                     </span>
                   </button>
                 ))}

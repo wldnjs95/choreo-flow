@@ -304,9 +304,15 @@ function formatPathDataForGemini(
       }
     }
 
+    // Support both string and number keys for dancerNames (JSON has string keys)
+    const names = config.dancerNames as Record<string | number, string> | undefined;
+    const dancerName = names?.[dancerPath.dancerId]
+      || names?.[String(dancerPath.dancerId)]
+      || `Dancer ${dancerPath.dancerId}`;
+
     return {
       dancerId: dancerPath.dancerId,
-      dancerName: config.dancerNames?.[dancerPath.dancerId] || `Dancer ${dancerPath.dancerId}`,
+      dancerName,
       startPosition: { zone: startZone, x: Math.round(startPos.x * 10) / 10, y: Math.round(startPos.y * 10) / 10 },
       endPosition: { zone: endZone, x: Math.round(endPos.x * 10) / 10, y: Math.round(endPos.y * 10) / 10 },
       timing: {
