@@ -92,7 +92,7 @@ const TimelineEditor: React.FC = () => {
   const [redoHistory, setRedoHistory] = useState<ChoreographyProject[]>([]);
   const isUndoingRef = useRef(false); // Prevent saving state during undo/redo
 
-  // Auto-save to localStorage with debounce
+  // Auto-save to localStorage with debounce (project only - paths/cuesheet saved separately)
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     // Clear previous timeout
@@ -114,6 +114,10 @@ const TimelineEditor: React.FC = () => {
       }
     };
   }, [project]);
+
+  // Paths storage key (used later for auto-save)
+  const PATHS_STORAGE_KEY = 'dance-choreography-paths';
+  const pathsSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // View state
   const [selectedFormationId, setSelectedFormationId] = useState<string | null>(
@@ -217,6 +221,135 @@ const TimelineEditor: React.FC = () => {
   // Track which algorithm was used for each transition's cue sheet generation
   // Key: pathKey (e.g., "formation-1->formation-2"), Value: algorithm used
   const [cueSheetGeneratedWith, setCueSheetGeneratedWith] = useState<Map<string, PathAlgorithm>>(new Map());
+
+  // Load paths and cue sheet from localStorage on mount
+  const [pathsRestoredFromStorage, setPathsRestoredFromStorage] = useState(false);
+
+  useEffect(() => {
+    try {
+      const savedPaths = localStorage.getItem(PATHS_STORAGE_KEY);
+      if (savedPaths) {
+        const data = JSON.parse(savedPaths);
+
+        // Restore allAlgorithmPaths
+        if (data.allAlgorithmPaths) {
+          const restoredPaths = new Map<string, Map<PathAlgorithm, GeneratedPath[]>>();
+          Object.entries(data.allAlgorithmPaths).forEach(([pathKey, algorithms]) => {
+            const algorithmMap = new Map<PathAlgorithm, GeneratedPath[]>();
+            Object.entries(algorithms as Record<string, GeneratedPath[]>).forEach(([algo, paths]) => {
+              algorithmMap.set(algo as PathAlgorithm, paths);
+            });
+            restoredPaths.set(pathKey, algorithmMap);
+          });
+          setAllAlgorithmPaths(restoredPaths);
+        }
+
+        // Restore userSelectedAlgorithms
+        if (data.userSelectedAlgorithms) {
+          const restoredAlgorithms = new Map<string, PathAlgorithm>();
+          Object.entries(data.userSelectedAlgorithms).forEach(([pathKey, algorithm]) => {
+            restoredAlgorithms.set(pathKey, algorithm as PathAlgorithm);
+          });
+          setUserSelectedAlgorithms(restoredAlgorithms);
+        }
+
+        // Restore geminiResults
+        if (data.geminiResults) {
+          const restoredGemini = new Map<string, GeminiTransitionResult>();
+          Object.entries(data.geminiResults).forEach(([pathKey, result]) => {
+            restoredGemini.set(pathKey, result as GeminiTransitionResult);
+          });
+          setGeminiResults(restoredGemini);
+        }
+
+        // Restore cueSheet
+        if (data.cueSheet) {
+          setCueSheet(data.cueSheet);
+        }
+
+        // Restore cueSheetAlgorithm
+        if (data.cueSheetAlgorithm) {
+          setCueSheetAlgorithm(data.cueSheetAlgorithm);
+        }
+
+        setPathsRestoredFromStorage(true);
+        console.log('[LocalStorage] Paths and cue sheet restored');
+      }
+    } catch (e) {
+      console.warn('Failed to load paths from localStorage:', e);
+    }
+  }, []); // Only run once on mount
+
+  // Auto-save paths, algorithms, and cue sheet (after state declarations)
+  useEffect(() => {
+    // Skip if we just restored from storage to avoid immediate re-save
+    if (!pathsRestoredFromStorage && allAlgorithmPaths.size === 0 && !cueSheet) {
+      return;
+    }
+
+    if (pathsSaveTimeoutRef.current) {
+      clearTimeout(pathsSaveTimeoutRef.current);
+    }
+
+    pathsSaveTimeoutRef.current = setTimeout(() => {
+      try {
+        // Serialize allAlgorithmPaths
+        const serializedPaths: Record<string, Record<string, GeneratedPath[]>> = {};
+        allAlgorithmPaths.forEach((algorithmMap, pathKey) => {
+          serializedPaths[pathKey] = {};
+          algorithmMap.forEach((paths, algorithm) => {
+            serializedPaths[pathKey][algorithm] = paths;
+          });
+        });
+
+        // Serialize userSelectedAlgorithms
+        const serializedAlgorithms: Record<string, PathAlgorithm> = {};
+        userSelectedAlgorithms.forEach((algorithm, pathKey) => {
+          serializedAlgorithms[pathKey] = algorithm;
+        });
+
+        // Serialize geminiResults
+        const serializedGemini: Record<string, GeminiTransitionResult> = {};
+        geminiResults.forEach((result, pathKey) => {
+          serializedGemini[pathKey] = result;
+        });
+
+        const pathsData = {
+          allAlgorithmPaths: serializedPaths,
+          userSelectedAlgorithms: serializedAlgorithms,
+          geminiResults: serializedGemini,
+          cueSheet,
+          cueSheetAlgorithm,
+        };
+
+        localStorage.setItem(PATHS_STORAGE_KEY, JSON.stringify(pathsData));
+      } catch (e) {
+        // If quota exceeded, try saving without allAlgorithmPaths (just selected paths)
+        console.warn('Paths auto-save failed, trying compact save:', e);
+        try {
+          const serializedAlgorithms: Record<string, PathAlgorithm> = {};
+          userSelectedAlgorithms.forEach((algorithm, pathKey) => {
+            serializedAlgorithms[pathKey] = algorithm;
+          });
+
+          const compactData = {
+            userSelectedAlgorithms: serializedAlgorithms,
+            cueSheet,
+            cueSheetAlgorithm,
+          };
+          localStorage.setItem(PATHS_STORAGE_KEY, JSON.stringify(compactData));
+        } catch (e2) {
+          console.warn('Compact save also failed:', e2);
+        }
+      }
+    }, AUTOSAVE_DELAY + 500); // Slightly delayed after project save
+
+    return () => {
+      if (pathsSaveTimeoutRef.current) {
+        clearTimeout(pathsSaveTimeoutRef.current);
+      }
+    };
+  }, [allAlgorithmPaths, userSelectedAlgorithms, geminiResults, cueSheet, cueSheetAlgorithm, pathsRestoredFromStorage]);
 
   // Preset filter state
   const [presetFilter, setPresetFilter] = useState<'all' | number>('all');
@@ -1603,6 +1736,7 @@ const TimelineEditor: React.FC = () => {
     // Clear localStorage auto-save
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(PATHS_STORAGE_KEY);
     } catch (e) {
       console.warn('Failed to clear autosave:', e);
     }
