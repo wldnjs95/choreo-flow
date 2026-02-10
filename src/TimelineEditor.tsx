@@ -3018,14 +3018,14 @@ Score each option 0-100 based on the weighted criteria above.
       setCueSheet(cueSheetResult);
       setCueSheetGeneratedWith(newGeneratedWith);
 
-      // Track which algorithm was used (for single transition, show specific; for multiple, show 'mixed')
-      if (totalTransitions === 1) {
-        const pathKey = `${project.formations[0].id}->${project.formations[1].id}`;
-        const userSelected = userSelectedAlgorithms.get(pathKey);
-        const geminiPick = geminiResults.get(pathKey)?.pick;
-        setCueSheetAlgorithm(userSelected || geminiPick || 'natural_curves');
+      // Track which algorithm was used
+      // If all transitions use the same algorithm, show it; otherwise show null (Mixed)
+      const algorithmsUsed = Array.from(newGeneratedWith.values());
+      const uniqueAlgorithms = [...new Set(algorithmsUsed)];
+      if (uniqueAlgorithms.length === 1) {
+        setCueSheetAlgorithm(uniqueAlgorithms[0]);
       } else {
-        setCueSheetAlgorithm(null); // Mixed algorithms for multiple transitions
+        setCueSheetAlgorithm(null); // Mixed algorithms
       }
       setPathGenerationStatus(null);
 
