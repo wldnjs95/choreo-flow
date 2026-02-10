@@ -3240,8 +3240,12 @@ Score each option 0-100 based on the weighted criteria above.
 
   const currentPaths = getCurrentPaths();
   const playbackPaths = getPlaybackPaths();
-  // Use playbackPaths when playing, otherwise use currentPaths (selected formation)
-  const displayPaths = isPlaying ? playbackPaths : currentPaths;
+  // Use playbackPaths when:
+  // 1. Playing, OR
+  // 2. Scrubbing (currentCount is not at selected formation's start)
+  const isAtSelectedFormationStart = selectedFormation &&
+    Math.abs(currentCount - selectedFormation.startCount) < 0.1;
+  const displayPaths = (isPlaying || !isAtSelectedFormationStart) ? playbackPaths : currentPaths;
   const hasNextFormation = selectedFormation && project.formations.findIndex(f => f.id === selectedFormationId) < project.formations.length - 1;
 
   // Compute current transition info for UI display
