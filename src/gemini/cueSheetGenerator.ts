@@ -489,18 +489,18 @@ Please output in the following JSON format:
   "dancers": [
     {
       "dancerId": 1,
-      "dancerLabel": "D1",
-      "summary": "Brief summary of this dancer's movement (1 sentence)",
+      "dancerLabel": "Alice",
+      "summary": "Lead dancer moving from upstage right to center, with dramatic diagonal crossing",
       "cues": [
         {
-          "timeRange": "0~2",
-          "instruction": "Standby upstage left, eyes forward",
-          "notes": "Prepare to start with D3"
+          "timeRange": "0~8",
+          "instruction": "Start at upstage right corner, facing downstage. On count 1, begin walking diagonally toward center stage with confident, measured steps. Reach center by count 6, then hold position with weight on right foot, arms relaxed at sides.",
+          "notes": "Watch for Bob crossing in front of you around count 4 - maintain 1 meter distance. Eye contact with audience throughout."
         },
         {
-          "timeRange": "2~5",
-          "instruction": "As soon as D5 passes, dash quickly to center stage",
-          "notes": "Curved path, watch for crossing with D2"
+          "timeRange": "8~16",
+          "instruction": "From center, turn 90 degrees to face stage left. Take 4 smooth steps toward stage left wing, decelerating as you approach. Stop at stage left position by count 14, pivot to face audience.",
+          "notes": "Sync your arrival with Chris who is entering from stage right. You should both reach your marks simultaneously on count 14."
         }
       ]
     }
@@ -508,15 +508,28 @@ Please output in the following JSON format:
 }
 \`\`\`
 
+## Quality Standards for Instructions
+Each instruction MUST include:
+1. **Starting position and facing direction** - Where exactly the dancer begins
+2. **Movement description** - How to move (walk, run, glide, turn, etc.)
+3. **Path details** - Direction, curve, diagonal, straight line
+4. **Timing specifics** - When to start, when to arrive, pace
+5. **Ending position** - Where to finish and how to stand
+6. **Body awareness** - Posture, arms, head direction, expression
+
+**BAD example** (too vague): "Move to center"
+**GOOD example**: "From upstage left, walk diagonally downstage toward center with 6 even steps. Arrive at center on count 4, facing the audience with arms naturally at your sides."
+
 **Important**:
 - Output ONLY valid JSON
-- Write cues chronologically for each dancer
-- **dancerLabel**: Use the "dancerName" from input data (NOT "D1", "D2" - use actual names like "Alice", "Bob")
-- **timeRange must use integer counts only** (e.g., "0~2", "3~5") - no decimals, no "counts" suffix
-- **formationNotes**: Write specific notes for each formation that the choreographer needs to focus on during that segment (key transitions, spatial awareness, timing cues, potential collision points)
+- Write cues chronologically for each dancer - one cue per formation transition
+- **dancerLabel**: Use the "dancerName" from input data (NOT "D1", "D2" - use actual names)
+- **timeRange must use integer counts only** (e.g., "0~8", "8~16") - must match formation boundaries
+- **formationNotes**: Write 2-3 specific notes for each formation focusing on: key transitions, spacing awareness, timing synchronization, potential collision points
 - When referencing other dancers in instructions/notes, use their actual names from the input data
-- Use polite, professional, and encouraging tone
-- Be specific enough for actual performance use`;
+- **CRITICAL**: Every dancer must have detailed instructions for EVERY formation they appear in
+- Use encouraging, professional language suitable for rehearsal
+- Be specific enough for actual performance use - dancers should be able to execute without additional explanation`;
   }
 }
 
