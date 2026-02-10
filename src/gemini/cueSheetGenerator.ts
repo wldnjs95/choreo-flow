@@ -294,12 +294,17 @@ function formatPathDataForGemini(
       : getStageZone(endPos.x, endPos.y, config.stageWidth, config.stageHeight);
 
     // Find interactions with nearby dancers (check at integer counts only)
-    const interactions: { time: number; nearbyDancers: number[] }[] = [];
+    const interactions: { time: number; nearbyDancers: string[] }[] = [];
     if (config.includeRelativePositioning) {
+      const names = config.dancerNames as Record<string | number, string> | undefined;
       for (let t = 0; t <= config.totalCounts; t += 1) {
         const nearby = findNearbyDancers(paths, dancerPath.dancerId, t);
         if (nearby.length > 0) {
-          interactions.push({ time: t, nearbyDancers: nearby });
+          // Convert dancer IDs to names
+          const nearbyNames = nearby.map(id =>
+            names?.[id] || names?.[String(id)] || `Dancer ${id}`
+          );
+          interactions.push({ time: t, nearbyDancers: nearbyNames });
         }
       }
     }
@@ -337,6 +342,15 @@ function formatPathDataForGemini(
     };
   });
 
+  // Build dancer name mapping for reference
+  const dancerNameMapping: Record<number, string> = {};
+  const names = config.dancerNames as Record<string | number, string> | undefined;
+  for (const dancerPath of paths) {
+    dancerNameMapping[dancerPath.dancerId] = names?.[dancerPath.dancerId]
+      || names?.[String(dancerPath.dancerId)]
+      || `Dancer ${dancerPath.dancerId}`;
+  }
+
   return {
     stageConfig: {
       width: config.stageWidth,
@@ -344,6 +358,7 @@ function formatPathDataForGemini(
       totalCounts: config.totalCounts,
       unit: 'meters',
     },
+    dancerNameMapping,  // ID to name mapping for reference
     dancers: formattedPaths,
   };
 }
@@ -526,7 +541,7 @@ Each instruction MUST include:
 - **dancerLabel**: Use the "dancerName" from input data (NOT "D1", "D2" - use actual names)
 - **timeRange must use integer counts only** (e.g., "0~8", "8~16") - must match formation boundaries
 - **formationNotes**: Write 2-3 specific notes for each formation focusing on: key transitions, spacing awareness, timing synchronization, potential collision points
-- When referencing other dancers in instructions/notes, use their actual names from the input data
+- **CRITICAL - Use Dancer Names**: When referencing dancers ANYWHERE (in instructions, notes, formationNotes, generalNotes), ALWAYS use the actual dancer names from "dancerNameMapping" in the input data. NEVER use "Dancer 4" or "dancers 5, 11, 12" - use their real names like "Alice", "Bob", "Chris".
 - **CRITICAL**: Every dancer must have detailed instructions for EVERY formation they appear in
 - Use encouraging, professional language suitable for rehearsal
 - Be specific enough for actual performance use - dancers should be able to execute without additional explanation`;
