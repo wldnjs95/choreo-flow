@@ -483,7 +483,11 @@ ${formationsSection}
 ## Interpretation Rules
 1. **No Raw Coordinates**: Never say "move to x:5". Instead, use stage directions like "move to center stage", "advance downstage left"
 2. **Relative Positioning**: Identify relationships with other dancers (e.g., "passing by D5", "circling behind D2")
-3. **Detect Stillness**: If movement is minimal, describe as "Hold", "Maintain pose", "Standby"
+3. **CRITICAL - Detect Stillness**: If totalDistance is 0 or very small (< 0.5m), the dancer is NOT moving. Their instruction MUST be:
+   - "Hold your position at [current zone]"
+   - "Stay in place, maintain your pose"
+   - "Keep your position steady, facing [direction]"
+   - Do NOT describe any movement for stationary dancers!
 4. **Add Artistic Nuance**:
    - High speed → "Dash quickly", "Explode into movement"
    - Curved path → "Move in a smooth arc", "Flow gracefully"
@@ -541,6 +545,10 @@ Each instruction MUST include:
 
 **BAD example** (too vague): "Move to center"
 **GOOD example**: "From upstage left, walk diagonally downstage toward center with 6 even steps. Arrive at center on count 4, facing the audience with arms naturally at your sides."
+
+**For STATIONARY dancers (totalDistance = 0 or < 0.5m)**:
+**BAD example**: "Move slightly and adjust position" (WRONG - they are not moving!)
+**GOOD example**: "Hold your position at center stage. Face the audience, maintain steady posture with weight evenly distributed. Stay alert for the dancers moving around you."
 
 **Important**:
 - Output ONLY valid JSON
