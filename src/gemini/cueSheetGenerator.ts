@@ -634,11 +634,22 @@ function convertToRelativeCount(timeRange: string): string {
  * Replace "Dancer X" patterns with actual names from dancerNames
  */
 function replaceDancerNames(text: string, dancerNames: Record<string | number, string>): string {
-  // Match patterns like "Dancer 1", "Dancer 20", "dancer 5", "Dancers 4, 5, 11"
-  return text.replace(/[Dd]ancer\s*(\d+)/g, (match, id) => {
-    const name = dancerNames[Number(id)] || dancerNames[id];
+  // Match patterns like "Dancer 1", "Dancer 20", "dancer 5", "D1", "D20"
+  let result = text;
+
+  // Pattern 1: "Dancer 1", "Dancer 20", "dancer5" (with or without space)
+  result = result.replace(/[Dd]ancer\s*(\d+)/g, (match, id) => {
+    const name = dancerNames[Number(id)] || dancerNames[id] || dancerNames[String(id)];
     return name || match;
   });
+
+  // Pattern 2: "D1", "D20" (short format)
+  result = result.replace(/\bD(\d+)\b/g, (match, id) => {
+    const name = dancerNames[Number(id)] || dancerNames[id] || dancerNames[String(id)];
+    return name || match;
+  });
+
+  return result;
 }
 
 /**
@@ -650,8 +661,15 @@ function postProcessCueSheet(
 ): CueSheetResult {
   // Process each dancer's cues
   result.dancers = result.dancers.map(dancer => {
-    // Fix dancerLabel if it's "Dancer X" format
-    if (dancer.dancerLabel.match(/^[Dd]ancer\s*\d+$/)) {
+    // Fix dancerLabel: use dancerId to look up real name
+    const realName = dancerNames[dancer.dancerId] ||
+                     dancerNames[String(dancer.dancerId)] ||
+                     dancerNames[Number(dancer.dancerId)];
+
+    if (realName) {
+      dancer.dancerLabel = realName;
+    } else if (dancer.dancerLabel.match(/^[Dd]ancer\s*\d+$/) || dancer.dancerLabel.match(/^D\d+$/)) {
+      // Fallback: try to extract ID from label
       const idMatch = dancer.dancerLabel.match(/\d+/);
       if (idMatch) {
         const name = dancerNames[Number(idMatch[0])] || dancerNames[idMatch[0]];
