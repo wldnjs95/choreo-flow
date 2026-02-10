@@ -343,13 +343,22 @@ function formatPathDataForGemini(
     };
   });
 
-  // Build dancer name mapping for reference
+  // Build dancer name mapping for reference - include ALL dancers from config, not just those with paths
   const dancerNameMapping: Record<number, string> = {};
   const names = config.dancerNames as Record<string | number, string> | undefined;
+
+  // First, add all dancers from config.dancerNames
+  if (names) {
+    Object.entries(names).forEach(([id, name]) => {
+      dancerNameMapping[Number(id)] = name;
+    });
+  }
+
+  // Then, fill in any missing dancers from paths with default names
   for (const dancerPath of paths) {
-    dancerNameMapping[dancerPath.dancerId] = names?.[dancerPath.dancerId]
-      || names?.[String(dancerPath.dancerId)]
-      || `Dancer ${dancerPath.dancerId}`;
+    if (!dancerNameMapping[dancerPath.dancerId]) {
+      dancerNameMapping[dancerPath.dancerId] = `Dancer ${dancerPath.dancerId}`;
+    }
   }
 
   return {
@@ -563,7 +572,11 @@ Each instruction MUST include:
   - Dancer at center stage - others position relative to center
   - Dancer at the edge who defines the formation width
   - The dancer who arrives first and holds position while others fill in
-- **CRITICAL - Use Dancer Names**: When referencing dancers ANYWHERE (in instructions, notes, formationNotes, generalNotes), ALWAYS use the actual dancer names from "dancerNameMapping" in the input data. NEVER use "Dancer 4" or "dancers 5, 11, 12" - use their real names like "Alice", "Bob", "Chris".
+- **CRITICAL - Use Dancer Names**: When referencing dancers ANYWHERE (in instructions, notes, formationNotes, generalNotes):
+  - ALWAYS look up the name in "dancerNameMapping" from input data
+  - Example: dancerNameMapping[18] = "Dorothy" → use "Dorothy", NOT "Dancer 18"
+  - NEVER output "Dancer X" format - always use the actual name from dancerNameMapping
+  - For dancerLabel field: use dancerName from each dancer's data, NOT "D1" or "Dancer 1"
 - **CRITICAL**: Every dancer must have detailed instructions for EVERY formation they appear in
 - Use encouraging, professional language suitable for rehearsal
 - Be specific enough for actual performance use - dancers should be able to execute without additional explanation`;
