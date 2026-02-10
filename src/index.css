@@ -4912,6 +4912,20 @@ textarea:focus {
   letter-spacing: 0.5px;
 }
 
+.pov-anchor-dancers {
+  background: rgba(100, 200, 255, 0.15);
+  color: #64C8FF;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 12px;
+  border-left: 3px solid #64C8FF;
+}
+
+.pov-anchor-dancers strong {
+  margin-right: 6px;
+}
+
 .pov-cue-instruction-main {
   font-size: 20px;
   font-weight: 500;

@@ -3734,6 +3734,11 @@ Score each option 0-100 based on the weighted criteria above.
                         <div className="pov-cue-time-badge">
                           {currentFormationNote.startCount}~{currentFormationNote.endCount}
                         </div>
+                        {currentFormationNote.anchorDancers && currentFormationNote.anchorDancers.length > 0 && (
+                          <div className="pov-anchor-dancers">
+                            <strong>⚓ Anchor:</strong> {currentFormationNote.anchorDancers.join(', ')}
+                          </div>
+                        )}
                         {currentFormationNote.notes.map((note, i) => (
                           <div key={i} className="pov-cue-instruction-main" style={{ marginBottom: i < currentFormationNote.notes.length - 1 ? '8px' : 0 }}>
                             {note}

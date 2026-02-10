@@ -29,6 +29,7 @@ export interface FormationNote {
   formationIndex: number;     // 0-based formation index
   startCount: number;
   endCount: number;
+  anchorDancers?: string[];   // Dancers who should position first as reference points
   notes: string[];            // Notes for this specific formation/transition
 }
 
@@ -457,6 +458,7 @@ ${config.formations.map((f, i) => `    {
       "formationIndex": ${i},
       "startCount": ${f.startCount},
       "endCount": ${f.startCount + f.duration},
+      "anchorDancers": ["Name of dancer who should position first", "Another anchor if applicable"],
       "notes": ["Choreographer note for ${f.name}", "Key focus point for this formation"]
     }`).join(',\n')}
   ],`
@@ -509,13 +511,13 @@ Please output in the following JSON format:
       "cues": [
         {
           "timeRange": "0~8",
-          "instruction": "Start at upstage right corner, facing downstage. On count 1, begin walking diagonally toward center stage with confident, measured steps. Reach center by count 6, then hold position with weight on right foot, arms relaxed at sides.",
-          "notes": "Watch for Bob crossing in front of you around count 4 - maintain 1 meter distance. Eye contact with audience throughout."
+          "instruction": "Start at upstage right corner, facing downstage. On count 1, begin walking diagonally toward center stage with confident, measured steps. Reach center by count 6, then hold position with weight on right foot, arms relaxed at sides. Position yourself so you're directly behind Bob from the audience's view.",
+          "notes": "Your anchor: Bob (align directly behind). Watch for Chris crossing in front of you around count 4 - maintain 1 meter distance."
         },
         {
           "timeRange": "8~16",
-          "instruction": "From center, turn 90 degrees to face stage left. Take 4 smooth steps toward stage left wing, decelerating as you approach. Stop at stage left position by count 14, pivot to face audience.",
-          "notes": "Sync your arrival with Chris who is entering from stage right. You should both reach your marks simultaneously on count 14."
+          "instruction": "From center, turn 90 degrees to face stage left. Take 4 smooth steps toward stage left wing, decelerating as you approach. Stop at stage left position by count 14, pivot to face audience. Stand so you're visible between David and Emma from audience view.",
+          "notes": "Your anchor: Between David and Emma. Sync your arrival with Chris who is entering from stage right."
         }
       ]
     }
@@ -531,6 +533,11 @@ Each instruction MUST include:
 4. **Timing specifics** - When to start, when to arrive, pace
 5. **Ending position** - Where to finish and how to stand
 6. **Body awareness** - Posture, arms, head direction, expression
+7. **Alignment reference** - WHO is your anchor? Examples:
+   - "Position yourself directly behind Alice"
+   - "Stand so you're visible between Bob and Charlie from audience view"
+   - "Align with David's left shoulder"
+   - "You should be in the same vertical line as Emma"
 
 **BAD example** (too vague): "Move to center"
 **GOOD example**: "From upstage left, walk diagonally downstage toward center with 6 even steps. Arrive at center on count 4, facing the audience with arms naturally at your sides."
@@ -541,6 +548,11 @@ Each instruction MUST include:
 - **dancerLabel**: Use the "dancerName" from input data (NOT "D1", "D2" - use actual names)
 - **timeRange must use integer counts only** (e.g., "0~8", "8~16") - must match formation boundaries
 - **formationNotes**: Write 2-3 specific notes for each formation focusing on: key transitions, spacing awareness, timing synchronization, potential collision points
+- **anchorDancers**: For each formation, identify 1-3 dancers who serve as reference/anchor points. These are dancers who should get into position FIRST so others can align relative to them. Examples:
+  - Dancer at the very front (downstage) - others line up behind them
+  - Dancer at center stage - others position relative to center
+  - Dancer at the edge who defines the formation width
+  - The dancer who arrives first and holds position while others fill in
 - **CRITICAL - Use Dancer Names**: When referencing dancers ANYWHERE (in instructions, notes, formationNotes, generalNotes), ALWAYS use the actual dancer names from "dancerNameMapping" in the input data. NEVER use "Dancer 4" or "dancers 5, 11, 12" - use their real names like "Alice", "Bob", "Chris".
 - **CRITICAL**: Every dancer must have detailed instructions for EVERY formation they appear in
 - Use encouraging, professional language suitable for rehearsal
