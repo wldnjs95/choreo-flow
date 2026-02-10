@@ -313,8 +313,8 @@ function formatPathDataForGemini(
     return {
       dancerId: dancerPath.dancerId,
       dancerName,
-      startPosition: { zone: startZone, x: Math.round(startPos.x * 10) / 10, y: Math.round(startPos.y * 10) / 10 },
-      endPosition: { zone: endZone, x: Math.round(endPos.x * 10) / 10, y: Math.round(endPos.y * 10) / 10 },
+      startPosition: { zone: startZone },
+      endPosition: { zone: endZone },
       timing: {
         startTime: Math.floor(dancerPath.startTime),
         endTime: Math.ceil(dancerPath.path[dancerPath.path.length - 1]?.t || config.totalCounts),
