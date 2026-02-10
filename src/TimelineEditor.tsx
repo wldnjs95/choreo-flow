@@ -3112,7 +3112,8 @@ Score each option 0-100 based on the weighted criteria above.
             Array.from(transitionPaths.values())[0];
 
           if (selectedPaths) {
-            const transitionStartCount = current.startCount + current.duration;
+            // Transition happens DURING current formation, starting at current.startCount
+            const transitionStartCount = current.startCount;
             selectedPaths.forEach((p: GeneratedPath) => {
               allDancerPaths.push({
                 dancerId: p.dancerId,
