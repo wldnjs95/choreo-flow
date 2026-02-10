@@ -2897,14 +2897,19 @@ Score each option 0-100 based on the weighted criteria above.
       }
     }
 
-    // If all cue sheets are up to date, show message and return
-    if (transitionsToRegenerate.length === 0 && cueSheet) {
+    // Check if cue sheet has all dancers (might be outdated if stationary dancers were missing)
+    const expectedDancerCount = project.dancerCount;
+    const cueSheetDancerCount = cueSheet?.dancers?.length || 0;
+    const dancerCountMismatch = cueSheet && cueSheetDancerCount < expectedDancerCount;
+
+    // If all cue sheets are up to date AND dancer count matches, show message and return
+    if (transitionsToRegenerate.length === 0 && cueSheet && !dancerCountMismatch) {
       showToast('✓ Cue sheet is already up to date', 'success');
       return;
     }
 
-    // If no cue sheet exists at all, regenerate everything
-    const needsFullRegeneration = !cueSheet || transitionsToRegenerate.length === totalTransitions;
+    // If no cue sheet exists at all, or dancer count mismatch, regenerate everything
+    const needsFullRegeneration = !cueSheet || transitionsToRegenerate.length === totalTransitions || dancerCountMismatch;
 
     setIsGeneratingCueSheet(true);
 
