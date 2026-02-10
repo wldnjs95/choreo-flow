@@ -584,6 +584,113 @@ Each instruction MUST include:
 }
 
 // ============================================
+// Post-processing Functions
+// ============================================
+
+/**
+ * Convert absolute count range to 8-count relative format
+ * e.g., "0~16" → "1st 8-count (1-8), 2nd 8-count (1-8)"
+ * e.g., "8~16" → "2nd 8-count (1-8)"
+ * e.g., "4~12" → "1st 8-count (5-8), 2nd 8-count (1-4)"
+ */
+function convertToRelativeCount(timeRange: string): string {
+  const match = timeRange.match(/(\d+)~(\d+)/);
+  if (!match) return timeRange;
+
+  const start = parseInt(match[1]);
+  const end = parseInt(match[2]);
+
+  const get8CountPhrase = (count: number): { phrase: number; position: number } => {
+    const phrase = Math.floor(count / 8) + 1; // 1st, 2nd, 3rd...
+    const position = (count % 8) || 8; // 1-8 within phrase
+    return { phrase, position };
+  };
+
+  const startInfo = get8CountPhrase(start);
+  const endInfo = get8CountPhrase(end);
+
+  const ordinal = (n: number): string => {
+    const suffixes = ['th', 'st', 'nd', 'rd'];
+    const v = n % 100;
+    return n + (suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0]);
+  };
+
+  if (startInfo.phrase === endInfo.phrase) {
+    // Same 8-count phrase
+    return `${ordinal(startInfo.phrase)} 8: count ${startInfo.position}-${endInfo.position}`;
+  } else {
+    // Spans multiple 8-count phrases
+    const parts: string[] = [];
+    for (let p = startInfo.phrase; p <= endInfo.phrase; p++) {
+      const pStart = p === startInfo.phrase ? startInfo.position : 1;
+      const pEnd = p === endInfo.phrase ? endInfo.position : 8;
+      parts.push(`${ordinal(p)} 8: ${pStart}-${pEnd}`);
+    }
+    return parts.join(', ');
+  }
+}
+
+/**
+ * Replace "Dancer X" patterns with actual names from dancerNames
+ */
+function replaceDancerNames(text: string, dancerNames: Record<string | number, string>): string {
+  // Match patterns like "Dancer 1", "Dancer 20", "dancer 5", "Dancers 4, 5, 11"
+  return text.replace(/[Dd]ancer\s*(\d+)/g, (match, id) => {
+    const name = dancerNames[Number(id)] || dancerNames[id];
+    return name || match;
+  });
+}
+
+/**
+ * Post-process cue sheet to fix dancer names and count format
+ */
+function postProcessCueSheet(
+  result: CueSheetResult,
+  dancerNames: Record<string | number, string>
+): CueSheetResult {
+  // Process each dancer's cues
+  result.dancers = result.dancers.map(dancer => {
+    // Fix dancerLabel if it's "Dancer X" format
+    if (dancer.dancerLabel.match(/^[Dd]ancer\s*\d+$/)) {
+      const idMatch = dancer.dancerLabel.match(/\d+/);
+      if (idMatch) {
+        const name = dancerNames[Number(idMatch[0])] || dancerNames[idMatch[0]];
+        if (name) dancer.dancerLabel = name;
+      }
+    }
+
+    // Process each cue
+    dancer.cues = dancer.cues.map(cue => ({
+      ...cue,
+      timeRange: convertToRelativeCount(cue.timeRange),
+      instruction: replaceDancerNames(cue.instruction, dancerNames),
+      notes: cue.notes ? replaceDancerNames(cue.notes, dancerNames) : cue.notes,
+    }));
+
+    // Process summary
+    dancer.summary = replaceDancerNames(dancer.summary, dancerNames);
+
+    return dancer;
+  });
+
+  // Process general notes
+  if (result.generalNotes) {
+    result.generalNotes = result.generalNotes.map(note => replaceDancerNames(note, dancerNames));
+  }
+
+  // Process formation notes
+  if (result.formationNotes) {
+    result.formationNotes = result.formationNotes.map(fn => ({
+      ...fn,
+      notes: fn.notes.map(note => replaceDancerNames(note, dancerNames)),
+      anchorDancers: fn.anchorDancers?.map(name => replaceDancerNames(name, dancerNames)),
+    }));
+  }
+
+  return result;
+}
+
+// ============================================
 // Main API Function
 // ============================================
 
@@ -598,6 +705,8 @@ export async function generateCueSheet(
     language: config.language || 'ko',
     includeRelativePositioning: config.includeRelativePositioning ?? true,
     includeArtisticNuance: config.includeArtisticNuance ?? true,
+    formations: config.formations,
+    dancerNames: config.dancerNames,
   };
 
   // Format path data for Gemini
@@ -625,6 +734,12 @@ export async function generateCueSheet(
     // Add stage info
     parsedResult.stageInfo = `${fullConfig.stageWidth}m × ${fullConfig.stageHeight}m`;
     parsedResult.totalCounts = fullConfig.totalCounts;
+
+    // Post-process: Replace "Dancer X" with actual names and convert count format
+    const dancerNames = fullConfig.dancerNames as Record<string | number, string> | undefined;
+    if (dancerNames) {
+      parsedResult = postProcessCueSheet(parsedResult, dancerNames);
+    }
 
     console.log('[CueSheetGenerator] Cue sheet generated successfully');
     return parsedResult;

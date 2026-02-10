@@ -1,0 +1,2341 @@
+{
+  "version": "2.0",
+  "project": {
+    "id": "project-1770630431276-8u5tahota",
+    "name": "Project A",
+    "createdAt": "2026-02-09T09:47:11.276Z",
+    "updatedAt": "2026-02-09T23:47:30.680Z",
+    "dancerCount": 25,
+    "stageWidth": 24,
+    "stageHeight": 15,
+    "formations": [
+      {
+        "id": "formation-1770630431276-mge6hj7ta",
+        "startCount": 0,
+        "duration": 8,
+        "positions": [
+          {
+            "dancerId": 1,
+            "position": {
+              "x": 12,
+              "y": 11.5
+            },
+            "color": "#FF6B6B"
+          },
+          {
+            "dancerId": 2,
+            "position": {
+              "x": 8.727272727272727,
+              "y": 11.5
+            },
+            "color": "#4ECDC4"
+          },
+          {
+            "dancerId": 3,
+            "position": {
+              "x": 15.272727272727272,
+              "y": 11.5
+            },
+            "color": "#45B7D1"
+          },
+          {
+            "dancerId": 4,
+            "position": {
+              "x": 17,
+              "y": 10.5
+            },
+            "color": "#96CEB4"
+          },
+          {
+            "dancerId": 5,
+            "position": {
+              "x": 7,
+              "y": 10.5
+            },
+            "color": "#FFEAA7"
+          },
+          {
+            "dancerId": 6,
+            "position": {
+              "x": 5.454545454545454,
+              "y": 9.5
+            },
+            "color": "#DDA0DD"
+          },
+          {
+            "dancerId": 7,
+            "position": {
+              "x": 3.818181818181818,
+              "y": 8.5
+            },
+            "color": "#98D8C8"
+          },
+          {
+            "dancerId": 8,
+            "position": {
+              "x": 2.1818181818181817,
+              "y": 7.5
+            },
+            "color": "#F7DC6F"
+          },
+          {
+            "dancerId": 9,
+            "position": {
+              "x": 7.09090909090909,
+              "y": 8.5
+            },
+            "color": "#1E90FF"
+          },
+          {
+            "dancerId": 10,
+            "position": {
+              "x": 20.18181818181818,
+              "y": 8.5
+            },
+            "color": "#F79F1F"
+          },
+          {
+            "dancerId": 11,
+            "position": {
+              "x": 5.5,
+              "y": 7.5
+            },
+            "color": "#E74C3C"
+          },
+          {
+            "dancerId": 12,
+            "position": {
+              "x": 15.272727272727272,
+              "y": 9.5
+            },
+            "color": "#1ABC9C"
+          },
+          {
+            "dancerId": 13,
+            "position": {
+              "x": 21.5,
+              "y": 7.5
+            },
+            "color": "#6C5CE7"
+          },
+          {
+            "dancerId": 14,
+            "position": {
+              "x": 18.545454545454543,
+              "y": 7.5
+            },
+            "color": "#FF69B4"
+          },
+          {
+            "dancerId": 15,
+            "position": {
+              "x": 9,
+              "y": 7.5
+            },
+            "color": "#BADC58"
+          },
+          {
+            "dancerId": 16,
+            "position": {
+              "x": 12,
+              "y": 7.5
+            },
+            "color": "#2980B9"
+          },
+          {
+            "dancerId": 17,
+            "position": {
+              "x": 10.909090909090908,
+              "y": 8.5
+            },
+            "color": "#A8E6CF"
+          },
+          {
+            "dancerId": 18,
+            "position": {
+              "x": 12,
+              "y": 10
+            },
+            "color": "#F9CA24"
+          },
+          {
+            "dancerId": 19,
+            "position": {
+              "x": 9,
+              "y": 9.5
+            },
+            "color": "#E67E22"
+          },
+          {
+            "dancerId": 20,
+            "position": {
+              "x": 10,
+              "y": 10.5
+            },
+            "color": "#16A085"
+          },
+          {
+            "dancerId": 21,
+            "position": {
+              "x": 14.5,
+              "y": 7.5
+            },
+            "color": "#686DE0"
+          },
+          {
+            "dancerId": 22,
+            "position": {
+              "x": 16.909090909090907,
+              "y": 8.5
+            },
+            "color": "#E91E63"
+          },
+          {
+            "dancerId": 23,
+            "position": {
+              "x": 13.636363636363635,
+              "y": 10.5
+            },
+            "color": "#A4DE02"
+          },
+          {
+            "dancerId": 24,
+            "position": {
+              "x": 18.5,
+              "y": 9.5
+            },
+            "color": "#22A6B3"
+          },
+          {
+            "dancerId": 25,
+            "position": {
+              "x": 13.5,
+              "y": 8.5
+            },
+            "color": "#22A6B3"
+          }
+        ],
+        "transitionType": "linear",
+        "label": "Opening"
+      },
+      {
+        "id": "formation-1770660438630-nssc3h37j",
+        "startCount": 8,
+        "duration": 8,
+        "positions": [
+          {
+            "dancerId": 1,
+            "position": {
+              "x": 12,
+              "y": 11.5
+            },
+            "color": "#FF6B6B"
+          },
+          {
+            "dancerId": 2,
+            "position": {
+              "x": 6,
+              "y": 11.5
+            },
+            "color": "#4ECDC4"
+          },
+          {
+            "dancerId": 3,
+            "position": {
+              "x": 18,
+              "y": 11.5
+            },
+            "color": "#45B7D1"
+          },
+          {
+            "dancerId": 4,
+            "position": {
+              "x": 21,
+              "y": 11.5
+            },
+            "color": "#96CEB4"
+          },
+          {
+            "dancerId": 5,
+            "position": {
+              "x": 3,
+              "y": 11.5
+            },
+            "color": "#FFEAA7"
+          },
+          {
+            "dancerId": 6,
+            "position": {
+              "x": 4.5,
+              "y": 10.5
+            },
+            "color": "#DDA0DD"
+          },
+          {
+            "dancerId": 7,
+            "position": {
+              "x": 6,
+              "y": 9.5
+            },
+            "color": "#98D8C8"
+          },
+          {
+            "dancerId": 8,
+            "position": {
+              "x": 3,
+              "y": 9.5
+            },
+            "color": "#F7DC6F"
+          },
+          {
+            "dancerId": 9,
+            "position": {
+              "x": 9,
+              "y": 9.5
+            },
+            "color": "#1E90FF"
+          },
+          {
+            "dancerId": 10,
+            "position": {
+              "x": 18,
+              "y": 9.5
+            },
+            "color": "#F79F1F"
+          },
+          {
+            "dancerId": 11,
+            "position": {
+              "x": 5,
+              "y": 8.5
+            },
+            "color": "#E74C3C"
+          },
+          {
+            "dancerId": 12,
+            "position": {
+              "x": 16.5,
+              "y": 10.5
+            },
+            "color": "#1ABC9C"
+          },
+          {
+            "dancerId": 13,
+            "position": {
+              "x": 21,
+              "y": 9.5
+            },
+            "color": "#6C5CE7"
+          },
+          {
+            "dancerId": 14,
+            "position": {
+              "x": 19,
+              "y": 8.5
+            },
+            "color": "#FF69B4"
+          },
+          {
+            "dancerId": 15,
+            "position": {
+              "x": 7.5,
+              "y": 8
+            },
+            "color": "#BADC58"
+          },
+          {
+            "dancerId": 16,
+            "position": {
+              "x": 13,
+              "y": 8
+            },
+            "color": "#2980B9"
+          },
+          {
+            "dancerId": 17,
+            "position": {
+              "x": 12,
+              "y": 9.5
+            },
+            "color": "#A8E6CF"
+          },
+          {
+            "dancerId": 18,
+            "position": {
+              "x": 10.5,
+              "y": 10.5
+            },
+            "color": "#F9CA24"
+          },
+          {
+            "dancerId": 19,
+            "position": {
+              "x": 7.5,
+              "y": 10.5
+            },
+            "color": "#E67E22"
+          },
+          {
+            "dancerId": 20,
+            "position": {
+              "x": 9,
+              "y": 11.5
+            },
+            "color": "#16A085"
+          },
+          {
+            "dancerId": 21,
+            "position": {
+              "x": 16.5,
+              "y": 8
+            },
+            "color": "#686DE0"
+          },
+          {
+            "dancerId": 22,
+            "position": {
+              "x": 15,
+              "y": 9.5
+            },
+            "color": "#E91E63"
+          },
+          {
+            "dancerId": 23,
+            "position": {
+              "x": 15,
+              "y": 11.5
+            },
+            "color": "#A4DE02"
+          },
+          {
+            "dancerId": 24,
+            "position": {
+              "x": 19.5,
+              "y": 10.5
+            },
+            "color": "#22A6B3"
+          },
+          {
+            "dancerId": 25,
+            "position": {
+              "x": 13.5,
+              "y": 10.5
+            },
+            "color": "#22A6B3"
+          }
+        ],
+        "transitionType": "linear",
+        "label": "Start"
+      },
+      {
+        "id": "formation-1770669198077-de0lp5vhv",
+        "startCount": 16,
+        "duration": 8,
+        "label": "Start move",
+        "transitionType": "linear",
+        "positions": [
+          {
+            "dancerId": 1,
+            "position": {
+              "x": 23.5,
+              "y": 1.5
+            },
+            "color": "#FF6B6B"
+          },
+          {
+            "dancerId": 2,
+            "position": {
+              "x": 23.5,
+              "y": 4.5
+            },
+            "color": "#4ECDC4"
+          },
+          {
+            "dancerId": 3,
+            "position": {
+              "x": 20.5,
+              "y": 7.5
+            },
+            "color": "#45B7D1"
+          },
+          {
+            "dancerId": 4,
+            "position": {
+              "x": 20.5,
+              "y": 6
+            },
+            "color": "#96CEB4"
+          },
+          {
+            "dancerId": 5,
+            "position": {
+              "x": 20.5,
+              "y": 13.5
+            },
+            "color": "#FFEAA7"
+          },
+          {
+            "dancerId": 6,
+            "position": {
+              "x": 4,
+              "y": 7.5
+            },
+            "color": "#DDA0DD"
+          },
+          {
+            "dancerId": 7,
+            "position": {
+              "x": 10,
+              "y": 9
+            },
+            "color": "#98D8C8"
+          },
+          {
+            "dancerId": 8,
+            "position": {
+              "x": 8,
+              "y": 9
+            },
+            "color": "#F7DC6F"
+          },
+          {
+            "dancerId": 9,
+            "position": {
+              "x": 12,
+              "y": 9
+            },
+            "color": "#1E90FF"
+          },
+          {
+            "dancerId": 10,
+            "position": {
+              "x": 20.5,
+              "y": 10.5
+            },
+            "color": "#F79F1F"
+          },
+          {
+            "dancerId": 11,
+            "position": {
+              "x": 4,
+              "y": 6
+            },
+            "color": "#E74C3C"
+          },
+          {
+            "dancerId": 12,
+            "position": {
+              "x": 4,
+              "y": 10.5
+            },
+            "color": "#1ABC9C"
+          },
+          {
+            "dancerId": 13,
+            "position": {
+              "x": 20.5,
+              "y": 4.5
+            },
+            "color": "#6C5CE7"
+          },
+          {
+            "dancerId": 14,
+            "position": {
+              "x": 15,
+              "y": 7.5
+            },
+            "color": "#FF69B4"
+          },
+          {
+            "dancerId": 15,
+            "position": {
+              "x": 9,
+              "y": 7.5
+            },
+            "color": "#BADC58"
+          },
+          {
+            "dancerId": 16,
+            "position": {
+              "x": 11,
+              "y": 7.5
+            },
+            "color": "#2980B9"
+          },
+          {
+            "dancerId": 17,
+            "position": {
+              "x": 14,
+              "y": 9
+            },
+            "color": "#A8E6CF"
+          },
+          {
+            "dancerId": 18,
+            "position": {
+              "x": 1,
+              "y": 11
+            },
+            "color": "#F9CA24"
+          },
+          {
+            "dancerId": 19,
+            "position": {
+              "x": 4,
+              "y": 9
+            },
+            "color": "#E67E22"
+          },
+          {
+            "dancerId": 20,
+            "position": {
+              "x": 20.5,
+              "y": 12
+            },
+            "color": "#16A085"
+          },
+          {
+            "dancerId": 21,
+            "position": {
+              "x": 13,
+              "y": 7.5
+            },
+            "color": "#686DE0"
+          },
+          {
+            "dancerId": 22,
+            "position": {
+              "x": 16,
+              "y": 9
+            },
+            "color": "#E91E63"
+          },
+          {
+            "dancerId": 23,
+            "position": {
+              "x": 20.5,
+              "y": 9
+            },
+            "color": "#A4DE02"
+          },
+          {
+            "dancerId": 24,
+            "position": {
+              "x": 4,
+              "y": 12
+            },
+            "color": "#22A6B3"
+          },
+          {
+            "dancerId": 25,
+            "position": {
+              "x": 1,
+              "y": 12
+            },
+            "color": "#22A6B3"
+          }
+        ]
+      },
+      {
+        "id": "formation-1770671236867-1b7g08797",
+        "startCount": 24,
+        "duration": 8,
+        "label": "4",
+        "transitionType": "linear",
+        "positions": [
+          {
+            "dancerId": 1,
+            "position": {
+              "x": 23.5,
+              "y": 1.5
+            },
+            "color": "#FF6B6B"
+          },
+          {
+            "dancerId": 2,
+            "position": {
+              "x": 23.5,
+              "y": 4.5
+            },
+            "color": "#4ECDC4"
+          },
+          {
+            "dancerId": 3,
+            "position": {
+              "x": 17.367284914398493,
+              "y": 5.617266809679158
+            },
+            "color": "#45B7D1"
+          },
+          {
+            "dancerId": 4,
+            "position": {
+              "x": 19.663575428007544,
+              "y": 7.413665951604211
+            },
+            "color": "#96CEB4"
+          },
+          {
+            "dancerId": 5,
+            "position": {
+              "x": 21,
+              "y": 9.5
+            },
+            "color": "#FFEAA7"
+          },
+          {
+            "dancerId": 6,
+            "position": {
+              "x": 7.782924875120644,
+              "y": 6.148931584476701
+            },
+            "color": "#DDA0DD"
+          },
+          {
+            "dancerId": 7,
+            "position": {
+              "x": 10,
+              "y": 9
+            },
+            "color": "#98D8C8"
+          },
+          {
+            "dancerId": 8,
+            "position": {
+              "x": 8,
+              "y": 9
+            },
+            "color": "#F7DC6F"
+          },
+          {
+            "dancerId": 9,
+            "position": {
+              "x": 12,
+              "y": 9
+            },
+            "color": "#1E90FF"
+          },
+          {
+            "dancerId": 10,
+            "position": {
+              "x": 15.896152563583339,
+              "y": 4.575264119478655
+            },
+            "color": "#F79F1F"
+          },
+          {
+            "dancerId": 11,
+            "position": {
+              "x": 9.130128511209943,
+              "y": 5.321258724641503
+            },
+            "color": "#E74C3C"
+          },
+          {
+            "dancerId": 12,
+            "position": {
+              "x": 5.088517602942049,
+              "y": 7.804277304147095
+            },
+            "color": "#1ABC9C"
+          },
+          {
+            "dancerId": 13,
+            "position": {
+              "x": 14.891810426016788,
+              "y": 3.3540774545055037
+            },
+            "color": "#6C5CE7"
+          },
+          {
+            "dancerId": 14,
+            "position": {
+              "x": 15,
+              "y": 7.5
+            },
+            "color": "#FF69B4"
+          },
+          {
+            "dancerId": 15,
+            "position": {
+              "x": 9,
+              "y": 7.5
+            },
+            "color": "#BADC58"
+          },
+          {
+            "dancerId": 16,
+            "position": {
+              "x": 11,
+              "y": 7.5
+            },
+            "color": "#2980B9"
+          },
+          {
+            "dancerId": 17,
+            "position": {
+              "x": 14,
+              "y": 9
+            },
+            "color": "#A8E6CF"
+          },
+          {
+            "dancerId": 18,
+            "position": {
+              "x": 1,
+              "y": 11
+            },
+            "color": "#F9CA24"
+          },
+          {
+            "dancerId": 19,
+            "position": {
+              "x": 6.435721239031347,
+              "y": 6.9766044443118975
+            },
+            "color": "#E67E22"
+          },
+          {
+            "dancerId": 20,
+            "position": {
+              "x": 20.488733590801445,
+              "y": 8.168062403328763
+            },
+            "color": "#16A085"
+          },
+          {
+            "dancerId": 21,
+            "position": {
+              "x": 13,
+              "y": 7.5
+            },
+            "color": "#686DE0"
+          },
+          {
+            "dancerId": 22,
+            "position": {
+              "x": 16,
+              "y": 9
+            },
+            "color": "#E91E63"
+          },
+          {
+            "dancerId": 23,
+            "position": {
+              "x": 18.192443077192394,
+              "y": 6.371663261403709
+            },
+            "color": "#A4DE02"
+          },
+          {
+            "dancerId": 24,
+            "position": {
+              "x": 4,
+              "y": 9
+            },
+            "color": "#22A6B3"
+          },
+          {
+            "dancerId": 25,
+            "position": {
+              "x": 0.75,
+              "y": 0.5
+            },
+            "color": "#22A6B3"
+          }
+        ]
+      },
+      {
+        "id": "formation-1770662678314-o14ar35ye",
+        "startCount": 32,
+        "duration": 8,
+        "positions": [
+          {
+            "dancerId": 1,
+            "position": {
+              "x": 23.5,
+              "y": 7.5
+            },
+            "color": "#FF6B6B"
+          },
+          {
+            "dancerId": 2,
+            "position": {
+              "x": 23.5,
+              "y": 5
+            },
+            "color": "#4ECDC4"
+          },
+          {
+            "dancerId": 3,
+            "position": {
+              "x": 12.5,
+              "y": 3
+            },
+            "color": "#45B7D1"
+          },
+          {
+            "dancerId": 4,
+            "position": {
+              "x": 4.5,
+              "y": 4
+            },
+            "color": "#96CEB4"
+          },
+          {
+            "dancerId": 5,
+            "position": {
+              "x": 17.5,
+              "y": 3
+            },
+            "color": "#FFEAA7"
+          },
+          {
+            "dancerId": 6,
+            "position": {
+              "x": 13,
+              "y": 5
+            },
+            "color": "#DDA0DD"
+          },
+          {
+            "dancerId": 7,
+            "position": {
+              "x": 10,
+              "y": 9.5
+            },
+            "color": "#98D8C8"
+          },
+          {
+            "dancerId": 8,
+            "position": {
+              "x": 8,
+              "y": 9.5
+            },
+            "color": "#F7DC6F"
+          },
+          {
+            "dancerId": 9,
+            "position": {
+              "x": 12,
+              "y": 9.5
+            },
+            "color": "#1E90FF"
+          },
+          {
+            "dancerId": 10,
+            "position": {
+              "x": 10.5,
+              "y": 5
+            },
+            "color": "#F79F1F"
+          },
+          {
+            "dancerId": 11,
+            "position": {
+              "x": 18,
+              "y": 5
+            },
+            "color": "#E74C3C"
+          },
+          {
+            "dancerId": 12,
+            "position": {
+              "x": 7,
+              "y": 3
+            },
+            "color": "#1ABC9C"
+          },
+          {
+            "dancerId": 13,
+            "position": {
+              "x": 6,
+              "y": 5
+            },
+            "color": "#6C5CE7"
+          },
+          {
+            "dancerId": 14,
+            "position": {
+              "x": 15,
+              "y": 8
+            },
+            "color": "#FF69B4"
+          },
+          {
+            "dancerId": 15,
+            "position": {
+              "x": 9,
+              "y": 8
+            },
+            "color": "#BADC58"
+          },
+          {
+            "dancerId": 16,
+            "position": {
+              "x": 11,
+              "y": 8
+            },
+            "color": "#2980B9"
+          },
+          {
+            "dancerId": 17,
+            "position": {
+              "x": 14,
+              "y": 9.5
+            },
+            "color": "#A8E6CF"
+          },
+          {
+            "dancerId": 18,
+            "position": {
+              "x": 0.5,
+              "y": 3
+            },
+            "color": "#F9CA24"
+          },
+          {
+            "dancerId": 19,
+            "position": {
+              "x": 9.5,
+              "y": 3
+            },
+            "color": "#E67E22"
+          },
+          {
+            "dancerId": 20,
+            "position": {
+              "x": 15,
+              "y": 3
+            },
+            "color": "#16A085"
+          },
+          {
+            "dancerId": 21,
+            "position": {
+              "x": 13,
+              "y": 8
+            },
+            "color": "#686DE0"
+          },
+          {
+            "dancerId": 22,
+            "position": {
+              "x": 16,
+              "y": 9.5
+            },
+            "color": "#E91E63"
+          },
+          {
+            "dancerId": 23,
+            "position": {
+              "x": 15.5,
+              "y": 5
+            },
+            "color": "#A4DE02"
+          },
+          {
+            "dancerId": 24,
+            "position": {
+              "x": 8,
+              "y": 5
+            },
+            "color": "#22A6B3"
+          },
+          {
+            "dancerId": 25,
+            "position": {
+              "x": 0.75,
+              "y": 0.5
+            },
+            "color": "#22A6B3"
+          }
+        ],
+        "transitionType": "linear",
+        "label": "Forward"
+      },
+      {
+        "id": "formation-1770660937626-nfrte1ed0",
+        "startCount": 40,
+        "duration": 8,
+        "positions": [
+          {
+            "dancerId": 1,
+            "position": {
+              "x": 23,
+              "y": 1.5
+            },
+            "color": "#FF6B6B"
+          },
+          {
+            "dancerId": 2,
+            "position": {
+              "x": 23.5,
+              "y": 2.5
+            },
+            "color": "#4ECDC4"
+          },
+          {
+            "dancerId": 3,
+            "position": {
+              "x": 15,
+              "y": 3
+            },
+            "color": "#45B7D1"
+          },
+          {
+            "dancerId": 4,
+            "position": {
+              "x": 7,
+              "y": 3
+            },
+            "color": "#96CEB4"
+          },
+          {
+            "dancerId": 5,
+            "position": {
+              "x": 18,
+              "y": 5
+            },
+            "color": "#FFEAA7"
+          },
+          {
+            "dancerId": 6,
+            "position": {
+              "x": 10.5,
+              "y": 5
+            },
+            "color": "#DDA0DD"
+          },
+          {
+            "dancerId": 7,
+            "position": {
+              "x": 10,
+              "y": 11
+            },
+            "color": "#98D8C8"
+          },
+          {
+            "dancerId": 8,
+            "position": {
+              "x": 7,
+              "y": 11
+            },
+            "color": "#F7DC6F"
+          },
+          {
+            "dancerId": 9,
+            "position": {
+              "x": 15.5,
+              "y": 9.5
+            },
+            "color": "#1E90FF"
+          },
+          {
+            "dancerId": 10,
+            "position": {
+              "x": 8,
+              "y": 5
+            },
+            "color": "#F79F1F"
+          },
+          {
+            "dancerId": 11,
+            "position": {
+              "x": 15.5,
+              "y": 5
+            },
+            "color": "#E74C3C"
+          },
+          {
+            "dancerId": 12,
+            "position": {
+              "x": 9.5,
+              "y": 3
+            },
+            "color": "#1ABC9C"
+          },
+          {
+            "dancerId": 13,
+            "position": {
+              "x": 4.5,
+              "y": 4
+            },
+            "color": "#6C5CE7"
+          },
+          {
+            "dancerId": 14,
+            "position": {
+              "x": 13.5,
+              "y": 8.5
+            },
+            "color": "#FF69B4"
+          },
+          {
+            "dancerId": 15,
+            "position": {
+              "x": 8.5,
+              "y": 9.5
+            },
+            "color": "#BADC58"
+          },
+          {
+            "dancerId": 16,
+            "position": {
+              "x": 10.5,
+              "y": 8.5
+            },
+            "color": "#2980B9"
+          },
+          {
+            "dancerId": 17,
+            "position": {
+              "x": 14,
+              "y": 11
+            },
+            "color": "#A8E6CF"
+          },
+          {
+            "dancerId": 18,
+            "position": {
+              "x": 0.5,
+              "y": 3.5
+            },
+            "color": "#F9CA24"
+          },
+          {
+            "dancerId": 19,
+            "position": {
+              "x": 12.5,
+              "y": 3
+            },
+            "color": "#E67E22"
+          },
+          {
+            "dancerId": 20,
+            "position": {
+              "x": 17.5,
+              "y": 3
+            },
+            "color": "#16A085"
+          },
+          {
+            "dancerId": 21,
+            "position": {
+              "x": 12,
+              "y": 10
+            },
+            "color": "#686DE0"
+          },
+          {
+            "dancerId": 22,
+            "position": {
+              "x": 17,
+              "y": 11
+            },
+            "color": "#E91E63"
+          },
+          {
+            "dancerId": 23,
+            "position": {
+              "x": 13,
+              "y": 5
+            },
+            "color": "#A4DE02"
+          },
+          {
+            "dancerId": 24,
+            "position": {
+              "x": 6,
+              "y": 5
+            },
+            "color": "#22A6B3"
+          },
+          {
+            "dancerId": 25,
+            "position": {
+              "x": 0.75,
+              "y": 0.5
+            },
+            "color": "#22A6B3"
+          }
+        ],
+        "transitionType": "linear",
+        "label": "Forward"
+      },
+      {
+        "id": "formation-1770661054410-aga6h04jg",
+        "startCount": 48,
+        "duration": 8,
+        "positions": [
+          {
+            "dancerId": 1,
+            "position": {
+              "x": 23,
+              "y": 4
+            },
+            "color": "#FF6B6B"
+          },
+          {
+            "dancerId": 2,
+            "position": {
+              "x": 0.5,
+              "y": 3
+            },
+            "color": "#4ECDC4"
+          },
+          {
+            "dancerId": 3,
+            "position": {
+              "x": 12.5,
+              "y": 3
+            },
+            "color": "#45B7D1"
+          },
+          {
+            "dancerId": 4,
+            "position": {
+              "x": 4.5,
+              "y": 4
+            },
+            "color": "#96CEB4"
+          },
+          {
+            "dancerId": 5,
+            "position": {
+              "x": 17.5,
+              "y": 3
+            },
+            "color": "#FFEAA7"
+          },
+          {
+            "dancerId": 6,
+            "position": {
+              "x": 13,
+              "y": 5
+            },
+            "color": "#DDA0DD"
+          },
+          {
+            "dancerId": 7,
+            "position": {
+              "x": 9,
+              "y": 11.5
+            },
+            "color": "#98D8C8"
+          },
+          {
+            "dancerId": 8,
+            "position": {
+              "x": 7,
+              "y": 10.5
+            },
+            "color": "#F7DC6F"
+          },
+          {
+            "dancerId": 9,
+            "position": {
+              "x": 13.5,
+              "y": 10.5
+            },
+            "color": "#1E90FF"
+          },
+          {
+            "dancerId": 10,
+            "position": {
+              "x": 10.5,
+              "y": 5
+            },
+            "color": "#F79F1F"
+          },
+          {
+            "dancerId": 11,
+            "position": {
+              "x": 18,
+              "y": 5
+            },
+            "color": "#E74C3C"
+          },
+          {
+            "dancerId": 12,
+            "position": {
+              "x": 7,
+              "y": 3
+            },
+            "color": "#1ABC9C"
+          },
+          {
+            "dancerId": 13,
+            "position": {
+              "x": 6,
+              "y": 5
+            },
+            "color": "#6C5CE7"
+          },
+          {
+            "dancerId": 14,
+            "position": {
+              "x": 16,
+              "y": 9.5
+            },
+            "color": "#FF69B4"
+          },
+          {
+            "dancerId": 15,
+            "position": {
+              "x": 10.5,
+              "y": 10.5
+            },
+            "color": "#BADC58"
+          },
+          {
+            "dancerId": 16,
+            "position": {
+              "x": 8,
+              "y": 9.5
+            },
+            "color": "#2980B9"
+          },
+          {
+            "dancerId": 17,
+            "position": {
+              "x": 15,
+              "y": 11.5
+            },
+            "color": "#A8E6CF"
+          },
+          {
+            "dancerId": 18,
+            "position": {
+              "x": 1,
+              "y": 4.5
+            },
+            "color": "#F9CA24"
+          },
+          {
+            "dancerId": 19,
+            "position": {
+              "x": 9.5,
+              "y": 3
+            },
+            "color": "#E67E22"
+          },
+          {
+            "dancerId": 20,
+            "position": {
+              "x": 15,
+              "y": 3
+            },
+            "color": "#16A085"
+          },
+          {
+            "dancerId": 21,
+            "position": {
+              "x": 12,
+              "y": 11.5
+            },
+            "color": "#686DE0"
+          },
+          {
+            "dancerId": 22,
+            "position": {
+              "x": 17,
+              "y": 10.5
+            },
+            "color": "#E91E63"
+          },
+          {
+            "dancerId": 23,
+            "position": {
+              "x": 15.5,
+              "y": 5
+            },
+            "color": "#A4DE02"
+          },
+          {
+            "dancerId": 24,
+            "position": {
+              "x": 8,
+              "y": 5
+            },
+            "color": "#22A6B3"
+          },
+          {
+            "dancerId": 25,
+            "position": {
+              "x": 0.75,
+              "y": 0.5
+            },
+            "color": "#22A6B3"
+          }
+        ],
+        "transitionType": "linear",
+        "label": "Son Group"
+      },
+      {
+        "id": "formation-1770661514842-le781u3h7",
+        "startCount": 56,
+        "duration": 8,
+        "positions": [
+          {
+            "dancerId": 1,
+            "position": {
+              "x": 23.5,
+              "y": 6.5
+            },
+            "color": "#FF6B6B"
+          },
+          {
+            "dancerId": 2,
+            "position": {
+              "x": 0.75,
+              "y": 3
+            },
+            "color": "#4ECDC4"
+          },
+          {
+            "dancerId": 3,
+            "position": {
+              "x": 13.5,
+              "y": 4
+            },
+            "color": "#45B7D1"
+          },
+          {
+            "dancerId": 4,
+            "position": {
+              "x": 3,
+              "y": 8
+            },
+            "color": "#96CEB4"
+          },
+          {
+            "dancerId": 5,
+            "position": {
+              "x": 21,
+              "y": 8
+            },
+            "color": "#FFEAA7"
+          },
+          {
+            "dancerId": 6,
+            "position": {
+              "x": 10.5,
+              "y": 4
+            },
+            "color": "#DDA0DD"
+          },
+          {
+            "dancerId": 7,
+            "position": {
+              "x": 0.75,
+              "y": 8.5
+            },
+            "color": "#98D8C8"
+          },
+          {
+            "dancerId": 8,
+            "position": {
+              "x": 0.75,
+              "y": 11
+            },
+            "color": "#F7DC6F"
+          },
+          {
+            "dancerId": 9,
+            "position": {
+              "x": 0.75,
+              "y": 9.5
+            },
+            "color": "#1E90FF"
+          },
+          {
+            "dancerId": 10,
+            "position": {
+              "x": 8.5,
+              "y": 4.5
+            },
+            "color": "#F79F1F"
+          },
+          {
+            "dancerId": 11,
+            "position": {
+              "x": 19.5,
+              "y": 6.5
+            },
+            "color": "#E74C3C"
+          },
+          {
+            "dancerId": 12,
+            "position": {
+              "x": 12,
+              "y": 6
+            },
+            "color": "#1ABC9C"
+          },
+          {
+            "dancerId": 13,
+            "position": {
+              "x": 4.5,
+              "y": 6.5
+            },
+            "color": "#6C5CE7"
+          },
+          {
+            "dancerId": 14,
+            "position": {
+              "x": 23.25,
+              "y": 9.5
+            },
+            "color": "#FF69B4"
+          },
+          {
+            "dancerId": 15,
+            "position": {
+              "x": 23.25,
+              "y": 12.5
+            },
+            "color": "#BADC58"
+          },
+          {
+            "dancerId": 16,
+            "position": {
+              "x": 10,
+              "y": 8
+            },
+            "color": "#2980B9"
+          },
+          {
+            "dancerId": 17,
+            "position": {
+              "x": 23,
+              "y": 8.5
+            },
+            "color": "#A8E6CF"
+          },
+          {
+            "dancerId": 18,
+            "position": {
+              "x": 0.5,
+              "y": 5.5
+            },
+            "color": "#F9CA24"
+          },
+          {
+            "dancerId": 19,
+            "position": {
+              "x": 14,
+              "y": 8
+            },
+            "color": "#E67E22"
+          },
+          {
+            "dancerId": 20,
+            "position": {
+              "x": 17.5,
+              "y": 5.5
+            },
+            "color": "#16A085"
+          },
+          {
+            "dancerId": 21,
+            "position": {
+              "x": 23.25,
+              "y": 13.5
+            },
+            "color": "#686DE0"
+          },
+          {
+            "dancerId": 22,
+            "position": {
+              "x": 23,
+              "y": 3
+            },
+            "color": "#E91E63"
+          },
+          {
+            "dancerId": 23,
+            "position": {
+              "x": 15.5,
+              "y": 4.5
+            },
+            "color": "#A4DE02"
+          },
+          {
+            "dancerId": 24,
+            "position": {
+              "x": 6.5,
+              "y": 5.5
+            },
+            "color": "#22A6B3"
+          },
+          {
+            "dancerId": 25,
+            "position": {
+              "x": 0.75,
+              "y": 0.5
+            },
+            "color": "#22A6B3"
+          }
+        ],
+        "transitionType": "linear",
+        "label": "Half Circle"
+      },
+      {
+        "id": "formation-1770661796175-pwoju3ehz",
+        "startCount": 64,
+        "duration": 8,
+        "positions": [
+          {
+            "dancerId": 1,
+            "position": {
+              "x": 10.5,
+              "y": 4
+            },
+            "color": "#FF6B6B"
+          },
+          {
+            "dancerId": 2,
+            "position": {
+              "x": 0.75,
+              "y": 3
+            },
+            "color": "#4ECDC4"
+          },
+          {
+            "dancerId": 3,
+            "position": {
+              "x": 13.5,
+              "y": 4
+            },
+            "color": "#45B7D1"
+          },
+          {
+            "dancerId": 4,
+            "position": {
+              "x": 12,
+              "y": 8
+            },
+            "color": "#96CEB4"
+          },
+          {
+            "dancerId": 5,
+            "position": {
+              "x": 3,
+              "y": 8
+            },
+            "color": "#FFEAA7"
+          },
+          {
+            "dancerId": 6,
+            "position": {
+              "x": 23.5,
+              "y": 6.5
+            },
+            "color": "#DDA0DD"
+          },
+          {
+            "dancerId": 7,
+            "position": {
+              "x": 0.75,
+              "y": 8.5
+            },
+            "color": "#98D8C8"
+          },
+          {
+            "dancerId": 8,
+            "position": {
+              "x": 0.75,
+              "y": 11
+            },
+            "color": "#F7DC6F"
+          },
+          {
+            "dancerId": 9,
+            "position": {
+              "x": 0.75,
+              "y": 9.5
+            },
+            "color": "#1E90FF"
+          },
+          {
+            "dancerId": 10,
+            "position": {
+              "x": 8.5,
+              "y": 4.5
+            },
+            "color": "#F79F1F"
+          },
+          {
+            "dancerId": 11,
+            "position": {
+              "x": 19.5,
+              "y": 6.5
+            },
+            "color": "#E74C3C"
+          },
+          {
+            "dancerId": 12,
+            "position": {
+              "x": 10,
+              "y": 6.5
+            },
+            "color": "#1ABC9C"
+          },
+          {
+            "dancerId": 13,
+            "position": {
+              "x": 4.5,
+              "y": 6.5
+            },
+            "color": "#6C5CE7"
+          },
+          {
+            "dancerId": 14,
+            "position": {
+              "x": 23.25,
+              "y": 9.5
+            },
+            "color": "#FF69B4"
+          },
+          {
+            "dancerId": 15,
+            "position": {
+              "x": 23.25,
+              "y": 12.5
+            },
+            "color": "#BADC58"
+          },
+          {
+            "dancerId": 16,
+            "position": {
+              "x": 14,
+              "y": 6.5
+            },
+            "color": "#2980B9"
+          },
+          {
+            "dancerId": 17,
+            "position": {
+              "x": 23,
+              "y": 8.5
+            },
+            "color": "#A8E6CF"
+          },
+          {
+            "dancerId": 18,
+            "position": {
+              "x": 17.5,
+              "y": 5.5
+            },
+            "color": "#F9CA24"
+          },
+          {
+            "dancerId": 19,
+            "position": {
+              "x": 23,
+              "y": 3
+            },
+            "color": "#E67E22"
+          },
+          {
+            "dancerId": 20,
+            "position": {
+              "x": 0.5,
+              "y": 1.5
+            },
+            "color": "#16A085"
+          },
+          {
+            "dancerId": 21,
+            "position": {
+              "x": 23.25,
+              "y": 13.5
+            },
+            "color": "#686DE0"
+          },
+          {
+            "dancerId": 22,
+            "position": {
+              "x": 21,
+              "y": 8
+            },
+            "color": "#E91E63"
+          },
+          {
+            "dancerId": 23,
+            "position": {
+              "x": 15.5,
+              "y": 4.5
+            },
+            "color": "#A4DE02"
+          },
+          {
+            "dancerId": 24,
+            "position": {
+              "x": 6.5,
+              "y": 5.5
+            },
+            "color": "#22A6B3"
+          },
+          {
+            "dancerId": 25,
+            "position": {
+              "x": 0.75,
+              "y": 0.5
+            },
+            "color": "#22A6B3"
+          }
+        ],
+        "transitionType": "linear",
+        "label": "3people"
+      },
+      {
+        "id": "formation-1770661811192-p26l4rgis",
+        "startCount": 72,
+        "duration": 8,
+        "positions": [
+          {
+            "dancerId": 1,
+            "position": {
+              "x": 10.5,
+              "y": 4
+            },
+            "color": "#FF6B6B"
+          },
+          {
+            "dancerId": 2,
+            "position": {
+              "x": 23.5,
+              "y": 2.5
+            },
+            "color": "#4ECDC4"
+          },
+          {
+            "dancerId": 3,
+            "position": {
+              "x": 13.5,
+              "y": 4
+            },
+            "color": "#45B7D1"
+          },
+          {
+            "dancerId": 4,
+            "position": {
+              "x": 12,
+              "y": 6
+            },
+            "color": "#96CEB4"
+          },
+          {
+            "dancerId": 5,
+            "position": {
+              "x": 3,
+              "y": 8
+            },
+            "color": "#FFEAA7"
+          },
+          {
+            "dancerId": 6,
+            "position": {
+              "x": 23.5,
+              "y": 6.5
+            },
+            "color": "#DDA0DD"
+          },
+          {
+            "dancerId": 7,
+            "position": {
+              "x": 0.75,
+              "y": 8.5
+            },
+            "color": "#98D8C8"
+          },
+          {
+            "dancerId": 8,
+            "position": {
+              "x": 0.75,
+              "y": 11
+            },
+            "color": "#F7DC6F"
+          },
+          {
+            "dancerId": 9,
+            "position": {
+              "x": 0.5,
+              "y": 9.5
+            },
+            "color": "#1E90FF"
+          },
+          {
+            "dancerId": 10,
+            "position": {
+              "x": 8.5,
+              "y": 4.5
+            },
+            "color": "#F79F1F"
+          },
+          {
+            "dancerId": 11,
+            "position": {
+              "x": 19.5,
+              "y": 6.5
+            },
+            "color": "#E74C3C"
+          },
+          {
+            "dancerId": 12,
+            "position": {
+              "x": 14,
+              "y": 8
+            },
+            "color": "#1ABC9C"
+          },
+          {
+            "dancerId": 13,
+            "position": {
+              "x": 4.5,
+              "y": 6.5
+            },
+            "color": "#6C5CE7"
+          },
+          {
+            "dancerId": 14,
+            "position": {
+              "x": 23.25,
+              "y": 9.5
+            },
+            "color": "#FF69B4"
+          },
+          {
+            "dancerId": 15,
+            "position": {
+              "x": 23.25,
+              "y": 12.5
+            },
+            "color": "#BADC58"
+          },
+          {
+            "dancerId": 16,
+            "position": {
+              "x": 10,
+              "y": 8
+            },
+            "color": "#2980B9"
+          },
+          {
+            "dancerId": 17,
+            "position": {
+              "x": 23,
+              "y": 8.5
+            },
+            "color": "#A8E6CF"
+          },
+          {
+            "dancerId": 18,
+            "position": {
+              "x": 17.5,
+              "y": 5.5
+            },
+            "color": "#F9CA24"
+          },
+          {
+            "dancerId": 19,
+            "position": {
+              "x": 0.5,
+              "y": 5.5
+            },
+            "color": "#E67E22"
+          },
+          {
+            "dancerId": 20,
+            "position": {
+              "x": 0.5,
+              "y": 1.5
+            },
+            "color": "#16A085"
+          },
+          {
+            "dancerId": 21,
+            "position": {
+              "x": 23.25,
+              "y": 13.5
+            },
+            "color": "#686DE0"
+          },
+          {
+            "dancerId": 22,
+            "position": {
+              "x": 21,
+              "y": 8
+            },
+            "color": "#E91E63"
+          },
+          {
+            "dancerId": 23,
+            "position": {
+              "x": 15.5,
+              "y": 4.5
+            },
+            "color": "#A4DE02"
+          },
+          {
+            "dancerId": 24,
+            "position": {
+              "x": 6.5,
+              "y": 5.5
+            },
+            "color": "#22A6B3"
+          },
+          {
+            "dancerId": 25,
+            "position": {
+              "x": 0.75,
+              "y": 0.5
+            },
+            "color": "#22A6B3"
+          }
+        ],
+        "transitionType": "linear",
+        "label": "3p-2"
+      },
+      {
+        "id": "formation-1770661866924-vdluf5xci",
+        "startCount": 80,
+        "duration": 8,
+        "positions": [
+          {
+            "dancerId": 1,
+            "position": {
+              "x": 9,
+              "y": 9
+            },
+            "color": "#FF6B6B"
+          },
+          {
+            "dancerId": 2,
+            "position": {
+              "x": 12,
+              "y": 9
+            },
+            "color": "#4ECDC4"
+          },
+          {
+            "dancerId": 3,
+            "position": {
+              "x": 15,
+              "y": 9
+            },
+            "color": "#45B7D1"
+          },
+          {
+            "dancerId": 4,
+            "position": {
+              "x": 3,
+              "y": 9
+            },
+            "color": "#96CEB4"
+          },
+          {
+            "dancerId": 5,
+            "position": {
+              "x": 21,
+              "y": 9
+            },
+            "color": "#FFEAA7"
+          },
+          {
+            "dancerId": 6,
+            "position": {
+              "x": 13.5,
+              "y": 10.5
+            },
+            "color": "#DDA0DD"
+          },
+          {
+            "dancerId": 7,
+            "position": {
+              "x": 3,
+              "y": 12
+            },
+            "color": "#98D8C8"
+          },
+          {
+            "dancerId": 8,
+            "position": {
+              "x": 7.5,
+              "y": 10.5
+            },
+            "color": "#F7DC6F"
+          },
+          {
+            "dancerId": 9,
+            "position": {
+              "x": 6,
+              "y": 12
+            },
+            "color": "#1E90FF"
+          },
+          {
+            "dancerId": 10,
+            "position": {
+              "x": 8,
+              "y": 7.5
+            },
+            "color": "#F79F1F"
+          },
+          {
+            "dancerId": 11,
+            "position": {
+              "x": 19.5,
+              "y": 7.5
+            },
+            "color": "#E74C3C"
+          },
+          {
+            "dancerId": 12,
+            "position": {
+              "x": 4.5,
+              "y": 7.5
+            },
+            "color": "#1ABC9C"
+          },
+          {
+            "dancerId": 13,
+            "position": {
+              "x": 4.5,
+              "y": 10.5
+            },
+            "color": "#6C5CE7"
+          },
+          {
+            "dancerId": 14,
+            "position": {
+              "x": 19.5,
+              "y": 10.5
+            },
+            "color": "#FF69B4"
+          },
+          {
+            "dancerId": 15,
+            "position": {
+              "x": 15,
+              "y": 12
+            },
+            "color": "#BADC58"
+          },
+          {
+            "dancerId": 16,
+            "position": {
+              "x": 9,
+              "y": 12
+            },
+            "color": "#2980B9"
+          },
+          {
+            "dancerId": 17,
+            "position": {
+              "x": 21,
+              "y": 12
+            },
+            "color": "#A8E6CF"
+          },
+          {
+            "dancerId": 18,
+            "position": {
+              "x": 10.5,
+              "y": 10.5
+            },
+            "color": "#F9CA24"
+          },
+          {
+            "dancerId": 19,
+            "position": {
+              "x": 16.5,
+              "y": 10.5
+            },
+            "color": "#E67E22"
+          },
+          {
+            "dancerId": 20,
+            "position": {
+              "x": 18,
+              "y": 9
+            },
+            "color": "#16A085"
+          },
+          {
+            "dancerId": 21,
+            "position": {
+              "x": 12,
+              "y": 12
+            },
+            "color": "#686DE0"
+          },
+          {
+            "dancerId": 22,
+            "position": {
+              "x": 18,
+              "y": 12
+            },
+            "color": "#E91E63"
+          },
+          {
+            "dancerId": 23,
+            "position": {
+              "x": 16.5,
+              "y": 7.5
+            },
+            "color": "#A4DE02"
+          },
+          {
+            "dancerId": 24,
+            "position": {
+              "x": 6.5,
+              "y": 9
+            },
+            "color": "#22A6B3"
+          },
+          {
+            "dancerId": 25,
+            "position": {
+              "x": 0.75,
+              "y": 0.5
+            },
+            "color": "#22A6B3"
+          }
+        ],
+        "transitionType": "linear",
+        "label": "Last Part"
+      }
+    ],
+    "dancerNames": {
+      "1": "Chris",
+      "2": "Joon",
+      "3": "Contemp",
+      "4": "Gwen",
+      "5": "Anna",
+      "6": "Matthew",
+      "7": "Dalia",
+      "8": "Lucy",
+      "9": "John",
+      "10": "Karth",
+      "11": "Sam",
+      "12": "Peter",
+      "13": "Nancy",
+      "14": "J",
+      "15": "Jay",
+      "16": "Xav",
+      "17": "Sharon",
+      "18": "Dorothy",
+      "19": "Krish",
+      "20": "Troy",
+      "21": "son",
+      "22": "Allison",
+      "23": "Clar",
+      "24": "Kathy",
+      "25": "Val"
+    }
+  },
+  "exportedAt": "2026-02-10T06:24:08.208Z"
+}
