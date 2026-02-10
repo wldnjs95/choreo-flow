@@ -253,11 +253,26 @@ const TimelineEditor: React.FC = () => {
           setUserSelectedAlgorithms(restoredAlgorithms);
         }
 
-        // Restore geminiResults
+        // Restore geminiResults (need to convert plain objects back to Maps)
         if (data.geminiResults) {
           const restoredGemini = new Map<string, GeminiTransitionResult>();
           Object.entries(data.geminiResults).forEach(([pathKey, result]) => {
-            restoredGemini.set(pathKey, result as GeminiTransitionResult);
+            const r = result as {
+              pick: PathAlgorithm;
+              scores: Record<string, number>;
+              breakdowns: Record<string, ScoreBreakdown>;
+              insights: Record<string, string>;
+              pickReason: string;
+            };
+            // Convert plain objects back to Maps
+            const restoredResult: GeminiTransitionResult = {
+              pick: r.pick,
+              scores: new Map(Object.entries(r.scores || {}) as [PathAlgorithm, number][]),
+              breakdowns: new Map(Object.entries(r.breakdowns || {}) as [PathAlgorithm, ScoreBreakdown][]),
+              insights: new Map(Object.entries(r.insights || {}) as [PathAlgorithm, string][]),
+              pickReason: r.pickReason,
+            };
+            restoredGemini.set(pathKey, restoredResult);
           });
           setGeminiResults(restoredGemini);
         }
@@ -308,10 +323,16 @@ const TimelineEditor: React.FC = () => {
           serializedAlgorithms[pathKey] = algorithm;
         });
 
-        // Serialize geminiResults
-        const serializedGemini: Record<string, GeminiTransitionResult> = {};
+        // Serialize geminiResults (convert Maps to plain objects)
+        const serializedGemini: Record<string, object> = {};
         geminiResults.forEach((result, pathKey) => {
-          serializedGemini[pathKey] = result;
+          serializedGemini[pathKey] = {
+            pick: result.pick,
+            scores: Object.fromEntries(result.scores),
+            breakdowns: Object.fromEntries(result.breakdowns),
+            insights: Object.fromEntries(result.insights),
+            pickReason: result.pickReason,
+          };
         });
 
         const pathsData = {
