@@ -8,3 +8,6 @@ export type { GeminiAPIOptions, GeminiAPIState, UseGeminiAPIReturn, GeminiModelI
 
 export { useFormationEditor, useFormationKeyboardShortcuts } from './useFormationEditor';
 export type { UseFormationEditorOptions, UseFormationEditorReturn } from './useFormationEditor';
+
+export { usePlayback } from './usePlayback';
+export { useUndoRedo } from './useUndoRedo';

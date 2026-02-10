@@ -3,11 +3,12 @@
  * Manages playback state, metronome, and animation loop
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { COUNTS_PER_SECOND } from '../constants/editor';
+import type { FormationKeyframe } from '../types/timeline';
 
 interface UsePlaybackOptions {
-  maxCount: number;
+  formations: FormationKeyframe[];
   onPlaybackEnd?: () => void;
 }
 
@@ -21,10 +22,17 @@ interface UsePlaybackReturn {
   metronomeEnabled: boolean;
   setMetronomeEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   togglePlayback: () => void;
+  currentCountRef: React.MutableRefObject<number>;
 }
 
 export function usePlayback(options: UsePlaybackOptions): UsePlaybackReturn {
-  const { maxCount, onPlaybackEnd } = options;
+  const { formations, onPlaybackEnd } = options;
+
+  // Calculate maxCount from formations
+  const maxCount = useMemo(() => {
+    const lastFormation = formations[formations.length - 1];
+    return lastFormation ? lastFormation.startCount + lastFormation.duration : 0;
+  }, [formations]);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentCount, setCurrentCount] = useState(0);
@@ -32,7 +40,9 @@ export function usePlayback(options: UsePlaybackOptions): UsePlaybackReturn {
   const [metronomeEnabled, setMetronomeEnabled] = useState(true);
 
   const animationRef = useRef<number | null>(null);
-  const lastTimeRef = useRef<number>(0);
+  const lastTimeRef = useRef<number | null>(null);
+  const currentCountRef = useRef(0);
+  const frameCountRef = useRef(0);
   const lastBeatRef = useRef<number>(-1);
   const audioContextRef = useRef<AudioContext | null>(null);
 
@@ -60,6 +70,13 @@ export function usePlayback(options: UsePlaybackOptions): UsePlaybackReturn {
     oscillator.stop(now + 0.05);
   }, []);
 
+  // Sync ref with state when not playing (for scrubbing/seeking)
+  useEffect(() => {
+    if (!isPlaying) {
+      currentCountRef.current = currentCount;
+    }
+  }, [currentCount, isPlaying]);
+
   // Playback loop
   useEffect(() => {
     if (!isPlaying) {
@@ -71,15 +88,19 @@ export function usePlayback(options: UsePlaybackOptions): UsePlaybackReturn {
       return;
     }
 
-    let currentCountValue = currentCount;
+    // Initialize frame counter
+    frameCountRef.current = 0;
 
     const animate = (time: number) => {
-      if (!lastTimeRef.current) lastTimeRef.current = time;
+      if (lastTimeRef.current === null) {
+        lastTimeRef.current = time;
+      }
       const delta = (time - lastTimeRef.current) / 1000;
       lastTimeRef.current = time;
 
-      const next = currentCountValue + delta * COUNTS_PER_SECOND * playbackSpeed;
+      const next = currentCountRef.current + delta * COUNTS_PER_SECOND * playbackSpeed;
 
+      // Check for metronome beat crossing
       if (metronomeEnabled) {
         const currentBeat = Math.floor(next);
         if (currentBeat !== lastBeatRef.current && currentBeat >= 0) {
@@ -92,18 +113,25 @@ export function usePlayback(options: UsePlaybackOptions): UsePlaybackReturn {
       if (next >= maxCount) {
         setIsPlaying(false);
         setCurrentCount(0);
+        currentCountRef.current = 0;
         onPlaybackEnd?.();
         return;
       }
 
-      currentCountValue = next;
-      setCurrentCount(next);
+      // Update ref immediately (for smooth animation)
+      currentCountRef.current = next;
+
+      // Throttle React state updates (every 2 frames for 30fps state updates)
+      frameCountRef.current++;
+      if (frameCountRef.current % 2 === 0) {
+        setCurrentCount(next);
+      }
 
       animationRef.current = requestAnimationFrame(animate);
     };
 
-    lastTimeRef.current = 0;
-    lastBeatRef.current = Math.floor(currentCount);
+    lastTimeRef.current = null;
+    lastBeatRef.current = Math.floor(currentCountRef.current);
     animationRef.current = requestAnimationFrame(animate);
 
     return () => {
@@ -111,7 +139,7 @@ export function usePlayback(options: UsePlaybackOptions): UsePlaybackReturn {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [isPlaying, playbackSpeed, maxCount, metronomeEnabled, playMetronomeClick, currentCount, onPlaybackEnd]);
+  }, [isPlaying, playbackSpeed, maxCount, metronomeEnabled, playMetronomeClick, onPlaybackEnd]);
 
   const togglePlayback = useCallback(() => {
     setIsPlaying(prev => !prev);
@@ -127,5 +155,6 @@ export function usePlayback(options: UsePlaybackOptions): UsePlaybackReturn {
     metronomeEnabled,
     setMetronomeEnabled,
     togglePlayback,
+    currentCountRef,
   };
 }

@@ -38,10 +38,8 @@ import {
   ALGORITHM_PRIORITY,
   FORMATION_PRESETS,
   ALL_PRESETS,
-  COUNTS_PER_SECOND,
   snapToGrid,
   EXIT_ZONE_WIDTH,
-  MAX_UNDO_HISTORY,
 } from './constants/editor';
 import {
   computePathsCleanFlow,
@@ -53,6 +51,7 @@ import {
 } from './algorithms';
 import { generateCueSheet, type CueSheetResult, type DancerCueSheet } from './gemini/cueSheetGenerator';
 import { callGeminiAPIWithImages, type GeminiImageData } from './gemini';
+import { usePlayback, useUndoRedo } from './hooks';
 
 // Keep alias for backwards compatibility
 type GeminiTransitionResult = PathEvaluationResult;
@@ -87,10 +86,12 @@ const TimelineEditor: React.FC = () => {
     }
   });
 
-  // Undo history
-  const [undoHistory, setUndoHistory] = useState<ChoreographyProject[]>([]);
-  const [redoHistory, setRedoHistory] = useState<ChoreographyProject[]>([]);
-  const isUndoingRef = useRef(false); // Prevent saving state during undo/redo
+  // Undo/redo with custom hook
+  const {
+    saveToHistory,
+    handleUndo: undoState,
+    handleRedo: redoState,
+  } = useUndoRedo(project);
 
   // Auto-save to localStorage with debounce (project only - paths/cuesheet saved separately)
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -124,46 +125,18 @@ const TimelineEditor: React.FC = () => {
     project.formations[0]?.id || null
   );
   const [zoom, setZoom] = useState(8); // pixels per count
-  const [currentCount, setCurrentCount] = useState(0);
 
-  // Playback state
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
-  const animationRef = useRef<number | null>(null);
-  const lastTimeRef = useRef<number | null>(null);
-  const currentCountRef = useRef(0); // For smooth animation without re-renders
-  const frameCountRef = useRef(0); // For throttling state updates
-
-  // Metronome state
-  const [metronomeEnabled, setMetronomeEnabled] = useState(true);
-  const lastBeatRef = useRef<number>(-1);
-  const audioContextRef = useRef<AudioContext | null>(null);
-
-  // Play metronome click sound
-  const playMetronomeClick = useCallback((isDownbeat: boolean = false) => {
-    if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-    }
-    const ctx = audioContextRef.current;
-
-    const oscillator = ctx.createOscillator();
-    const gainNode = ctx.createGain();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(ctx.destination);
-
-    // Higher pitch for downbeat (every 4 counts), lower for regular beats
-    oscillator.frequency.value = isDownbeat ? 1000 : 800;
-    oscillator.type = 'sine';
-
-    // Quick attack and decay for click sound
-    const now = ctx.currentTime;
-    gainNode.gain.setValueAtTime(0.3, now);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
-
-    oscillator.start(now);
-    oscillator.stop(now + 0.05);
-  }, []);
+  // Playback state - using custom hook
+  const {
+    isPlaying,
+    setIsPlaying,
+    currentCount,
+    setCurrentCount,
+    playbackSpeed,
+    setPlaybackSpeed,
+    metronomeEnabled,
+    setMetronomeEnabled,
+  } = usePlayback({ formations: project.formations });
 
   // Drag state
   const [draggingDancer, setDraggingDancer] = useState<number | null>(null);
@@ -468,35 +441,11 @@ const TimelineEditor: React.FC = () => {
     localStorage.setItem('dance-choreography-onboarding-seen', 'true');
   }, []);
 
-  // Save state to undo history (call before making changes)
-  const saveToHistory = useCallback(() => {
-    if (isUndoingRef.current) return;
-    setUndoHistory(prev => {
-      const newHistory = [...prev, project];
-      // Limit history size
-      if (newHistory.length > MAX_UNDO_HISTORY) {
-        return newHistory.slice(-MAX_UNDO_HISTORY);
-      }
-      return newHistory;
-    });
-    // Clear redo history when new action is performed
-    setRedoHistory([]);
-  }, [project]);
-
-  // Undo function
+  // Undo function - wraps hook to handle side effects
   const handleUndo = useCallback(() => {
-    if (undoHistory.length === 0) return;
+    const previousState = undoState();
+    if (!previousState) return;
 
-    isUndoingRef.current = true;
-    const previousState = undoHistory[undoHistory.length - 1];
-
-    // Save current state to redo history
-    setRedoHistory(prev => [...prev, project]);
-
-    // Remove last item from undo history
-    setUndoHistory(prev => prev.slice(0, -1));
-
-    // Restore previous state
     setProject(previousState);
 
     // Update selected formation if needed
@@ -507,27 +456,14 @@ const TimelineEditor: React.FC = () => {
       }
     }
 
-    setTimeout(() => {
-      isUndoingRef.current = false;
-    }, 0);
-
     showToast('Undo', 'info', 1500);
-  }, [undoHistory, project, selectedFormationId, showToast]);
+  }, [undoState, selectedFormationId, showToast]);
 
-  // Redo function
+  // Redo function - wraps hook to handle side effects
   const handleRedo = useCallback(() => {
-    if (redoHistory.length === 0) return;
+    const nextState = redoState();
+    if (!nextState) return;
 
-    isUndoingRef.current = true;
-    const nextState = redoHistory[redoHistory.length - 1];
-
-    // Save current state to undo history
-    setUndoHistory(prev => [...prev, project]);
-
-    // Remove last item from redo history
-    setRedoHistory(prev => prev.slice(0, -1));
-
-    // Restore next state
     setProject(nextState);
 
     // Update selected formation if needed
@@ -538,12 +474,8 @@ const TimelineEditor: React.FC = () => {
       }
     }
 
-    setTimeout(() => {
-      isUndoingRef.current = false;
-    }, 0);
-
     showToast('Redo', 'info', 1500);
-  }, [redoHistory, project, selectedFormationId, showToast]);
+  }, [redoState, selectedFormationId, showToast]);
 
   // Keyboard shortcut for undo/redo
   useEffect(() => {
@@ -653,80 +585,7 @@ const TimelineEditor: React.FC = () => {
     return () => window.removeEventListener('keydown', handleCopyPaste);
   }, [uiMode, selectedDancers, selectedFormation, copiedPositions, saveToHistory, showToast]);
 
-  // Playback loop
-  useEffect(() => {
-    if (!isPlaying) {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
-      }
-      // Reset metronome beat tracker when stopped
-      lastBeatRef.current = -1;
-      return;
-    }
-
-    const lastFormation = project.formations[project.formations.length - 1];
-    const maxCount = lastFormation ? lastFormation.startCount + lastFormation.duration : 0;
-
-    // Initialize ref with current state value
-    currentCountRef.current = currentCount;
-    frameCountRef.current = 0;
-
-    const animate = (time: number) => {
-      // Fix: Use null check instead of falsy check
-      if (lastTimeRef.current === null) {
-        lastTimeRef.current = time;
-      }
-      const delta = (time - lastTimeRef.current) / 1000;
-      lastTimeRef.current = time;
-
-      const next = currentCountRef.current + delta * COUNTS_PER_SECOND * playbackSpeed;
-
-      // Check for metronome beat crossing
-      if (metronomeEnabled) {
-        const currentBeat = Math.floor(next);
-        if (currentBeat !== lastBeatRef.current && currentBeat >= 0) {
-          lastBeatRef.current = currentBeat;
-          // Downbeat every 4 counts (0, 4, 8, 12...)
-          const isDownbeat = currentBeat % 4 === 0;
-          playMetronomeClick(isDownbeat);
-        }
-      }
-
-      if (next >= maxCount) {
-        setIsPlaying(false);
-        setCurrentCount(0);
-        currentCountRef.current = 0;
-        return;
-      }
-
-      // Update ref immediately (for smooth animation)
-      currentCountRef.current = next;
-
-      // Throttle React state updates (every 2 frames for 30fps state updates)
-      frameCountRef.current++;
-      if (frameCountRef.current % 2 === 0) {
-        setCurrentCount(next);
-      }
-
-      animationRef.current = requestAnimationFrame(animate);
-    };
-
-    // Fix: Use null instead of 0 to properly detect first frame
-    lastTimeRef.current = null;
-    // Initialize beat tracker to current position
-    lastBeatRef.current = Math.floor(currentCount);
-    animationRef.current = requestAnimationFrame(animate);
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-        // Sync final state when stopping
-        setCurrentCount(currentCountRef.current);
-      }
-    };
-    // Fix: Remove currentCount from dependencies to prevent animation restart
-  }, [isPlaying, playbackSpeed, project.formations, metronomeEnabled, playMetronomeClick]);
+  // Playback loop is now handled by usePlayback hook
 
   // Update formation (saves to undo history)
   const updateFormation = useCallback((id: string, updates: Partial<FormationKeyframe>) => {
@@ -3151,6 +3010,27 @@ Score each option 0-100 based on the weighted criteria above.
 
       const lastFormation = project.formations[project.formations.length - 1];
       const totalCounts = lastFormation.startCount + lastFormation.duration;
+
+      // Ensure ALL dancers are included, even if they have no generated paths (stationary)
+      const firstFormation = project.formations[0];
+      if (firstFormation) {
+        for (let dancerId = 0; dancerId < project.dancerCount; dancerId++) {
+          if (!mergedPaths.has(dancerId)) {
+            // This dancer has no path - they're stationary in all formations
+            // Get their position from the first formation
+            const dancerPos = firstFormation.positions.find(p => p.dancerId === dancerId);
+            if (dancerPos) {
+              mergedPaths.set(dancerId, {
+                dancerId,
+                path: [{ x: dancerPos.position.x, y: dancerPos.position.y, t: 0 }],
+                startTime: 0,
+                speed: 0,
+                totalDistance: 0,
+              });
+            }
+          }
+        }
+      }
 
       const cueSheetResult = await generateCueSheet(
         Array.from(mergedPaths.values()),

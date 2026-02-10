@@ -445,6 +445,7 @@ ${JSON.stringify(pathData, null, 2)}
 \`\`\`
 
 **중요**:
+- **필수**: 입력 데이터의 모든 ${(pathData as { dancers: unknown[] }).dancers.length}명 댄서에 대한 큐시트를 출력해야 합니다. 한 명도 빠뜨리지 마세요!
 - 반드시 유효한 JSON 형식으로만 출력
 - 각 댄서별로 시간순 큐 작성
 - **timeRange는 반드시 정수 카운트 사용** (예: "0~2 카운트", "3~5 카운트") - 소수점 금지
@@ -577,6 +578,7 @@ Each instruction MUST include:
   - Example: dancerNameMapping[18] = "Dorothy" → use "Dorothy", NOT "Dancer 18"
   - NEVER output "Dancer X" format - always use the actual name from dancerNameMapping
   - For dancerLabel field: use dancerName from each dancer's data, NOT "D1" or "Dancer 1"
+- **CRITICAL**: You MUST output cue sheets for ALL dancers in the input data. The input contains ${(pathData as { dancers: unknown[] }).dancers.length} dancers - output exactly that many!
 - **CRITICAL**: Every dancer must have detailed instructions for EVERY formation they appear in
 - Use encouraging, professional language suitable for rehearsal
 - Be specific enough for actual performance use - dancers should be able to execute without additional explanation`;
@@ -588,46 +590,47 @@ Each instruction MUST include:
 // ============================================
 
 /**
- * Convert absolute count range to 8-count relative format
- * e.g., "0~16" → "1st 8-count (1-8), 2nd 8-count (1-8)"
- * e.g., "8~16" → "2nd 8-count (1-8)"
- * e.g., "4~12" → "1st 8-count (5-8), 2nd 8-count (1-4)"
+ * Convert absolute count range to formation transition format
+ * e.g., "0~8" with formations → "대형1 → 대형2"
+ * Falls back to original count format if formations not available
  */
-function convertToRelativeCount(timeRange: string): string {
+function convertToFormationTransition(timeRange: string, formations?: FormationInfo[]): string {
   const match = timeRange.match(/(\d+)~(\d+)/);
   if (!match) return timeRange;
 
   const start = parseInt(match[1]);
   const end = parseInt(match[2]);
 
-  const get8CountPhrase = (count: number): { phrase: number; position: number } => {
-    const phrase = Math.floor(count / 8) + 1; // 1st, 2nd, 3rd...
-    const position = (count % 8) || 8; // 1-8 within phrase
-    return { phrase, position };
-  };
-
-  const startInfo = get8CountPhrase(start);
-  const endInfo = get8CountPhrase(end);
-
-  const ordinal = (n: number): string => {
-    const suffixes = ['th', 'st', 'nd', 'rd'];
-    const v = n % 100;
-    return n + (suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0]);
-  };
-
-  if (startInfo.phrase === endInfo.phrase) {
-    // Same 8-count phrase
-    return `${ordinal(startInfo.phrase)} 8: count ${startInfo.position}-${endInfo.position}`;
-  } else {
-    // Spans multiple 8-count phrases
-    const parts: string[] = [];
-    for (let p = startInfo.phrase; p <= endInfo.phrase; p++) {
-      const pStart = p === startInfo.phrase ? startInfo.position : 1;
-      const pEnd = p === endInfo.phrase ? endInfo.position : 8;
-      parts.push(`${ordinal(p)} 8: ${pStart}-${pEnd}`);
-    }
-    return parts.join(', ');
+  if (!formations || formations.length < 2) {
+    // Fallback to simple count format
+    return `${start}~${end} count`;
   }
+
+  // Find which formation this count range belongs to
+  // The transition from formation[i] to formation[i+1] happens during formation[i].duration
+  let fromFormation: FormationInfo | null = null;
+  let toFormation: FormationInfo | null = null;
+
+  for (let i = 0; i < formations.length - 1; i++) {
+    const current = formations[i];
+    const next = formations[i + 1];
+    const transitionEnd = current.startCount + current.duration;
+
+    // Check if this count range falls within this transition
+    if (start >= current.startCount && end <= transitionEnd) {
+      fromFormation = current;
+      toFormation = next;
+      break;
+    }
+  }
+
+  if (fromFormation && toFormation) {
+    // Keep count info for rehearsal mode matching
+    return `${fromFormation.name} → ${toFormation.name} (${start}~${end})`;
+  }
+
+  // Fallback if no matching transition found
+  return `${start}~${end}`;
 }
 
 /**
@@ -653,11 +656,12 @@ function replaceDancerNames(text: string, dancerNames: Record<string | number, s
 }
 
 /**
- * Post-process cue sheet to fix dancer names and count format
+ * Post-process cue sheet to fix dancer names and convert to formation transitions
  */
 function postProcessCueSheet(
   result: CueSheetResult,
-  dancerNames: Record<string | number, string>
+  dancerNames: Record<string | number, string>,
+  formations?: FormationInfo[]
 ): CueSheetResult {
   // Process each dancer's cues
   result.dancers = result.dancers.map(dancer => {
@@ -680,7 +684,7 @@ function postProcessCueSheet(
     // Process each cue
     dancer.cues = dancer.cues.map(cue => ({
       ...cue,
-      timeRange: convertToRelativeCount(cue.timeRange),
+      timeRange: convertToFormationTransition(cue.timeRange, formations),
       instruction: replaceDancerNames(cue.instruction, dancerNames),
       notes: cue.notes ? replaceDancerNames(cue.notes, dancerNames) : cue.notes,
     }));
@@ -753,10 +757,10 @@ export async function generateCueSheet(
     parsedResult.stageInfo = `${fullConfig.stageWidth}m × ${fullConfig.stageHeight}m`;
     parsedResult.totalCounts = fullConfig.totalCounts;
 
-    // Post-process: Replace "Dancer X" with actual names and convert count format
+    // Post-process: Replace "Dancer X" with actual names and convert to formation transitions
     const dancerNames = fullConfig.dancerNames as Record<string | number, string> | undefined;
     if (dancerNames) {
-      parsedResult = postProcessCueSheet(parsedResult, dancerNames);
+      parsedResult = postProcessCueSheet(parsedResult, dancerNames, fullConfig.formations);
     }
 
     console.log('[CueSheetGenerator] Cue sheet generated successfully');
