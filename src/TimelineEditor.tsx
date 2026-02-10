@@ -1888,12 +1888,25 @@ const TimelineEditor: React.FC = () => {
           // Regular movement - use algorithm
           const dx = endPosition.x - startPosition.x;
           const dy = endPosition.y - startPosition.y;
-          regularAssignments.push({
-            dancerId: pos.dancerId,
-            startPosition,
-            endPosition,
-            distance: Math.sqrt(dx * dx + dy * dy),
-          });
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          if (distance < 0.1) {
+            // Stationary dancer - create hold path
+            exitPaths.push({
+              dancerId: pos.dancerId,
+              path: [
+                { x: startPosition.x, y: startPosition.y, t: 0 },
+                { x: startPosition.x, y: startPosition.y, t: fromFormation.duration },
+              ],
+            });
+          } else {
+            regularAssignments.push({
+              dancerId: pos.dancerId,
+              startPosition,
+              endPosition,
+              distance,
+            });
+          }
         }
       }
     }
@@ -3733,7 +3746,7 @@ Score each option 0-100 based on the weighted criteria above.
           {uiMode === 'rehearsal' && typeof povMode === 'number' && cueSheet && (
             <div className={`pov-cue-sheet ${isCueSheetCollapsed ? 'collapsed' : ''}`}>
               {cueSheet.dancers
-                .filter((dancer: DancerCueSheet) => dancer.dancerId === povMode)
+                .filter((dancer: DancerCueSheet) => Number(dancer.dancerId) === povMode)
                 .map((dancer: DancerCueSheet) => {
                   // Find current cue for collapsed mode - flexible regex for various formats
                   const currentCueData = dancer.cues.find(cue => {
